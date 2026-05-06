@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# MLflow
+mlflow.db
+mlruns/
+
+# OS
+.DS_Store
