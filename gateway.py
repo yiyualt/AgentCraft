@@ -7,6 +7,7 @@ import httpx
 import mlflow
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
+from mlflow.entities import SpanType
 from openai import OpenAI
 
 from tools import get_default_registry
@@ -20,7 +21,10 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1")
 # ===== MLflow =====
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment(MLFLOW_EXPERIMENT)
-mlflow.openai.autolog(log_traces=True)
+# We manage LLM call spans manually instead of relying on autolog.
+# autolog's Completions span leaves outputs=null when the API errors,
+# which produces broken-looking traces in the UI.
+mlflow.openai.autolog(log_traces=False)
 
 # ===== Ollama OpenAI-compatible Client =====
 client = OpenAI(
@@ -85,12 +89,14 @@ def _handle_non_streaming(
         mlflow.log_dict(payload, "request.json")
 
         # Parent span for the whole request
-        with mlflow.start_span(name="chat_completion_request") as request_span:
+        with mlflow.start_span(name="chat_completion_request", span_type=SpanType.CHAT_MODEL) as request_span:
             request_span.set_inputs({
                 "model": model,
-                "message_count": len(messages),
-                "tools_count": len(tools),
-                "stream": False,
+                "messages": list(messages),
+                "metadata": {
+                    "tools_count": len(tools),
+                    "stream": False,
+                },
             })
 
             # === Tool execution loop ===
@@ -102,11 +108,27 @@ def _handle_non_streaming(
                 if tools:
                     call_kwargs["tools"] = tools
 
-                try:
-                    response = llm_client.chat.completions.create(**call_kwargs)
-                except Exception as e:
-                    return {"error": {"message": str(e), "type": type(e).__name__}}
-                result = response.model_dump()
+                with mlflow.start_span(name="Completions", span_type=SpanType.CHAT_MODEL) as llm_span:
+                    llm_span.set_inputs({
+                        "model": model,
+                        "messages": list(messages),
+                        **kwargs,
+                    })
+                    try:
+                        response = llm_client.chat.completions.create(**call_kwargs)
+                    except Exception as e:
+                        llm_span.set_outputs({
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                        })
+                        request_span.set_outputs({
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "latency_seconds": time.time() - start_time,
+                        })
+                        return {"error": {"message": str(e), "type": type(e).__name__}}
+                    result = response.model_dump()
+                    llm_span.set_outputs(result)
 
                 choice = result["choices"][0]
                 message = choice["message"]
@@ -164,6 +186,7 @@ def _handle_non_streaming(
             request_span.set_outputs({
                 "latency_seconds": latency,
                 "tool_loop_turns": n_turns,
+                "messages": list(messages),
                 "final_content": result["choices"][0]["message"].get("content", ""),
             })
 
