@@ -17,10 +17,11 @@ MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5050")
 MLFLOW_EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT", "ollama-gateway-qwen3-8b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1")
 
-# ===== MLflow =====
+# ===== MLflow — disable autolog, we trace manually =====
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment(MLFLOW_EXPERIMENT)
-mlflow.openai.autolog()
+# Deliberately NOT calling mlflow.openai.autolog() — we build one
+# complete trace per request that includes the full tool loop.
 
 # ===== Ollama OpenAI-compatible Client =====
 client = OpenAI(
@@ -86,17 +87,22 @@ def _handle_non_streaming(
 
         # === Tool execution loop ===
         n_turns = 0
+        turn_log: list[dict[str, Any]] = []
+
         while True:
             call_kwargs: dict[str, Any] = {"model": model, "messages": messages, **kwargs}
             if tools:
                 call_kwargs["tools"] = tools
 
-            response = llm_client.chat.completions.create(**call_kwargs)
+            try:
+                response = llm_client.chat.completions.create(**call_kwargs)
+            except Exception as e:
+                return {"error": {"message": str(e), "type": type(e).__name__}}
             result = response.model_dump()
 
             choice = result["choices"][0]
             message = choice["message"]
-            messages.append(message)  # keep full conversation
+            messages.append(message)
 
             tool_calls = message.get("tool_calls")
             if not tool_calls:
@@ -104,13 +110,17 @@ def _handle_non_streaming(
 
             n_turns += 1
             if n_turns > 10:
-                # Safety limit
                 messages.append({
                     "role": "tool",
                     "tool_call_id": "limit",
                     "content": "Tool execution limit reached (10). Please provide your best answer.",
                 })
                 break
+
+            turn_log.append({
+                "llm_response": result,
+                "tool_results": [],
+            })
 
             for tc in tool_calls:
                 fn_name = tc["function"]["name"]
@@ -119,6 +129,11 @@ def _handle_non_streaming(
                 except json.JSONDecodeError:
                     fn_args = {}
                 tool_result = registry.dispatch(fn_name, fn_args)
+                turn_log[-1]["tool_results"].append({
+                    "name": fn_name,
+                    "arguments": fn_args,
+                    "result": tool_result,
+                })
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tc["id"],
@@ -130,6 +145,14 @@ def _handle_non_streaming(
         mlflow.log_metric("tool_loop_turns", n_turns)
 
         mlflow.log_dict(result, "response.json")
+
+        # Log full conversation history as an artifact
+        mlflow.log_dict({
+            "tool_loop_turns": n_turns,
+            "full_messages": messages,
+            "turn_log": turn_log,
+        }, "conversation.json")
+
         _log_mlflow_artifacts(result)
 
         return result
@@ -144,16 +167,23 @@ def _handle_streaming(
     """Proxy streaming response from LLM to client while recording to MLflow."""
 
     stream_payload = {**payload, "stream": True}
-    # Don't pass stream in the inner payload since we set it on the SDK call
     inner_kwargs = {k: v for k, v in stream_payload.items() if k != "stream"}
+
+    mlflow.start_run(run_name=f"gateway-{model}")
+    mlflow.log_param("model", model)
+    mlflow.log_param("runtime", "ollama")
+    mlflow.log_param("ollama_base_url", OLLAMA_BASE_URL)
+    mlflow.log_param("temperature", payload.get("temperature"))
+    mlflow.log_param("client_host", request.client.host if request.client else "unknown")
+    mlflow.log_param("path", "/v1/chat/completions")
+    mlflow.log_param("stream", True)
+    mlflow.log_dict(payload, "request.json")
 
     def generate() -> Generator[str, None, None]:
         collected_content: list[str] = []
         collected_reasoning: list[str] = []
         first_chunk_time = time.time()
 
-        # We record MLflow at the end — the streaming run wrapper below
-        # is a separate closure for the non-MLflow chunk stream.
         try:
             stream = llm_client.chat.completions.create(
                 **inner_kwargs, stream=True
@@ -162,7 +192,6 @@ def _handle_streaming(
                 chunk_dict = chunk.model_dump()
                 yield f"data: {json.dumps(chunk_dict, ensure_ascii=False)}\n\n"
 
-                # Collect content for MLflow logging
                 delta = chunk_dict.get("choices", [{}])[0].get("delta", {})
                 if delta.get("content"):
                     collected_content.append(delta["content"])
@@ -176,21 +205,30 @@ def _handle_streaming(
             yield f"data: {error_body}\n\n"
             yield "data: [DONE]\n\n"
             return
+        finally:
+            latency = time.time() - first_chunk_time
+            full_answer = "".join(collected_content)
+            full_reasoning = "".join(collected_reasoning)
 
-        # Log to MLflow after stream completes
-        full_answer = "".join(collected_content)
-        full_reasoning = "".join(collected_reasoning)
+            mlflow.log_metric("latency_seconds", latency)
+            full_result = {
+                "id": f"chatcmpl-{int(time.time())}",
+                "object": "chat.completion",
+                "choices": [{
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": full_answer,
+                        "reasoning": full_reasoning or None,
+                    },
+                }],
+            }
+            mlflow.log_dict(full_result, "response.json")
+            mlflow.log_text(full_answer or "", "answer.txt")
+            if full_reasoning:
+                mlflow.log_text(full_reasoning, "reasoning.txt")
 
-        # We need to capture the run inside the generator but MLflow
-        # requires us to start/end outside or use a separate thread
-        # -- simplest approach: log synchronously at the end
-        import threading
-        threading.Thread(
-            target=_log_stream_mlflow,
-            args=(model, payload, inner_kwargs, time.time() - first_chunk_time,
-                  full_answer, full_reasoning, request),
-            daemon=True,
-        ).start()
+            mlflow.end_run()
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 
@@ -203,48 +241,5 @@ def _log_mlflow_artifacts(result: dict[str, Any]) -> None:
         mlflow.log_text(answer or "", "answer.txt")
         if reasoning:
             mlflow.log_text(reasoning, "reasoning.txt")
-    except Exception:
-        pass
-
-
-def _log_stream_mlflow(
-    model: str,
-    original_payload: dict[str, Any],
-    inner_kwargs: dict[str, Any],
-    latency: float,
-    answer: str,
-    reasoning: str,
-    request: Request,
-) -> None:
-    """Log streaming result to MLflow in a background thread."""
-    try:
-        with mlflow.start_run(run_name=f"gateway-{model}"):
-            mlflow.log_param("model", model)
-            mlflow.log_param("runtime", "ollama")
-            mlflow.log_param("ollama_base_url", OLLAMA_BASE_URL)
-            mlflow.log_param("temperature", original_payload.get("temperature"))
-            mlflow.log_param("client_host", request.client.host if request.client else "unknown")
-            mlflow.log_param("path", "/v1/chat/completions")
-            mlflow.log_param("stream", True)
-
-            mlflow.log_dict(original_payload, "request.json")
-            mlflow.log_metric("latency_seconds", latency)
-
-            full_result = {
-                "id": f"chatcmpl-{int(time.time())}",
-                "object": "chat.completion",
-                "choices": [{
-                    "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": answer,
-                        "reasoning": reasoning or None,
-                    },
-                }],
-            }
-            mlflow.log_dict(full_result, "response.json")
-            mlflow.log_text(answer or "", "answer.txt")
-            if reasoning:
-                mlflow.log_text(reasoning, "reasoning.txt")
     except Exception:
         pass
