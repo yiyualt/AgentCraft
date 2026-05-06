@@ -9,6 +9,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 from openai import OpenAI
 
+from tools import get_default_registry
+from tools.builtin import *  # noqa: F401,F403 — register built-in tools
+
 # ===== Config =====
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5050")
 MLFLOW_EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT", "ollama-gateway-qwen3-8b")
@@ -62,6 +65,14 @@ def _handle_non_streaming(
 ) -> dict[str, Any]:
     start_time = time.time()
 
+    registry = get_default_registry()
+    user_tools = payload.get("tools")
+    tools = user_tools if user_tools else registry.list_tools()
+
+    # Build messages list from payload
+    messages = list(payload.get("messages", []))
+    kwargs = {k: v for k, v in payload.items() if k not in ("messages", "tools")}
+
     with mlflow.start_run(run_name=f"gateway-{model}"):
         mlflow.log_param("model", model)
         mlflow.log_param("runtime", "ollama")
@@ -69,17 +80,56 @@ def _handle_non_streaming(
         mlflow.log_param("temperature", payload.get("temperature"))
         mlflow.log_param("client_host", request.client.host if request.client else "unknown")
         mlflow.log_param("path", "/v1/chat/completions")
+        mlflow.log_param("tools_available", len(tools))
 
         mlflow.log_dict(payload, "request.json")
 
-        response = llm_client.chat.completions.create(**payload)
+        # === Tool execution loop ===
+        n_turns = 0
+        while True:
+            call_kwargs: dict[str, Any] = {"model": model, "messages": messages, **kwargs}
+            if tools:
+                call_kwargs["tools"] = tools
+
+            response = llm_client.chat.completions.create(**call_kwargs)
+            result = response.model_dump()
+
+            choice = result["choices"][0]
+            message = choice["message"]
+            messages.append(message)  # keep full conversation
+
+            tool_calls = message.get("tool_calls")
+            if not tool_calls:
+                break  # pure text answer → done
+
+            n_turns += 1
+            if n_turns > 10:
+                # Safety limit
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": "limit",
+                    "content": "Tool execution limit reached (10). Please provide your best answer.",
+                })
+                break
+
+            for tc in tool_calls:
+                fn_name = tc["function"]["name"]
+                try:
+                    fn_args = json.loads(tc["function"]["arguments"])
+                except json.JSONDecodeError:
+                    fn_args = {}
+                tool_result = registry.dispatch(fn_name, fn_args)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc["id"],
+                    "content": tool_result,
+                })
 
         latency = time.time() - start_time
         mlflow.log_metric("latency_seconds", latency)
+        mlflow.log_metric("tool_loop_turns", n_turns)
 
-        result = response.model_dump()
         mlflow.log_dict(result, "response.json")
-
         _log_mlflow_artifacts(result)
 
         return result
