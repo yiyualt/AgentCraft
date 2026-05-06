@@ -17,11 +17,10 @@ MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5050")
 MLFLOW_EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT", "ollama-gateway-qwen3-8b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1")
 
-# ===== MLflow — disable autolog, we trace manually =====
+# ===== MLflow =====
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment(MLFLOW_EXPERIMENT)
-# Deliberately NOT calling mlflow.openai.autolog() — we build one
-# complete trace per request that includes the full tool loop.
+mlflow.openai.autolog(log_traces=True)
 
 # ===== Ollama OpenAI-compatible Client =====
 client = OpenAI(
@@ -85,75 +84,88 @@ def _handle_non_streaming(
 
         mlflow.log_dict(payload, "request.json")
 
-        # === Tool execution loop ===
-        n_turns = 0
-        turn_log: list[dict[str, Any]] = []
-
-        while True:
-            call_kwargs: dict[str, Any] = {"model": model, "messages": messages, **kwargs}
-            if tools:
-                call_kwargs["tools"] = tools
-
-            try:
-                response = llm_client.chat.completions.create(**call_kwargs)
-            except Exception as e:
-                return {"error": {"message": str(e), "type": type(e).__name__}}
-            result = response.model_dump()
-
-            choice = result["choices"][0]
-            message = choice["message"]
-            messages.append(message)
-
-            tool_calls = message.get("tool_calls")
-            if not tool_calls:
-                break  # pure text answer → done
-
-            n_turns += 1
-            if n_turns > 10:
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": "limit",
-                    "content": "Tool execution limit reached (10). Please provide your best answer.",
-                })
-                break
-
-            turn_log.append({
-                "llm_response": result,
-                "tool_results": [],
+        # Parent span for the whole request
+        with mlflow.start_span(name="chat_completion_request") as request_span:
+            request_span.set_inputs({
+                "model": model,
+                "message_count": len(messages),
+                "tools_count": len(tools),
+                "stream": False,
             })
 
-            for tc in tool_calls:
-                fn_name = tc["function"]["name"]
+            # === Tool execution loop ===
+            n_turns = 0
+            turn_log: list[dict[str, Any]] = []
+
+            while True:
+                call_kwargs: dict[str, Any] = {"model": model, "messages": messages, **kwargs}
+                if tools:
+                    call_kwargs["tools"] = tools
+
                 try:
-                    fn_args = json.loads(tc["function"]["arguments"])
-                except json.JSONDecodeError:
-                    fn_args = {}
-                tool_result = registry.dispatch(fn_name, fn_args)
-                turn_log[-1]["tool_results"].append({
-                    "name": fn_name,
-                    "arguments": fn_args,
-                    "result": tool_result,
+                    response = llm_client.chat.completions.create(**call_kwargs)
+                except Exception as e:
+                    return {"error": {"message": str(e), "type": type(e).__name__}}
+                result = response.model_dump()
+
+                choice = result["choices"][0]
+                message = choice["message"]
+                messages.append(message)
+
+                tool_calls = message.get("tool_calls")
+                if not tool_calls:
+                    break  # pure text answer → done
+
+                n_turns += 1
+                if n_turns > 10:
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": "limit",
+                        "content": "Tool execution limit reached (10). Please provide your best answer.",
+                    })
+                    break
+
+                turn_log.append({
+                    "llm_response": result,
+                    "tool_results": [],
                 })
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc["id"],
-                    "content": tool_result,
-                })
 
-        latency = time.time() - start_time
-        mlflow.log_metric("latency_seconds", latency)
-        mlflow.log_metric("tool_loop_turns", n_turns)
+                for tc in tool_calls:
+                    fn_name = tc["function"]["name"]
+                    try:
+                        fn_args = json.loads(tc["function"]["arguments"])
+                    except json.JSONDecodeError:
+                        fn_args = {}
+                    tool_result = registry.dispatch(fn_name, fn_args)
+                    turn_log[-1]["tool_results"].append({
+                        "name": fn_name,
+                        "arguments": fn_args,
+                        "result": tool_result,
+                    })
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": tool_result,
+                    })
 
-        mlflow.log_dict(result, "response.json")
+            latency = time.time() - start_time
+            mlflow.log_metric("latency_seconds", latency)
+            mlflow.log_metric("tool_loop_turns", n_turns)
 
-        # Log full conversation history as an artifact
-        mlflow.log_dict({
-            "tool_loop_turns": n_turns,
-            "full_messages": messages,
-            "turn_log": turn_log,
-        }, "conversation.json")
+            mlflow.log_dict(result, "response.json")
+            mlflow.log_dict({
+                "tool_loop_turns": n_turns,
+                "full_messages": messages,
+                "turn_log": turn_log,
+            }, "conversation.json")
 
-        _log_mlflow_artifacts(result)
+            _log_mlflow_artifacts(result)
+
+            request_span.set_outputs({
+                "latency_seconds": latency,
+                "tool_loop_turns": n_turns,
+                "final_content": result["choices"][0]["message"].get("content", ""),
+            })
 
         return result
 
