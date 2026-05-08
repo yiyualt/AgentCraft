@@ -48,6 +48,36 @@ def health() -> dict[str, str]:
     }
 
 
+_OLLAMA_API_URL = OLLAMA_BASE_URL.rstrip("/v1").rstrip("/")  # Strip /v1 suffix if present
+
+
+@app.get("/v1/models")
+def list_models() -> dict[str, Any]:
+    """List available models from Ollama, converted to OpenAI-compatible format."""
+    try:
+        resp = httpx.get(f"{_OLLAMA_API_URL}/api/tags", timeout=10)
+        resp.raise_for_status()
+        tags = resp.json()
+    except Exception as e:
+        return {
+            "error": {"message": str(e), "type": type(e).__name__},
+        }
+
+    models = tags.get("models", [])
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": m["name"],
+                "object": "model",
+                "created": int(time.mktime(time.strptime(m["modified_at"].split(".")[0], "%Y-%m-%dT%H:%M:%S"))) if "modified_at" in m and m["modified_at"] else 0,
+                "owned_by": "ollama",
+            }
+            for m in models
+        ],
+    }
+
+
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     payload = await request.json()

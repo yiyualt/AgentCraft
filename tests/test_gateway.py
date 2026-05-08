@@ -50,6 +50,20 @@ class TestHealth:
         assert "mlflow_tracking_uri" in data
 
 
+@pytest.mark.integration
+class TestModels:
+    def test_list_models(self):
+        resp = client.get("/v1/models")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "data" in data
+        assert data["object"] == "list"
+        assert len(data["data"]) > 0
+        model = data["data"][0]
+        assert "id" in model
+        assert model["owned_by"] == "ollama"
+
+
 # ============================================================
 # Non-streaming (needs LLM)
 # ============================================================
