@@ -10,37 +10,58 @@
 
 ## 目标
 
-- [ ] Tool Registry：声明式注册 Python 函数为 LLM 可调用的 Tool
-- [ ] Tool Execution Loop：LLM → Tool Call → 执行 → 结果送回 LLM → 最终回答
-- [ ] MCP Stdio 支持：通过 `npx` 启动外部 MCP server 并调用其工具
-- [ ] 内置工具：时间、计算、文件读写、Web 搜索
+- [x] Tool Registry：声明式注册 Python 函数为 LLM 可调用的 Tool
+- [x] Tool Execution Loop：LLM → Tool Call → 执行 → 结果送回 LLM → 最终回答
+- [x] MCP Stdio 支持：通过 `npx`/`uvx` 启动外部 MCP server 并调用其工具
+- [x] 内置工具：时间、计算、文件读写、Web 搜索
 
-## 设计
+## 实现
+
+### 本地工具 (`tools/__init__.py`)
 
 ```python
 @tool(
-    name="get_weather",
-    description="查询指定城市的天气",
-    parameters={
-        "type": "object",
-        "properties": {
-            "city": {"type": "string", "description": "城市名称"}
-        },
-        "required": ["city"]
-    }
+    name="calculator",
+    description="Evaluate math expressions",
+    parameters={...}
 )
-def get_weather(city: str) -> dict:
-    """实际的 Python 实现"""
-    ...
+def calculator(expression: str) -> str:
+    return str(eval(expression, ...))
+```
+
+### MCP 工具 (`tools/mcp/`)
+
+```python
+# 配置文件 mcp_config.json
+{
+  "mcpServers": {
+    "git": {
+      "command": "uvx",
+      "args": ["mcp-server-git"],
+      "enabled": true
+    }
+  }
+}
+
+# Gateway 启动时自动加载 MCP servers
+# 工具名格式: server.tool_name (如 git.git_log)
 ```
 
 ## Tool Execution Loop
 
 ```
-1. User: "北京天气怎么样？"
-2. LLM: tool_call → get_weather(city="北京")
-3. Gateway: 执行 get_weather("北京") → {"temperature": 22, ...}
-4. Gateway: 把结果作为 tool message 送回 LLM
-5. LLM: "北京目前 22°C，天气晴朗"
+1. User: "最近3条commit记录？"
+2. LLM: tool_call → git.git_log(repo_path=".", max_count=3)
+3. Gateway: 通过 MCP stdio 调用 git server → commit history
+4. Gateway: 结果作为 tool message 送回 LLM
+5. LLM: "以下是最近3条提交记录..."
 6. Gateway: 最终回答返回给用户
+```
+
+## 验证
+
+```bash
+# 测试 MCP 工具调用
+curl -X POST http://127.0.0.1:8000/v1/chat/completions \
+  -d '{"model":"qwen3:8b","messages":[{"role":"user","content":"查看git log"}]}'
 ```

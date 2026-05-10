@@ -234,26 +234,29 @@ class TestBuiltinTools:
         result = builtin.bash("nonexistent_command_xyz_123", workdir="/tmp")
         assert result is not None  # just shouldn't crash
 
+    @pytest.mark.integration
     def test_web_fetch_invalid_url(self):
+        """Integration test - requires network."""
         result = builtin.web_fetch("http://192.0.2.1/test")
         assert "Error" in result or "[HTTP" in result
 
     @pytest.mark.integration
     def test_web_fetch_httpbin(self):
+        """Integration test - requires network."""
         result = builtin.web_fetch("https://httpbin.org/get")
         assert "url" in result or "Error" in result
 
+    @pytest.mark.integration
     def test_web_search(self):
-        """DuckDuckGo search should return results (no API key needed)."""
+        """Integration test - DuckDuckGo search requires network."""
         result = builtin.web_search("test query")
-        # Should either return results or a no-results message, not an error
         assert "Error" not in result or "No results" in result
         assert result is not None
         assert len(result) > 0
 
     @pytest.mark.integration
     def test_web_search_real_query(self):
-        """Actual search query that should return real results."""
+        """Integration test - actual search requires network."""
         result = builtin.web_search("Python programming language")
         assert "No results" not in result or "Error" not in result
 

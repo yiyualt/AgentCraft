@@ -6,12 +6,13 @@
 - [x] FastAPI Gateway (请求代理 + MLflow)
 - [x] 项目结构 (pyproject.toml, uv)
 
-## Phase 1: Gateway 强化
+## Phase 1: Gateway 强化 ✅ (已完成)
 
-- [ ] 支持 streaming 响应
-- [ ] Tool Calling 代理 (将 LLM 的 tool calls 转发回 Gateway 执行)
-- [ ] 请求限流 / 并发控制
-- [ ] 健康检查 + 模型列表 API
+- [x] 支持 streaming 响应
+- [x] Tool Calling 代理 (将 LLM 的 tool calls 转发回 Gateway 执行)
+- [x] 请求限流 / 并发控制
+- [x] 健康检查 + 模型列表 API
+- [x] MCP Stdio 支持 (通过 npx/uvx 启动外部 MCP server)
 
 ## Phase 2: Agent Core
 
@@ -30,7 +31,7 @@
 ## Phase 4: Skills & Tools
 
 - [ ] Skills 系统 (按需加载能力)
-- [ ] MCP 工具协议支持
+- [x] MCP 工具协议支持
 - [ ] 沙箱执行 (Docker)
 - [ ] 工具市场 / ClawHub 类似物
 
