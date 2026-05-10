@@ -51,11 +51,20 @@ def repl(
             session_id = session.id
             print(f"Created session: {session_name}")
 
-    if system_prompt:
-        messages.insert(0, {"role": "system", "content": system_prompt})
+    # Show active system prompt
+    active_sp = None
+    if session_id:
+        s = mgr.get_session(session_id)
+        if s and s.system_prompt:
+            active_sp = s.system_prompt
+    elif system_prompt:
+        active_sp = system_prompt
+
+    if active_sp:
+        print(f"System: {active_sp}")
 
     print(f"Model: {model}")
-    print("Commands: /exit, /quit, /clear, /help, /sessions, /new <name>\n")
+    print("Commands: /exit, /quit, /clear, /help, /sessions, /new <name>, /system\n")
 
     while True:
         try:
@@ -80,12 +89,28 @@ def repl(
                     mgr.clear_messages(session_id)
                 print("(history cleared)")
                 continue
+            elif cmd == "/system":
+                if not session_id:
+                    print("(no active session, use --session <name> to start one)")
+                    continue
+                if len(parts) > 1:
+                    new_sp = parts[1] if parts[1] != "clear" else None
+                    mgr.update_session(session_id, system_prompt=new_sp)
+                    print(f"System prompt: {'cleared' if new_sp is None else 'set'}")
+                else:
+                    s = mgr.get_session(session_id)
+                    if s and s.system_prompt:
+                        print(f"System prompt: {s.system_prompt}")
+                    else:
+                        print("(no system prompt set)")
+                continue
             elif cmd == "/help":
                 print("Commands:")
                 print("  /exit, /quit   退出")
                 print("  /clear         清除对话历史")
                 print("  /sessions      列出所有会话")
                 print("  /new <name>    创建新会话")
+                print("  /system        查看/设置 system prompt")
                 print("  /help          显示帮助")
                 continue
             elif cmd == "/sessions":

@@ -233,6 +233,12 @@ async def _handle_non_streaming(
     if session_id:
         history = _session_manager.get_messages_openai(session_id)
         messages = history + new_messages
+        # Inject session system prompt if set
+        session = _session_manager.get_session(session_id)
+        if session and session.system_prompt and not any(
+            m["role"] == "system" for m in messages
+        ):
+            messages.insert(0, {"role": "system", "content": session.system_prompt})
     else:
         messages = list(new_messages)
     kwargs = {k: v for k, v in payload.items() if k not in ("messages", "tools")}
@@ -398,6 +404,12 @@ def _handle_streaming(
     if session_id:
         history = _session_manager.get_messages_openai(session_id)
         full_messages = history + new_messages
+        # Inject session system prompt if set
+        session = _session_manager.get_session(session_id)
+        if session and session.system_prompt and not any(
+            m["role"] == "system" for m in full_messages
+        ):
+            full_messages.insert(0, {"role": "system", "content": session.system_prompt})
         for msg in new_messages:
             _session_manager.add_message(
                 session_id=session_id,
