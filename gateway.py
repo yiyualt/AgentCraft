@@ -277,6 +277,10 @@ async def _handle_non_streaming(
                 "final_content": result["choices"][0]["message"].get("content", ""),
             })
 
+            # Export trace to file system
+            trace_id = request_span.request_id
+            _export_trace_to_filesystem(trace_id, 4)
+
         return result
 
 
@@ -364,5 +368,37 @@ def _log_mlflow_artifacts(result: dict[str, Any]) -> None:
         mlflow.log_text(answer or "", "answer.txt")
         if reasoning:
             mlflow.log_text(reasoning, "reasoning.txt")
+    except Exception:
+        pass
+
+
+def _export_trace_to_filesystem(trace_id: str, experiment_id: int) -> None:
+    """Export trace data to file system as traces.json artifact."""
+    try:
+        from mlflow.tracing.client import TracingClient
+
+        client = TracingClient()
+        trace = client.get_trace(trace_id)
+
+        artifact_dir = f"mlruns/{experiment_id}/traces/{trace_id}/artifacts"
+        os.makedirs(artifact_dir, exist_ok=True)
+
+        spans_data = {"spans": []}
+        for span in trace.data.spans:
+            span_dict = {
+                "trace_id": span.trace_id,
+                "span_id": span.span_id,
+                "parent_span_id": span.parent_id,
+                "name": span.name,
+                "start_time_unix_nano": span.start_time_ns,
+                "end_time_unix_nano": span.end_time_ns,
+                "events": span.events or [],
+                "status": {"code": "STATUS_CODE_OK", "message": ""},
+                "attributes": span.attributes or {},
+            }
+            spans_data["spans"].append(span_dict)
+
+        with open(f"{artifact_dir}/traces.json", "w") as f:
+            json.dump(spans_data, f, ensure_ascii=False)
     except Exception:
         pass
