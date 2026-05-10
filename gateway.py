@@ -15,6 +15,7 @@ from openai import OpenAI
 from tools import get_default_registry, UnifiedToolRegistry
 from tools.builtin import *  # noqa: F401,F403 — register built-in tools
 from tools.mcp import MCPToolManager, MCPConfig
+from sessions import SessionManager
 
 # ===== Config =====
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5050")
@@ -56,11 +57,16 @@ _rate_limit_lock = asyncio.Lock()
 _mcp_manager: MCPToolManager | None = None
 _unified_registry: UnifiedToolRegistry | None = None
 
+# ===== Session Manager =====
+_session_manager = SessionManager()
+
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize MCP servers on startup."""
     global _mcp_manager, _unified_registry
+
+    app.state.session_manager = _session_manager
 
     config = MCPConfig.load()
     if config.enabled and config.get_enabled_servers():
@@ -148,6 +154,54 @@ def list_models() -> dict[str, Any]:
     }
 
 
+# ===== Session REST Endpoints =====
+
+
+@app.post("/v1/sessions")
+async def create_session(request: Request) -> dict[str, Any]:
+    body = await request.json()
+    session = _session_manager.create_session(
+        name=body.get("name", "Untitled"),
+        model=body.get("model", "qwen3:8b"),
+        system_prompt=body.get("system_prompt"),
+    )
+    return session.to_dict()
+
+
+@app.get("/v1/sessions")
+def list_sessions(status: str = "active") -> list[dict[str, Any]]:
+    return [s.to_dict() for s in _session_manager.list_sessions(status)]
+
+
+@app.get("/v1/sessions/{session_id}")
+def get_session(session_id: str) -> dict[str, Any]:
+    session = _session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session.to_dict()
+
+
+@app.patch("/v1/sessions/{session_id}")
+async def update_session(session_id: str, request: Request) -> dict[str, Any]:
+    body = await request.json()
+    session = _session_manager.update_session(session_id, **body)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session.to_dict()
+
+
+@app.delete("/v1/sessions/{session_id}")
+def delete_session(session_id: str) -> dict[str, str]:
+    if not _session_manager.delete_session(session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"status": "deleted"}
+
+
+@app.get("/v1/sessions/{session_id}/messages")
+def get_session_messages(session_id: str, limit: int = 50) -> list[dict[str, Any]]:
+    return _session_manager.get_messages_openai(session_id, limit)
+
+
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     # Rate limit check (quick, no LLM)
@@ -156,6 +210,7 @@ async def chat_completions(request: Request):
     payload = await request.json()
     model = payload.get("model", "qwen3:8b")
     stream = payload.get("stream", False)
+    session_id = request.headers.get("X-Session-Id")
 
     # Fail-fast semaphore check — avoid parsing payload unnecessarily
     # when the semaphore is already saturated.
@@ -171,9 +226,9 @@ async def chat_completions(request: Request):
         )
 
     if stream:
-        return _handle_streaming(request, client, payload, model)
+        return _handle_streaming(request, client, payload, model, session_id)
     else:
-        return await _handle_non_streaming(request, client, payload, model)
+        return await _handle_non_streaming(request, client, payload, model, session_id)
 
 
 async def _handle_non_streaming(
@@ -181,6 +236,7 @@ async def _handle_non_streaming(
     llm_client: OpenAI,
     payload: dict[str, Any],
     model: str,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     start_time = time.time()
 
@@ -189,9 +245,26 @@ async def _handle_non_streaming(
     user_tools = payload.get("tools")
     tools = user_tools if user_tools else registry.list_tools()
 
-    # Build messages list from payload
-    messages = list(payload.get("messages", []))
+    # Build messages: session history + current request messages
+    new_messages = list(payload.get("messages", []))
+    if session_id:
+        history = _session_manager.get_messages_openai(session_id)
+        messages = history + new_messages
+    else:
+        messages = list(new_messages)
     kwargs = {k: v for k, v in payload.items() if k not in ("messages", "tools")}
+
+    # Save incoming messages to session
+    if session_id:
+        for msg in new_messages:
+            _session_manager.add_message(
+                session_id=session_id,
+                role=msg.get("role", "user"),
+                content=msg.get("content", ""),
+                tool_call_id=msg.get("tool_call_id"),
+                name=msg.get("name"),
+            )
+        saved_count = len(messages)  # track what's already persisted
 
     with mlflow.start_run(run_name=f"gateway-{model}"):
         mlflow.log_param("model", model)
@@ -313,6 +386,18 @@ async def _handle_non_streaming(
             trace_id = request_span.request_id
             _export_trace_to_filesystem(trace_id, 4)
 
+            # Persist new messages (assistant + tool) to session
+            if session_id:
+                for msg in messages[saved_count:]:
+                    _session_manager.add_message(
+                        session_id=session_id,
+                        role=msg["role"],
+                        content=msg.get("content", ""),
+                        tool_calls=json.dumps(msg["tool_calls"]) if msg.get("tool_calls") else None,
+                        tool_call_id=msg.get("tool_call_id"),
+                        name=msg.get("name"),
+                    )
+
         return result
 
 
@@ -321,8 +406,24 @@ def _handle_streaming(
     llm_client: OpenAI,
     payload: dict[str, Any],
     model: str,
+    session_id: str | None = None,
 ) -> StreamingResponse:
     """Proxy streaming response from LLM to client while recording to MLflow."""
+
+    # Load session history and save incoming messages
+    new_messages = list(payload.get("messages", []))
+    if session_id:
+        history = _session_manager.get_messages_openai(session_id)
+        full_messages = history + new_messages
+        for msg in new_messages:
+            _session_manager.add_message(
+                session_id=session_id,
+                role=msg.get("role", "user"),
+                content=msg.get("content", ""),
+                tool_call_id=msg.get("tool_call_id"),
+                name=msg.get("name"),
+            )
+        payload = {**payload, "messages": full_messages}
 
     stream_payload = {**payload, "stream": True}
     inner_kwargs = {k: v for k, v in stream_payload.items() if k != "stream"}
@@ -386,6 +487,13 @@ def _handle_streaming(
             mlflow.log_text(full_answer or "", "answer.txt")
             if full_reasoning:
                 mlflow.log_text(full_reasoning, "reasoning.txt")
+
+            if session_id and full_answer:
+                _session_manager.add_message(
+                    session_id=session_id,
+                    role="assistant",
+                    content=full_answer,
+                )
 
             mlflow.end_run()
 
