@@ -1,11 +1,13 @@
 import json
 import os
 import time
-from typing import Any, Generator
+from typing import Any, AsyncGenerator
 
 import httpx
 import mlflow
-from fastapi import FastAPI, Request
+import asyncio
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from mlflow.entities import SpanType
 from openai import OpenAI
@@ -17,6 +19,12 @@ from tools.builtin import *  # noqa: F401,F403 — register built-in tools
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5050")
 MLFLOW_EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT", "ollama-gateway-qwen3-8b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1")
+
+# Concurrency / Rate Limiting
+MAX_CONCURRENT_OLLAMA = int(os.getenv("MAX_CONCURRENT_OLLAMA", "1"))
+RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "false").lower() == "true"
+RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "60"))
+RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
 
 # ===== MLflow =====
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
@@ -37,6 +45,37 @@ client = OpenAI(
 )
 
 app = FastAPI(title="Ollama MLflow Gateway")
+
+# ===== Concurrency & Rate Limiting =====
+_ollama_semaphore = asyncio.Semaphore(MAX_CONCURRENT_OLLAMA)
+_rate_limit_buckets: dict[str, list[float]] = {}
+_rate_limit_lock = asyncio.Lock()
+
+
+async def _check_rate_limit(request: Request) -> None:
+    """Raise HTTPException(429) if the client IP has exceeded the rate limit."""
+    if not RATE_LIMIT_ENABLED:
+        return
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    now = time.monotonic()
+    window_start = now - RATE_LIMIT_WINDOW
+
+    async with _rate_limit_lock:
+        timestamps = _rate_limit_buckets.get(client_ip, [])
+        # Prune entries outside the window
+        timestamps = [t for t in timestamps if t > window_start]
+        if len(timestamps) >= RATE_LIMIT_REQUESTS:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": {
+                        "message": "Rate limit exceeded. Try again later.",
+                        "type": "rate_limit_error",
+                    }
+                },
+            )
+        timestamps.append(now)
+        _rate_limit_buckets[client_ip] = timestamps
 
 
 @app.get("/health")
@@ -80,18 +119,33 @@ def list_models() -> dict[str, Any]:
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
-    payload = await request.json()
+    # Rate limit check (quick, no LLM)
+    await _check_rate_limit(request)
 
+    payload = await request.json()
     model = payload.get("model", "qwen3:8b")
     stream = payload.get("stream", False)
+
+    # Fail-fast semaphore check — avoid parsing payload unnecessarily
+    # when the semaphore is already saturated.
+    if _ollama_semaphore.locked():
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": {
+                    "message": "Too many concurrent requests. Try again later.",
+                    "type": "concurrency_limit_error",
+                }
+            },
+        )
 
     if stream:
         return _handle_streaming(request, client, payload, model)
     else:
-        return _handle_non_streaming(request, client, payload, model)
+        return await _handle_non_streaming(request, client, payload, model)
 
 
-def _handle_non_streaming(
+async def _handle_non_streaming(
     request: Request,
     llm_client: OpenAI,
     payload: dict[str, Any],
@@ -145,7 +199,10 @@ def _handle_non_streaming(
                         **kwargs,
                     })
                     try:
-                        response = llm_client.chat.completions.create(**call_kwargs)
+                        async with _ollama_semaphore:
+                            response = await asyncio.to_thread(
+                                llm_client.chat.completions.create, **call_kwargs
+                            )
                     except Exception as e:
                         llm_span.set_outputs({
                             "error": str(e),
@@ -244,26 +301,27 @@ def _handle_streaming(
     mlflow.log_param("stream", True)
     mlflow.log_dict(payload, "request.json")
 
-    def generate() -> Generator[str, None, None]:
+    async def generate() -> AsyncGenerator[str, None]:
         collected_content: list[str] = []
         collected_reasoning: list[str] = []
         first_chunk_time = time.time()
 
         try:
-            stream = llm_client.chat.completions.create(
-                **inner_kwargs, stream=True
-            )
-            for chunk in stream:
-                chunk_dict = chunk.model_dump()
-                yield f"data: {json.dumps(chunk_dict, ensure_ascii=False)}\n\n"
+            async with _ollama_semaphore:
+                stream = await asyncio.to_thread(
+                    llm_client.chat.completions.create, **inner_kwargs, stream=True
+                )
+                for chunk in stream:
+                    chunk_dict = chunk.model_dump()
+                    yield f"data: {json.dumps(chunk_dict, ensure_ascii=False)}\n\n"
 
-                delta = chunk_dict.get("choices", [{}])[0].get("delta", {})
-                if delta.get("content"):
-                    collected_content.append(delta["content"])
-                if delta.get("reasoning"):
-                    collected_reasoning.append(delta["reasoning"])
+                    delta = chunk_dict.get("choices", [{}])[0].get("delta", {})
+                    if delta.get("content"):
+                        collected_content.append(delta["content"])
+                    if delta.get("reasoning"):
+                        collected_reasoning.append(delta["reasoning"])
 
-            yield "data: [DONE]\n\n"
+                yield "data: [DONE]\n\n"
 
         except Exception as e:
             error_body = json.dumps({"error": {"message": str(e), "type": "stream_error"}}, ensure_ascii=False)

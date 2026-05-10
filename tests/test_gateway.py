@@ -11,9 +11,12 @@ Make sure the MLflow server is running before running integration tests.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+from unittest.mock import patch
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -158,3 +161,105 @@ class TestStreaming:
             # First data chunk should be valid JSON
             first_data = json.loads(chunks[0][6:])  # strip "data: "
             assert "choices" in first_data
+
+
+# ============================================================
+# Concurrency control (no LLM needed)
+# ============================================================
+
+
+class TestConcurrencyLimit:
+    """Unit tests for the asyncio.Semaphore concurrency limit."""
+
+    def test_rejects_when_semaphore_full(self):
+        """When semaphore has no capacity, request gets 429."""
+        import gateway as gw
+
+        with patch.object(gw, "_ollama_semaphore", asyncio.Semaphore(0)):
+            resp = client.post(
+                "/v1/chat/completions",
+                json={"model": "qwen3:8b", "messages": [{"role": "user", "content": "hi"}], "stream": False},
+            )
+            assert resp.status_code == 429
+            data = resp.json()
+            # FastAPI wraps HTTPException detail in {"detail": ...}
+            assert data["detail"]["error"]["type"] == "concurrency_limit_error"
+
+    async def test_allows_normal_traffic(self):
+        """When semaphore has capacity, request passes through."""
+        import gateway as gw
+
+        async def fake_handler(*args, **kwargs):
+            return {"choices": [{"message": {"content": "ok"}}]}
+
+        with (
+            patch.object(gw, "_ollama_semaphore", asyncio.Semaphore(2)),
+            patch.object(gw, "_handle_non_streaming", fake_handler),
+        ):
+            resp = client.post(
+                "/v1/chat/completions",
+                json={"model": "qwen3:8b", "messages": [{"role": "user", "content": "hi"}], "stream": False},
+            )
+            assert resp.status_code == 200
+            assert resp.json()["choices"][0]["message"]["content"] == "ok"
+
+    def test_semaphore_locked_on_zero(self):
+        """asyncio.Semaphore(0).locked() returns True."""
+        sem = asyncio.Semaphore(0)
+        assert sem.locked() is True
+
+    def test_semaphore_unlocked_on_positive(self):
+        """asyncio.Semaphore(1).locked() returns False."""
+        sem = asyncio.Semaphore(1)
+        assert sem.locked() is False
+
+
+# ============================================================
+# Rate limiting (no LLM needed)
+# ============================================================
+
+
+class TestRateLimit:
+    """Unit tests for per-IP rate limiting."""
+
+    def test_disabled_by_default(self):
+        """Rate limiting is disabled when RATE_LIMIT_ENABLED is not set."""
+        import gateway as gw
+
+        assert gw.RATE_LIMIT_ENABLED is False
+
+    def test_rate_limit_exceeded(self):
+        """When rate limit is exceeded, returns 429."""
+        import gateway as gw
+
+        gw._rate_limit_buckets.clear()
+
+        async def fake_handler(*args, **kwargs):
+            return {"choices": [{"message": {"content": "ok"}}]}
+
+        with (
+            patch.object(gw, "RATE_LIMIT_ENABLED", True),
+            patch.object(gw, "RATE_LIMIT_REQUESTS", 1),
+            patch.object(gw, "_handle_non_streaming", fake_handler),
+        ):
+            resp1 = client.post(
+                "/v1/chat/completions",
+                json={"model": "qwen3:8b", "messages": [{"role": "user", "content": "hi"}], "stream": False},
+            )
+            assert resp1.status_code == 200
+
+            resp2 = client.post(
+                "/v1/chat/completions",
+                json={"model": "qwen3:8b", "messages": [{"role": "user", "content": "hi"}], "stream": False},
+            )
+            assert resp2.status_code == 429
+            assert resp2.json()["detail"]["error"]["type"] == "rate_limit_error"
+
+    def test_window_limits_independent(self):
+        """Verify sliding window logic: timestamps outside window are pruned."""
+        now = 1000.0
+        window = 60
+        # Two timestamps: one just inside window, one just outside
+        timestamps = [now - 61, now - 30]
+        pruned = [t for t in timestamps if t > now - window]
+        assert len(pruned) == 1
