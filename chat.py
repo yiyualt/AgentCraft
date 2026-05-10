@@ -106,18 +106,18 @@ def repl(
 
         messages.append({"role": "user", "content": text})
 
-        # Save user message locally
-        if session_id:
-            mgr.add_message(session_id=session_id, role="user", content=text)
-
         try:
             extra_headers = {}
             if session_id:
                 extra_headers["X-Session-Id"] = session_id
+                # Only send the new message; gateway loads session history
+                request_messages = [{"role": "user", "content": text}]
+            else:
+                request_messages = messages
 
             response = client.chat.completions.create(
                 model=model,
-                messages=messages,  # type: ignore
+                messages=request_messages,  # type: ignore
                 temperature=temperature,
                 stream=False,
                 extra_headers=extra_headers,
@@ -125,16 +125,13 @@ def repl(
             reply = response.choices[0].message.content or ""
             print(reply)
             messages.append({"role": "assistant", "content": reply})
-
-            if session_id:
-                mgr.add_message(session_id=session_id, role="assistant", content=reply)
         except Exception as e:
             print(f"[Error] {e}", file=sys.stderr)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Interactive chat with local model")
-    parser.add_argument("--model", default="qwen3:8b", help="Model name (default: qwen3:8b)")
+    parser.add_argument("--model", default="deepseek-chat", help="Model name (default: deepseek-chat)")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000/v1", help="OpenAI-compatible API base URL")
     parser.add_argument("--temperature", type=float, default=0.3, help="Sampling temperature (default: 0.3)")
     parser.add_argument("--system", help="Optional system prompt")

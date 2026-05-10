@@ -4,13 +4,13 @@
     "filesystem": {
       "command": "npx",
       "args": ["-y", "@anthropic/mcp-server-filesystem", "/tmp"],
-      "enabled": true,
+      "enabled": false,
       "description": "Filesystem operations (read, write, list)"
     },
     "git": {
       "command": "uvx",
       "args": ["mcp-server-git"],
-      "enabled": true,
+      "enabled": false,
       "description": "Git operations (status, log, diff)"
     }
   }

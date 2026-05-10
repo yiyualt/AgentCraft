@@ -30,7 +30,7 @@ class SessionManager:
     def create_session(
         self,
         name: str,
-        model: str = "qwen3:8b",
+        model: str = "deepseek-chat",
         system_prompt: str | None = None,
     ) -> Session:
         sid = new_id()

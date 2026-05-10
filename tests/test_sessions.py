@@ -32,7 +32,7 @@ class TestSessionCreate:
     def test_create_basic(self, mgr):
         s = mgr.create_session("test")
         assert s.name == "test"
-        assert s.model == "qwen3:8b"
+        assert s.model == "deepseek-chat"
         assert s.status == "active"
         assert len(s.id) == 12
 

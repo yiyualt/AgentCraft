@@ -19,11 +19,12 @@ from sessions import SessionManager
 
 # ===== Config =====
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5050")
-MLFLOW_EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT", "ollama-gateway-qwen3-8b")
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1")
+MLFLOW_EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT", "agentcraft-gateway")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "sk-default")
 
 # Concurrency / Rate Limiting
-MAX_CONCURRENT_OLLAMA = int(os.getenv("MAX_CONCURRENT_OLLAMA", "1"))
+MAX_CONCURRENT_LLM = int(os.getenv("MAX_CONCURRENT_OLLAMA", "1"))
 RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "false").lower() == "true"
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "60"))
 RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
@@ -36,10 +37,10 @@ mlflow.set_experiment(MLFLOW_EXPERIMENT)
 # which produces broken-looking traces in the UI.
 mlflow.openai.autolog(log_traces=False)
 
-# ===== Ollama OpenAI-compatible Client =====
+# ===== LLM Client =====
 client = OpenAI(
-    base_url=OLLAMA_BASE_URL,
-    api_key="ollama",
+    base_url=LLM_BASE_URL,
+    api_key=LLM_API_KEY,
     http_client=httpx.Client(
         trust_env=False,
         timeout=300,
@@ -49,7 +50,7 @@ client = OpenAI(
 app = FastAPI(title="Ollama MLflow Gateway")
 
 # ===== Concurrency & Rate Limiting =====
-_ollama_semaphore = asyncio.Semaphore(MAX_CONCURRENT_OLLAMA)
+_llm_semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLM)
 _rate_limit_buckets: dict[str, list[float]] = {}
 _rate_limit_lock = asyncio.Lock()
 
@@ -120,36 +121,18 @@ def health() -> dict[str, str]:
     return {
         "status": "ok",
         "mlflow_tracking_uri": MLFLOW_TRACKING_URI,
-        "ollama_base_url": OLLAMA_BASE_URL,
+        "llm_base_url": LLM_BASE_URL,
     }
-
-
-_OLLAMA_API_URL = OLLAMA_BASE_URL.rstrip("/v1").rstrip("/")  # Strip /v1 suffix if present
 
 
 @app.get("/v1/models")
 def list_models() -> dict[str, Any]:
-    """List available models from Ollama, converted to OpenAI-compatible format."""
-    try:
-        resp = httpx.get(f"{_OLLAMA_API_URL}/api/tags", timeout=10)
-        resp.raise_for_status()
-        tags = resp.json()
-    except Exception as e:
-        return {
-            "error": {"message": str(e), "type": type(e).__name__},
-        }
-
-    models = tags.get("models", [])
+    """Return available models."""
     return {
         "object": "list",
         "data": [
-            {
-                "id": m["name"],
-                "object": "model",
-                "created": int(time.mktime(time.strptime(m["modified_at"].split(".")[0], "%Y-%m-%dT%H:%M:%S"))) if "modified_at" in m and m["modified_at"] else 0,
-                "owned_by": "ollama",
-            }
-            for m in models
+            {"id": "deepseek-chat", "object": "model", "owned_by": "deepseek"},
+            {"id": "deepseek-reasoner", "object": "model", "owned_by": "deepseek"},
         ],
     }
 
@@ -162,7 +145,7 @@ async def create_session(request: Request) -> dict[str, Any]:
     body = await request.json()
     session = _session_manager.create_session(
         name=body.get("name", "Untitled"),
-        model=body.get("model", "qwen3:8b"),
+        model=body.get("model", "deepseek-chat"),
         system_prompt=body.get("system_prompt"),
     )
     return session.to_dict()
@@ -203,18 +186,18 @@ def get_session_messages(session_id: str, limit: int = 50) -> list[dict[str, Any
 
 
 @app.post("/v1/chat/completions")
-async def chat_completions(request: Request):
+async def chat_completions(request: Request): 
     # Rate limit check (quick, no LLM)
     await _check_rate_limit(request)
 
     payload = await request.json()
-    model = payload.get("model", "qwen3:8b")
+    model = payload.get("model", "deepseek-chat")
     stream = payload.get("stream", False)
     session_id = request.headers.get("X-Session-Id")
 
     # Fail-fast semaphore check — avoid parsing payload unnecessarily
     # when the semaphore is already saturated.
-    if _ollama_semaphore.locked():
+    if _llm_semaphore.locked():
         raise HTTPException(
             status_code=429,
             detail={
@@ -268,8 +251,8 @@ async def _handle_non_streaming(
 
     with mlflow.start_run(run_name=f"gateway-{model}"):
         mlflow.log_param("model", model)
-        mlflow.log_param("runtime", "ollama")
-        mlflow.log_param("ollama_base_url", OLLAMA_BASE_URL)
+        mlflow.log_param("runtime", "openai")
+        mlflow.log_param("llm_base_url", LLM_BASE_URL)
         mlflow.log_param("temperature", payload.get("temperature"))
         mlflow.log_param("client_host", request.client.host if request.client else "unknown")
         mlflow.log_param("path", "/v1/chat/completions")
@@ -304,7 +287,7 @@ async def _handle_non_streaming(
                         **kwargs,
                     })
                     try:
-                        async with _ollama_semaphore:
+                        async with _llm_semaphore:
                             response = await asyncio.to_thread(
                                 llm_client.chat.completions.create, **call_kwargs
                             )
@@ -430,8 +413,8 @@ def _handle_streaming(
 
     mlflow.start_run(run_name=f"gateway-{model}")
     mlflow.log_param("model", model)
-    mlflow.log_param("runtime", "ollama")
-    mlflow.log_param("ollama_base_url", OLLAMA_BASE_URL)
+    mlflow.log_param("runtime", "openai")
+    mlflow.log_param("llm_base_url", LLM_BASE_URL)
     mlflow.log_param("temperature", payload.get("temperature"))
     mlflow.log_param("client_host", request.client.host if request.client else "unknown")
     mlflow.log_param("path", "/v1/chat/completions")
@@ -444,7 +427,7 @@ def _handle_streaming(
         first_chunk_time = time.time()
 
         try:
-            async with _ollama_semaphore:
+            async with _llm_semaphore:
                 stream = await asyncio.to_thread(
                     llm_client.chat.completions.create, **inner_kwargs, stream=True
                 )

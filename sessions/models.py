@@ -14,7 +14,7 @@ from typing import Any
 class Session:
     id: str
     name: str
-    model: str = "qwen3:8b"
+    model: str = "deepseek-chat"
     system_prompt: str | None = None
     created_at: str = ""
     updated_at: str = ""
@@ -72,7 +72,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    model TEXT NOT NULL DEFAULT 'qwen3:8b',
+    model TEXT NOT NULL DEFAULT 'deepseek-chat',
     system_prompt TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,

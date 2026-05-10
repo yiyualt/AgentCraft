@@ -32,7 +32,7 @@ client = TestClient(app)
 
 # Fixture for a basic chat payload
 CHAT_PAYLOAD = {
-    "model": "qwen3:8b",
+    "model": "deepseek-chat",
     "messages": [{"role": "user", "content": "只回复: hello"}],
     "stream": False,
 }
@@ -49,7 +49,7 @@ class TestHealth:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
-        assert "ollama_base_url" in data
+        assert "llm_base_url" in data
         assert "mlflow_tracking_uri" in data
 
 
@@ -64,7 +64,6 @@ class TestModels:
         assert len(data["data"]) > 0
         model = data["data"][0]
         assert "id" in model
-        assert model["owned_by"] == "ollama"
 
 
 # ============================================================
@@ -98,7 +97,7 @@ class TestNonStreaming:
 
     def test_empty_messages(self):
         resp = client.post("/v1/chat/completions", json={
-            "model": "qwen3:8b",
+            "model": "deepseek-chat",
             "messages": [],
             "stream": False,
         })
@@ -112,7 +111,7 @@ class TestToolCalling:
     def test_current_time_tool(self):
         """LLM should call the current_time tool."""
         resp = client.post("/v1/chat/completions", json={
-            "model": "qwen3:8b",
+            "model": "deepseek-chat",
             "messages": [{"role": "user", "content": "现在几点？只给我时间，不要其他内容。"}],
             "stream": False,
         })
@@ -126,7 +125,7 @@ class TestToolCalling:
     def test_calculator_tool(self):
         """LLM should call the calculator tool."""
         resp = client.post("/v1/chat/completions", json={
-            "model": "qwen3:8b",
+            "model": "deepseek-chat",
             "messages": [{"role": "user", "content": "123 * 456 等于多少？"}],
             "stream": False,
         })
@@ -143,7 +142,7 @@ class TestStreaming:
     def test_basic_streaming(self):
         """Streaming should return SSE chunks ending with [DONE]."""
         payload = {
-            "model": "qwen3:8b",
+            "model": "deepseek-chat",
             "messages": [{"role": "user", "content": "只回复: hi"}],
             "stream": True,
         }
@@ -175,10 +174,10 @@ class TestConcurrencyLimit:
         """When semaphore has no capacity, request gets 429."""
         import gateway as gw
 
-        with patch.object(gw, "_ollama_semaphore", asyncio.Semaphore(0)):
+        with patch.object(gw, "_llm_semaphore", asyncio.Semaphore(0)):
             resp = client.post(
                 "/v1/chat/completions",
-                json={"model": "qwen3:8b", "messages": [{"role": "user", "content": "hi"}], "stream": False},
+                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": "hi"}], "stream": False},
             )
             assert resp.status_code == 429
             data = resp.json()
@@ -193,12 +192,12 @@ class TestConcurrencyLimit:
             return {"choices": [{"message": {"content": "ok"}}]}
 
         with (
-            patch.object(gw, "_ollama_semaphore", asyncio.Semaphore(2)),
+            patch.object(gw, "_llm_semaphore", asyncio.Semaphore(2)),
             patch.object(gw, "_handle_non_streaming", fake_handler),
         ):
             resp = client.post(
                 "/v1/chat/completions",
-                json={"model": "qwen3:8b", "messages": [{"role": "user", "content": "hi"}], "stream": False},
+                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": "hi"}], "stream": False},
             )
             assert resp.status_code == 200
             assert resp.json()["choices"][0]["message"]["content"] == "ok"
@@ -244,13 +243,13 @@ class TestRateLimit:
         ):
             resp1 = client.post(
                 "/v1/chat/completions",
-                json={"model": "qwen3:8b", "messages": [{"role": "user", "content": "hi"}], "stream": False},
+                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": "hi"}], "stream": False},
             )
             assert resp1.status_code == 200
 
             resp2 = client.post(
                 "/v1/chat/completions",
-                json={"model": "qwen3:8b", "messages": [{"role": "user", "content": "hi"}], "stream": False},
+                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": "hi"}], "stream": False},
             )
             assert resp2.status_code == 429
             assert resp2.json()["detail"]["error"]["type"] == "rate_limit_error"
