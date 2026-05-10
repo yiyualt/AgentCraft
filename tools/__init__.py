@@ -104,3 +104,56 @@ def _infer_parameters(sig: inspect.Signature) -> dict[str, Any]:
 
 def get_default_registry() -> ToolRegistry:
     return _default_registry
+
+
+class UnifiedToolRegistry:
+    """Combined registry for local tools and MCP tools.
+
+    Provides async dispatch that routes to either local tools
+    (synchronous) or MCP tools (async).
+    """
+
+    def __init__(self, local_registry: ToolRegistry, mcp_manager: Any = None):
+        self._local_registry = local_registry
+        self._mcp_manager = mcp_manager
+
+    def list_tools(self) -> list[dict[str, Any]]:
+        """Return combined list of local and MCP tools."""
+        tools = self._local_registry.list_tools()
+        if self._mcp_manager:
+            tools.extend(self._mcp_manager.list_tools())
+        return tools
+
+    async def dispatch(self, name: str, arguments: dict[str, Any]) -> str:
+        """Dispatch tool call to local or MCP handler.
+
+        Args:
+            name: Tool name (may be prefixed with server name for MCP)
+            arguments: Tool arguments
+
+        Returns:
+            Tool result as string
+        """
+        # Try local tools first (synchronous)
+        local_tool = self._local_registry.get(name)
+        if local_tool:
+            return local_tool.run(arguments)
+
+        # Try MCP tools (async)
+        if self._mcp_manager and self._mcp_manager.is_tool_available(name):
+            return await self._mcp_manager.call_tool(name, arguments)
+
+        # Unknown tool
+        return json.dumps({"error": f"Unknown tool: {name}"}, ensure_ascii=False)
+
+    def is_mcp_tool(self, name: str) -> bool:
+        """Check if a tool is from MCP."""
+        if self._mcp_manager:
+            return self._mcp_manager.is_tool_available(name)
+        return False
+
+    def get_mcp_tool_names(self) -> list[str]:
+        """Return names of available MCP tools."""
+        if self._mcp_manager:
+            return self._mcp_manager.get_tool_names()
+        return []

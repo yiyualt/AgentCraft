@@ -12,8 +12,9 @@ from fastapi.responses import StreamingResponse
 from mlflow.entities import SpanType
 from openai import OpenAI
 
-from tools import get_default_registry
+from tools import get_default_registry, UnifiedToolRegistry
 from tools.builtin import *  # noqa: F401,F403 — register built-in tools
+from tools.mcp import MCPToolManager, MCPConfig
 
 # ===== Config =====
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5050")
@@ -50,6 +51,36 @@ app = FastAPI(title="Ollama MLflow Gateway")
 _ollama_semaphore = asyncio.Semaphore(MAX_CONCURRENT_OLLAMA)
 _rate_limit_buckets: dict[str, list[float]] = {}
 _rate_limit_lock = asyncio.Lock()
+
+# ===== MCP Tool Manager =====
+_mcp_manager: MCPToolManager | None = None
+_unified_registry: UnifiedToolRegistry | None = None
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize MCP servers on startup."""
+    global _mcp_manager, _unified_registry
+
+    config = MCPConfig.load()
+    if config.enabled and config.get_enabled_servers():
+        _mcp_manager = MCPToolManager()
+        await _mcp_manager.initialize(config)
+        _unified_registry = UnifiedToolRegistry(
+            get_default_registry(), _mcp_manager
+        )
+        app.state.mcp_manager = _mcp_manager
+        app.state.unified_registry = _unified_registry
+    else:
+        _unified_registry = UnifiedToolRegistry(get_default_registry())
+        app.state.unified_registry = _unified_registry
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop MCP servers on shutdown."""
+    if _mcp_manager:
+        await _mcp_manager.shutdown()
 
 
 async def _check_rate_limit(request: Request) -> None:
@@ -153,7 +184,8 @@ async def _handle_non_streaming(
 ) -> dict[str, Any]:
     start_time = time.time()
 
-    registry = get_default_registry()
+    # Use unified registry (local + MCP) or default
+    registry = _unified_registry or UnifiedToolRegistry(get_default_registry())
     user_tools = payload.get("tools")
     tools = user_tools if user_tools else registry.list_tools()
 
@@ -245,7 +277,7 @@ async def _handle_non_streaming(
                         fn_args = json.loads(tc["function"]["arguments"])
                     except json.JSONDecodeError:
                         fn_args = {}
-                    tool_result = registry.dispatch(fn_name, fn_args)
+                    tool_result = await registry.dispatch(fn_name, fn_args)
                     turn_log[-1]["tool_results"].append({
                         "name": fn_name,
                         "arguments": fn_args,
