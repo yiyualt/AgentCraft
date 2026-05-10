@@ -6,6 +6,7 @@ from typing import Any, AsyncGenerator
 import httpx
 import mlflow
 import asyncio
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -16,6 +17,7 @@ from tools import get_default_registry, UnifiedToolRegistry
 from tools.builtin import *  # noqa: F401,F403 — register built-in tools
 from tools.mcp import MCPToolManager, MCPConfig
 from sessions import SessionManager
+from skills import SkillLoader, default_skill_dirs
 
 # ===== Config =====
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5050")
@@ -29,12 +31,29 @@ RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "false").lower() == "true"
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "60"))
 RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
 
+# ===== Logging (写入文件) =====
+import logging
+
+LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, "gateway.log")
+
+logger = logging.getLogger("gateway")
+logger.setLevel(logging.DEBUG)
+
+if not logger.handlers:
+    file_handler = logging.FileHandler(LOG_FILE, mode="a", encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter(
+        "[%(asctime)s] %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
 # ===== MLflow =====
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment(MLFLOW_EXPERIMENT)
-# We manage LLM call spans manually instead of relying on autolog.
-# autolog's Completions span leaves outputs=null when the API errors,
-# which produces broken-looking traces in the UI.
 mlflow.openai.autolog(log_traces=False)
 
 # ===== LLM Client =====
@@ -46,8 +65,6 @@ client = OpenAI(
         timeout=300,
     ),
 )
-
-app = FastAPI(title="Ollama MLflow Gateway")
 
 # ===== Concurrency & Rate Limiting =====
 _llm_semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLM)
@@ -61,13 +78,19 @@ _unified_registry: UnifiedToolRegistry | None = None
 # ===== Session Manager =====
 _session_manager = SessionManager()
 
+# ===== Skills =====
+_skill_loader = SkillLoader(default_skill_dirs())
+_skill_loader.load()
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize MCP servers on startup."""
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Initialize MCP servers on startup, shut down on exit."""
     global _mcp_manager, _unified_registry
 
-    app.state.session_manager = _session_manager
+    _app.state.session_manager = _session_manager
+    _skill_loader.load()
+    _app.state.skill_loader = _skill_loader
 
     config = MCPConfig.load()
     if config.enabled and config.get_enabled_servers():
@@ -76,18 +99,19 @@ async def startup_event():
         _unified_registry = UnifiedToolRegistry(
             get_default_registry(), _mcp_manager
         )
-        app.state.mcp_manager = _mcp_manager
-        app.state.unified_registry = _unified_registry
+        _app.state.mcp_manager = _mcp_manager
+        _app.state.unified_registry = _unified_registry
     else:
         _unified_registry = UnifiedToolRegistry(get_default_registry())
-        app.state.unified_registry = _unified_registry
+        _app.state.unified_registry = _unified_registry
 
+    yield
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Stop MCP servers on shutdown."""
     if _mcp_manager:
         await _mcp_manager.shutdown()
+
+
+app = FastAPI(title="Ollama MLflow Gateway", lifespan=lifespan)
 
 
 async def _check_rate_limit(request: Request) -> None:
@@ -100,7 +124,6 @@ async def _check_rate_limit(request: Request) -> None:
 
     async with _rate_limit_lock:
         timestamps = _rate_limit_buckets.get(client_ip, [])
-        # Prune entries outside the window
         timestamps = [t for t in timestamps if t > window_start]
         if len(timestamps) >= RATE_LIMIT_REQUESTS:
             raise HTTPException(
@@ -147,6 +170,7 @@ async def create_session(request: Request) -> dict[str, Any]:
         name=body.get("name", "Untitled"),
         model=body.get("model", "deepseek-chat"),
         system_prompt=body.get("system_prompt"),
+        skills=body.get("skills", ""),
     )
     return session.to_dict()
 
@@ -185,8 +209,13 @@ def get_session_messages(session_id: str, limit: int = 50) -> list[dict[str, Any
     return _session_manager.get_messages_openai(session_id, limit)
 
 
+@app.get("/v1/skills")
+def list_skills() -> list[dict[str, Any]]:
+    return [s.to_dict() for s in _skill_loader.list_skills()]
+
+
 @app.post("/v1/chat/completions")
-async def chat_completions(request: Request): 
+async def chat_completions(request: Request):
     # Rate limit check (quick, no LLM)
     await _check_rate_limit(request)
 
@@ -195,8 +224,6 @@ async def chat_completions(request: Request):
     stream = payload.get("stream", False)
     session_id = request.headers.get("X-Session-Id")
 
-    # Fail-fast semaphore check — avoid parsing payload unnecessarily
-    # when the semaphore is already saturated.
     if _llm_semaphore.locked():
         raise HTTPException(
             status_code=429,
@@ -214,6 +241,25 @@ async def chat_completions(request: Request):
         return await _handle_non_streaming(request, client, payload, model, session_id)
 
 
+# ===== 辅助函数：生成 messages 摘要（不存完整内容） =====
+def _summarize_messages(msgs: list[dict]) -> list[dict]:
+    out = []
+    for m in msgs:
+        item = {"role": m["role"]}
+        content = m.get("content") or ""
+        if content:
+            item["content_preview"] = content[:80].replace("\n", "\\n")
+        if m.get("tool_calls"):
+            item["tool_calls"] = [
+                {"name": tc["function"]["name"], "id": tc["id"]}
+                for tc in m["tool_calls"]
+            ]
+        if m.get("tool_call_id"):
+            item["tool_call_id"] = m["tool_call_id"]
+        out.append(item)
+    return out
+
+
 async def _handle_non_streaming(
     request: Request,
     llm_client: OpenAI,
@@ -226,22 +272,74 @@ async def _handle_non_streaming(
     # Use unified registry (local + MCP) or default
     registry = _unified_registry or UnifiedToolRegistry(get_default_registry())
     user_tools = payload.get("tools")
-    tools = user_tools if user_tools else registry.list_tools()
+    tools = user_tools if user_tools is not None else registry.list_tools()
+
+    # ===== LOG: 初始状态 =====
+    logger.info("=" * 60)
+    logger.info(f"[TURN START] session_id={session_id}, model={model}")
+    logger.info(f"user_tools is None: {user_tools is None}")
+    logger.info(f"tools count: {len(tools)}")
+    logger.info(f"tool names: {[t['function']['name'] for t in tools]}")
 
     # Build messages: session history + current request messages
     new_messages = list(payload.get("messages", []))
     if session_id:
+        session = _session_manager.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
         history = _session_manager.get_messages_openai(session_id)
         messages = history + new_messages
-        # Inject session system prompt if set
-        session = _session_manager.get_session(session_id)
-        if session and session.system_prompt and not any(
-            m["role"] == "system" for m in messages
-        ):
-            messages.insert(0, {"role": "system", "content": session.system_prompt})
+
+        # ===== LOG: Session 状态 =====
+        logger.info(f"session.skills={session.skills}")
+        logger.info(f"session.system_prompt={session.system_prompt}")
+        logger.info(f"history messages count: {len(history)}")
+
+        # Build system prompt from session system_prompt + enabled skills
+        system_parts = []
+        if session.system_prompt:
+            system_parts.append(session.system_prompt)
+            logger.info("added session.system_prompt to system_parts")
+
+        if session.skills:
+            skill_names = [n.strip() for n in session.skills.split(",") if n.strip()]
+            logger.info(f"parsed skill_names: {skill_names}")
+
+            skill_prompt = _skill_loader.build_prompt(skill_names)
+            logger.info(f"skill_prompt length: {len(skill_prompt) if skill_prompt else 0}")
+            if skill_prompt:
+                logger.debug(f"skill_prompt content:\n{skill_prompt}")
+                system_parts.append(skill_prompt)
+
+        if system_parts:
+            logger.info(f"system_parts count: {len(system_parts)}")
+            for i, part in enumerate(system_parts):
+                preview = part[:80].replace("\n", "\\n")
+                logger.info(f"  system_parts[{i}] preview: '{preview}...'")
+        else:
+            logger.info("system_parts is empty")
+
+        if system_parts and not any(m["role"] == "system" for m in messages):
+            messages.insert(0, {"role": "system", "content": "\n\n".join(system_parts)})
+            logger.info("inserted system message at messages[0]")
     else:
         messages = list(new_messages)
+        logger.info("no session_id, using payload messages directly")
+
     kwargs = {k: v for k, v in payload.items() if k not in ("messages", "tools")}
+
+    # ===== LOG: 最终发给 LLM 的 messages =====
+    logger.info(f"final messages count: {len(messages)}")
+    for i, m in enumerate(messages):
+        content = m.get("content", "") or ""
+        preview = content[:70].replace("\n", "\\n")
+        role = m["role"]
+        extra = ""
+        if role == "tool":
+            extra = f" tool_call_id={m.get('tool_call_id')}"
+        elif role == "assistant" and m.get("tool_calls"):
+            extra = f" tool_calls_count={len(m['tool_calls'])}"
+        logger.info(f"  messages[{i}] role={role}{extra}, content_preview='{preview}...'")
 
     # Save incoming messages to session
     if session_id:
@@ -253,7 +351,8 @@ async def _handle_non_streaming(
                 tool_call_id=msg.get("tool_call_id"),
                 name=msg.get("name"),
             )
-        saved_count = len(messages)  # track what's already persisted
+        saved_count = len(messages)
+        logger.info(f"saved_count={saved_count} (messages persisted to session)")
 
     with mlflow.start_run(run_name=f"gateway-{model}"):
         mlflow.log_param("model", model)
@@ -270,7 +369,8 @@ async def _handle_non_streaming(
         with mlflow.start_span(name="chat_completion_request", span_type=SpanType.CHAT_MODEL) as request_span:
             request_span.set_inputs({
                 "model": model,
-                "messages": list(messages),
+                "messages_count": len(messages),
+                "messages_summary": _summarize_messages(messages),
                 "metadata": {
                     "tools_count": len(tools),
                     "stream": False,
@@ -286,10 +386,16 @@ async def _handle_non_streaming(
                 if tools:
                     call_kwargs["tools"] = tools
 
-                with mlflow.start_span(name="Completions", span_type=SpanType.CHAT_MODEL) as llm_span:
+                # ===== LLM CALL (带轮次序号 + messages 摘要) =====
+                with mlflow.start_span(
+                    name=f"Completions (turn {n_turns})",
+                    span_type=SpanType.CHAT_MODEL,
+                ) as llm_span:
                     llm_span.set_inputs({
+                        "turn": n_turns,
                         "model": model,
-                        "messages": list(messages),
+                        "messages_count": len(messages),
+                        "messages_summary": _summarize_messages(messages),
                         **kwargs,
                     })
                     try:
@@ -307,25 +413,43 @@ async def _handle_non_streaming(
                             "error_type": type(e).__name__,
                             "latency_seconds": time.time() - start_time,
                         })
-                        return {"error": {"message": str(e), "type": type(e).__name__}}
+                        logger.error(f"LLM API error: {type(e).__name__}: {e}")
+                        raise HTTPException(
+                            status_code=502,
+                            detail={"error": {"message": str(e), "type": type(e).__name__}},
+                        )
                     result = response.model_dump()
-                    llm_span.set_outputs(result)
+                    llm_span.set_outputs({
+                        "finish_reason": result["choices"][0].get("finish_reason"),
+                        "has_tool_calls": bool(result["choices"][0]["message"].get("tool_calls")),
+                    })
 
                 choice = result["choices"][0]
                 message = choice["message"]
                 messages.append(message)
 
+                # ===== LOG: LLM 返回 =====
+                content_preview = (message.get("content") or "")[:70].replace("\n", "\\n")
+                finish_reason = choice.get("finish_reason")
+                logger.info(f"LLM response content_preview: '{content_preview}...'")
+                logger.info(f"LLM finish_reason: {finish_reason}")
+
                 tool_calls = message.get("tool_calls")
                 if not tool_calls:
-                    break  # pure text answer → done
+                    logger.info("no tool_calls → breaking loop")
+                    break
 
                 n_turns += 1
+                logger.info(f"tool_calls detected, count={len(tool_calls)}, n_turns={n_turns}")
+
                 if n_turns > 10:
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": "limit",
-                        "content": "Tool execution limit reached (10). Please provide your best answer.",
-                    })
+                    logger.warning("tool loop exceeded 10 turns, forcing break")
+                    for tc in tool_calls:
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc["id"],
+                            "content": "Tool execution limit reached (10). Please provide your best answer based on available information.",
+                        })
                     break
 
                 turn_log.append({
@@ -333,22 +457,50 @@ async def _handle_non_streaming(
                     "tool_results": [],
                 })
 
-                for tc in tool_calls:
-                    fn_name = tc["function"]["name"]
-                    try:
-                        fn_args = json.loads(tc["function"]["arguments"])
-                    except json.JSONDecodeError:
-                        fn_args = {}
-                    tool_result = await registry.dispatch(fn_name, fn_args)
-                    turn_log[-1]["tool_results"].append({
-                        "name": fn_name,
-                        "arguments": fn_args,
-                        "result": tool_result,
+                # ===== TOOL EXECUTION (独立 span) =====
+                with mlflow.start_span(
+                    name=f"Tool Execution (turn {n_turns})",
+                    span_type=SpanType.CHAIN,
+                ) as tool_span:
+                    tool_calls_summary = [
+                        {
+                            "id": tc["id"],
+                            "name": tc["function"]["name"],
+                            "arguments": tc["function"]["arguments"],
+                        }
+                        for tc in tool_calls
+                    ]
+                    tool_span.set_inputs({
+                        "turn": n_turns,
+                        "tool_calls": tool_calls_summary,
                     })
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc["id"],
-                        "content": tool_result,
+
+                    for tc in tool_calls:
+                        fn_name = tc["function"]["name"]
+                        try:
+                            fn_args = json.loads(tc["function"]["arguments"])
+                        except json.JSONDecodeError:
+                            fn_args = {}
+                        logger.info(f"  -> dispatching tool: {fn_name}({json.dumps(fn_args, ensure_ascii=False)})")
+
+                        tool_result = await registry.dispatch(fn_name, fn_args)
+                        result_preview = str(tool_result)[:70].replace("\n", "\\n")
+                        logger.info(f"  <- tool_result preview: '{result_preview}...'")
+
+                        turn_log[-1]["tool_results"].append({
+                            "name": fn_name,
+                            "arguments": fn_args,
+                            "result": tool_result,
+                        })
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc["id"],
+                            "content": tool_result,
+                        })
+
+                    tool_span.set_outputs({
+                        "executed_count": len(tool_calls),
+                        "tool_names": [tc["function"]["name"] for tc in tool_calls],
                     })
 
             latency = time.time() - start_time
@@ -364,11 +516,22 @@ async def _handle_non_streaming(
 
             _log_mlflow_artifacts(result)
 
+            # ===== request_span outputs: 去重 + 摘要 =====
             request_span.set_outputs({
                 "latency_seconds": latency,
                 "tool_loop_turns": n_turns,
-                "messages": list(messages),
-                "final_content": result["choices"][0]["message"].get("content", ""),
+                "total_messages": len(messages),
+                "final_content": result["choices"][0]["message"].get("content", "")[:100],
+                "conversation_artifact": "conversation.json",
+                "turn_log_summary": [
+                    {
+                        "turn": i + 1,
+                        "tools": [tr["name"] for tr in turn["tool_results"]],
+                        "tool_count": len(turn["tool_results"]),
+                    }
+                    for i, turn in enumerate(turn_log)
+                ] if turn_log else "no tool execution",
+                "final_messages_summary": _summarize_messages(messages),
             })
 
             # Export trace to file system
@@ -377,6 +540,7 @@ async def _handle_non_streaming(
 
             # Persist new messages (assistant + tool) to session
             if session_id:
+                new_msg_count = 0
                 for msg in messages[saved_count:]:
                     _session_manager.add_message(
                         session_id=session_id,
@@ -386,6 +550,11 @@ async def _handle_non_streaming(
                         tool_call_id=msg.get("tool_call_id"),
                         name=msg.get("name"),
                     )
+                    new_msg_count += 1
+                logger.info(f"persisted {new_msg_count} new messages to session")
+
+            logger.info(f"[TURN END] latency={latency:.3f}s, tool_loop_turns={n_turns}")
+            logger.info("=" * 60)
 
         return result
 
@@ -402,14 +571,22 @@ def _handle_streaming(
     # Load session history and save incoming messages
     new_messages = list(payload.get("messages", []))
     if session_id:
+        session = _session_manager.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
         history = _session_manager.get_messages_openai(session_id)
         full_messages = history + new_messages
-        # Inject session system prompt if set
-        session = _session_manager.get_session(session_id)
-        if session and session.system_prompt and not any(
-            m["role"] == "system" for m in full_messages
-        ):
-            full_messages.insert(0, {"role": "system", "content": session.system_prompt})
+        # Build system prompt from session system_prompt + enabled skills
+        system_parts = []
+        if session.system_prompt:
+            system_parts.append(session.system_prompt)
+        if session.skills:
+            skill_names = [n.strip() for n in session.skills.split(",") if n.strip()]
+            skill_prompt = _skill_loader.build_prompt(skill_names)
+            if skill_prompt:
+                system_parts.append(skill_prompt)
+        if system_parts and not any(m["role"] == "system" for m in full_messages):
+            full_messages.insert(0, {"role": "system", "content": "\n\n".join(system_parts)})
         for msg in new_messages:
             _session_manager.add_message(
                 session_id=session_id,

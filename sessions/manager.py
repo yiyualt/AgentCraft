@@ -32,18 +32,19 @@ class SessionManager:
         name: str,
         model: str = "deepseek-chat",
         system_prompt: str | None = None,
+        skills: str = "",
     ) -> Session:
         sid = new_id()
         now = now_iso()
         self._conn.execute(
-            "INSERT INTO sessions (id, name, model, system_prompt, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (sid, name, model, system_prompt, now, now),
+            "INSERT INTO sessions (id, name, model, system_prompt, skills, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (sid, name, model, system_prompt, skills, now, now),
         )
         self._conn.commit()
         return Session(
             id=sid, name=name, model=model,
-            system_prompt=system_prompt,
+            system_prompt=system_prompt, skills=skills,
             created_at=now, updated_at=now,
         )
 
@@ -65,7 +66,7 @@ class SessionManager:
         if not session:
             return None
 
-        allowed = {"name", "model", "system_prompt", "status"}
+        allowed = {"name", "model", "system_prompt", "status", "skills"}
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
             return session
@@ -163,6 +164,7 @@ class SessionManager:
             system_prompt=row[3], created_at=row[4],
             updated_at=row[5], message_count=row[6],
             token_count=row[7], status=row[8],
+            skills=row[9] if len(row) > 9 else "",
         )
 
     @staticmethod

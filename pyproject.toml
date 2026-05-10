@@ -21,8 +21,9 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+addopts = "-m 'not integration'"
 markers = [
-    "integration: marks tests that require a running LLM (Ollama)",
+    "integration: marks tests that require a running LLM (Ollama) and valid API key",
 ]
 
 [dependency-groups]

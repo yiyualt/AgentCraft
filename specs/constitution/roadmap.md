@@ -18,7 +18,7 @@
 
 - [x] Session 管理 (多对话隔离 + SQLite 持久化)
 - [x] System Prompt 注入 (Persona / Instructions)
-- [ ] Skills 系统 (按需加载能力，注入到 prompt)
+- [x] Skills 系统 (按需加载能力，注入到 prompt)
 - [ ] 记忆管理 (短期 context window + 长期持久化)
 
 ## Phase 3: Channel Adapters

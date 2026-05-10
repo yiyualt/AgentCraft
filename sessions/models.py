@@ -21,6 +21,7 @@ class Session:
     message_count: int = 0
     token_count: int = 0
     status: str = "active"
+    skills: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -33,6 +34,7 @@ class Session:
             "message_count": self.message_count,
             "token_count": self.token_count,
             "status": self.status,
+            "skills": self.skills,
         }
 
 
@@ -78,7 +80,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     updated_at TEXT NOT NULL,
     message_count INTEGER NOT NULL DEFAULT 0,
     token_count INTEGER NOT NULL DEFAULT 0,
-    status TEXT NOT NULL DEFAULT 'active'
+    status TEXT NOT NULL DEFAULT 'active',
+    skills TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -104,5 +107,10 @@ def init_db(db_path: str) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
+    # Migrate existing databases that lack the skills column
+    try:
+        conn.execute("SELECT skills FROM sessions LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE sessions ADD COLUMN skills TEXT NOT NULL DEFAULT ''")
     conn.commit()
     return conn
