@@ -16,9 +16,9 @@
 
 ## Phase 2: Agent Core
 
-- [ ] Session 管理 (多对话隔离)
+- [ ] Session 管理 (多对话隔离 + SQLite 持久化)
 - [ ] System Prompt 注入 (Persona / Instructions)
-- [ ] Tool Registry (注册、发现、执行工具)
+- [ ] Skills 系统 (按需加载能力，注入到 prompt)
 - [ ] 记忆管理 (短期 context window + 长期持久化)
 
 ## Phase 3: Channel Adapters
@@ -28,12 +28,11 @@
 - [ ] Web Chat (简单的 HTML/JS)
 - [ ] 统一的 Channel Router
 
-## Phase 4: Skills & Tools
+## Phase 4: Skills 增强 & 沙箱
 
-- [ ] Skills 系统 (按需加载能力)
-- [x] MCP 工具协议支持
+- [ ] Skills 市场 / 社区共享
 - [ ] 沙箱执行 (Docker)
-- [ ] 工具市场 / ClawHub 类似物
+- [ ] 工具组合编排 (多工具联动)
 
 ## Phase 5: Canvas & 可视化
 

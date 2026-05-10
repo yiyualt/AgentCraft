@@ -14,13 +14,15 @@
 ## 学习路径
 
 ```
-阶段 1: Local LLM Gateway  ← 你在这里
+阶段 0: Local LLM 基础 ✅
       ↓
-阶段 2: Agent Core (Session + Tool Calling)
+阶段 1: Gateway + Tool Calling + MCP ✅
       ↓
-阶段 3: Channel Adapters (Telegram / Slack / CLI)
+阶段 2: Agent Core (Session + Skills + Memory)  ← 你在这里
       ↓
-阶段 4: Skills System + MCP Tools
+阶段 3: Channel Adapters (Telegram / Slack / Web)
+      ↓
+阶段 4: Skills 增强 + 沙箱执行
       ↓
 阶段 5: Canvas / Visual Workspace
       ↓

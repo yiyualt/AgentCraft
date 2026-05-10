@@ -2,15 +2,17 @@
 
 ## 背景
 
-当前 gateway.py 是一个简单的请求代理，不支持 streaming，也没有 tool calling 能力。
+Gateway 是 AgentCraft 的核心入口，提供 OpenAI-compatible API，代理请求到本地 Ollama，
+同时集成 MLflow 追踪、工具调用编排、MCP 外部工具接入。
 
 ## 目标
 
-- [ ] 支持 OpenAI-compatible streaming (`stream=true`)
-- [ ] 支持 Tool Calling 转发（LLM 请求工具 → Gateway 执行 → 返回结果给 LLM）
-- [ ] 请求限流 / 并发控制（防止 Ollama OOM）
-- [ ] 模型列表 API (`GET /v1/models`)
-- [ ] 更好的错误处理和超时管理
+- [x] 支持 OpenAI-compatible streaming (`stream=true`)
+- [x] 支持 Tool Calling 转发（LLM 请求工具 → Gateway 执行 → 返回结果给 LLM）
+- [x] 请求限流 / 并发控制（防止 Ollama OOM）
+- [x] 模型列表 API (`GET /v1/models`)
+- [x] MCP Stdio 支持（启动外部 MCP server 并调用其工具）
+- [x] Trace 自动导出到文件系统
 
 ## 非目标
 
@@ -21,17 +23,16 @@
 ## 接口
 
 保持与 OpenAI Chat Completions API 兼容：
-- `POST /v1/chat/completions`
-- `GET /v1/models`
-- `GET /health`
+- `POST /v1/chat/completions` — 聊天补全（stream 和 non-stream）
+- `GET /v1/models` — 列出可用模型
+- `GET /health` — 健康检查
 
-## Streaming 设计
+## 架构
 
 ```
-Client → Gateway → Ollama (streaming)
-         Gateway ← Ollama (SSE chunks)
-Client ← Gateway ← (转发每个 chunk，同时记录到 MLflow)
+Client → Gateway (FastAPI)
+           ├─→ Ollama (LLM 推理)
+           ├─→ ToolRegistry (本地工具)
+           ├─→ MCP Servers (外部工具，通过 stdio)
+           └─→ MLflow (追踪)
 ```
-
-- 每个 chunk 透传，不修改 content
-- 最终汇总完整 response 记录到 MLflow
