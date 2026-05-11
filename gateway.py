@@ -236,14 +236,14 @@ async def chat_completions(request: Request):
     return await _handle_non_streaming(request, client, payload, model, session_id)
 
 
-# ===== 辅助函数：生成 messages 摘要（不存完整内容） =====
+# ===== 辅助函数：生成 messages 摘要 =====
 def _summarize_messages(msgs: list[dict]) -> list[dict]:
     out = []
     for m in msgs:
         item = {"role": m["role"]}
         content = m.get("content") or ""
         if content:
-            item["content_preview"] = content[:80].replace("\n", "\\n")
+            item["content"] = content  # 记录完整 content
         if m.get("tool_calls"):
             item["tool_calls"] = [
                 {"name": tc["function"]["name"], "id": tc["id"]}
