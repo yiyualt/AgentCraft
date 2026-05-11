@@ -47,3 +47,8 @@ class ExecutionResult:
     error: str = ""
     exit_code: int = 0
     timed_out: bool = False
+
+    @property
+    def success(self) -> bool:
+        """Check if execution succeeded."""
+        return self.exit_code == 0 and not self.error

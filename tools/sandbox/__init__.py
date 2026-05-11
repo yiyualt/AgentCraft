@@ -116,12 +116,26 @@ subprocess.run(["pip", "install", "-q"] + {json.dumps(self.config.pip_packages)}
 '''
 
         if tool_code:
-            # Strip @tool decorator lines
+            # Strip @tool decorator block (multi-line support)
             lines = tool_code.split('\n')
             cleaned_lines = []
-            for line in lines:
-                # Skip decorator lines (start with @tool or @)
-                if line.strip().startswith('@tool') or (line.strip().startswith('@') and 'tool' in line):
+            in_decorator = False
+            paren_count = 0
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                # Detect start of decorator block
+                if stripped.startswith('@tool') or (stripped.startswith('@') and not in_decorator):
+                    in_decorator = True
+                    # Count parentheses in the decorator line
+                    paren_count += stripped.count('(') - stripped.count(')')
+                    if paren_count <= 0:
+                        in_decorator = False
+                    continue
+                # Inside decorator block
+                if in_decorator:
+                    paren_count += stripped.count('(') - stripped.count(')')
+                    if paren_count <= 0:
+                        in_decorator = False
                     continue
                 cleaned_lines.append(line)
             cleaned_code = '\n'.join(cleaned_lines)
