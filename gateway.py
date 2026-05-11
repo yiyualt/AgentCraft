@@ -19,6 +19,7 @@ from openai import OpenAI
 from tools import get_default_registry, UnifiedToolRegistry
 from tools.builtin import *  # noqa: F401,F403 — register built-in tools
 from tools.mcp import MCPToolManager, MCPConfig
+from tools.sandbox import SandboxExecutor, SandboxConfig
 from sessions import SessionManager
 from skills import SkillLoader, default_skill_dirs
 from channels import ChannelRouter
@@ -36,6 +37,14 @@ MAX_CONCURRENT_LLM = int(os.getenv("MAX_CONCURRENT_OLLAMA", "1"))
 RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "false").lower() == "true"
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "60"))
 RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
+
+# Sandbox Execution
+SANDBOX_ENABLED = os.getenv("SANDBOX_ENABLED", "false").lower() == "true"
+SANDBOX_NETWORK = os.getenv("SANDBOX_NETWORK", "false").lower() == "true"  # Enable network
+SANDBOX_HOST_BIN = os.getenv("SANDBOX_HOST_BIN", "false").lower() == "true"  # Mount host /usr/bin
+SANDBOX_PIP_PACKAGES = os.getenv("SANDBOX_PIP_PACKAGES", "").split(",") if os.getenv("SANDBOX_PIP_PACKAGES") else []
+SANDBOX_READ_DIRS = os.getenv("SANDBOX_READ_DIRS", "").split(",") if os.getenv("SANDBOX_READ_DIRS") else []
+SANDBOX_WRITE_DIRS = os.getenv("SANDBOX_WRITE_DIRS", "").split(",") if os.getenv("SANDBOX_WRITE_DIRS") else []
 
 # ===== Logging (写入文件) =====
 import logging
@@ -98,6 +107,9 @@ _session_manager = SessionManager()
 _skill_loader = SkillLoader(default_skill_dirs())
 _skill_loader.load()
 
+# ===== Sandbox Executor =====
+_sandbox_executor: SandboxExecutor | None = None
+
 # ===== Channels =====
 _channel_router = ChannelRouter()
 _telegram_channel: TelegramChannel | None = None
@@ -107,11 +119,24 @@ _web_channel: WebChannel | None = None
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Initialize MCP servers and channels on startup, shut down on exit."""
-    global _mcp_manager, _unified_registry, _telegram_channel, _web_channel
+    global _mcp_manager, _unified_registry, _telegram_channel, _web_channel, _sandbox_executor
 
     _app.state.session_manager = _session_manager
     _skill_loader.load()
     _app.state.skill_loader = _skill_loader
+
+    # Sandbox initialization
+    if SANDBOX_ENABLED:
+        sandbox_config = SandboxConfig(
+            network_disabled=not SANDBOX_NETWORK,
+            mount_host_bin=SANDBOX_HOST_BIN,
+            pip_packages=SANDBOX_PIP_PACKAGES,
+            read_dirs=SANDBOX_READ_DIRS,
+            write_dirs=SANDBOX_WRITE_DIRS,
+        )
+        _sandbox_executor = SandboxExecutor(sandbox_config)
+        _app.state.sandbox_executor = _sandbox_executor
+        logger.info(f"Sandbox executor initialized: network={SANDBOX_NETWORK}, host_bin={SANDBOX_HOST_BIN}, pip={SANDBOX_PIP_PACKAGES}")
 
     # MCP initialization
     config = MCPConfig.load()
@@ -141,6 +166,8 @@ async def lifespan(_app: FastAPI):
 
     # Cleanup
     await _channel_router.stop_all()
+    if _sandbox_executor:
+        await _sandbox_executor.cleanup()
     if _mcp_manager:
         await _mcp_manager.shutdown()
 
@@ -179,6 +206,7 @@ def health() -> dict[str, str]:
         "status": "ok",
         "mlflow_tracking_uri": MLFLOW_TRACKING_URI,
         "llm_base_url": LLM_BASE_URL,
+        "sandbox_enabled": str(SANDBOX_ENABLED),
     }
 
 
@@ -523,7 +551,24 @@ async def _handle_non_streaming(
                         logger.info(f"[TOOL EXEC] {fn_name}({json.dumps(fn_args, ensure_ascii=False)})")
                         logger.debug(f"[TOOL ARGS FULL]: {json.dumps(fn_args, ensure_ascii=False, indent=2)}")
 
-                        tool_result = await registry.dispatch(fn_name, fn_args)
+                        # Execute in sandbox or directly
+                        if SANDBOX_ENABLED and _sandbox_executor:
+                            # Sandbox execution: get tool source code first
+                            tool_code = registry.get_source_code(fn_name)
+                            if tool_code is None:
+                                # MCP tools cannot be sandboxed, fall back to direct dispatch
+                                logger.warning(f"[SANDBOX] {fn_name} has no source code (MCP tool?), falling back to direct dispatch")
+                                tool_result = await registry.dispatch(fn_name, fn_args)
+                            else:
+                                logger.info(f"[SANDBOX] executing {fn_name} in isolated container (code_len={len(tool_code)})")
+                                result = await _sandbox_executor.run_tool(fn_name, fn_args, tool_code)
+                                tool_result = result.output if result.success else f"Error: {result.error}"
+                                if not result.success:
+                                    logger.warning(f"[SANDBOX ERROR] {fn_name}: {result.error}")
+                        else:
+                            # Direct execution via registry
+                            tool_result = await registry.dispatch(fn_name, fn_args)
+
                         logger.info(f"[TOOL RESULT] {fn_name}: length={len(str(tool_result))}")
                         logger.debug(f"[TOOL RESULT FULL]: {tool_result}")
 

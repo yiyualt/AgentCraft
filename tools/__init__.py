@@ -32,6 +32,17 @@ class Tool:
             result = json.dumps(result, ensure_ascii=False)
         return result
 
+    def get_source_code(self) -> str | None:
+        """Get the source code of the tool function.
+
+        Returns:
+            Source code string, or None if unavailable
+        """
+        try:
+            return inspect.getsource(self.fn)
+        except (OSError, TypeError):
+            return None
+
 
 class ToolRegistry:
     """Registry of tools available to the LLM."""
@@ -44,6 +55,20 @@ class ToolRegistry:
 
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
+
+    def get_source_code(self, name: str) -> str | None:
+        """Get source code of a registered tool.
+
+        Args:
+            name: Tool name
+
+        Returns:
+            Source code string, or None if tool not found or unavailable
+        """
+        tool = self.get(name)
+        if tool:
+            return tool.get_source_code()
+        return None
 
     def list_tools(self) -> list[dict[str, Any]]:
         return [t.to_openai_tool() for t in self._tools.values()]
@@ -123,6 +148,21 @@ class UnifiedToolRegistry:
         if self._mcp_manager:
             tools.extend(self._mcp_manager.list_tools())
         return tools
+
+    def get_source_code(self, name: str) -> str | None:
+        """Get source code of a local tool.
+
+        Note: MCP tools cannot have source code extracted.
+
+        Args:
+            name: Tool name
+
+        Returns:
+            Source code string, or None if not available
+        """
+        if self.is_mcp_tool(name):
+            return None
+        return self._local_registry.get_source_code(name)
 
     async def dispatch(self, name: str, arguments: dict[str, Any]) -> str:
         """Dispatch tool call to local or MCP handler.

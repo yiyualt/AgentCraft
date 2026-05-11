@@ -109,8 +109,36 @@ steps:
 
 ## 验证
 
-- [ ] Docker 容器能成功执行工具
-- [ ] 容器资源限制生效
-- [ ] Workflow 能顺序执行多个工具
-- [ ] Workflow 条件分支正确执行
-- [ ] Skill 能从 Registry 安装
+- [x] SandboxExecutor 模块创建 ✅
+- [x] WorkflowEngine 支持顺序执行 ✅
+- [x] WorkflowEngine 支持条件分支 ✅
+- [x] WorkflowEngine 支持重试机制 ✅
+- [x] LocalRegistry 支持安装/卸载 Skill Pack ✅
+- [x] Gateway 集成 SandboxExecutor (SANDBOX_ENABLED) ✅
+- [x] 工具源代码获取 (Tool.get_source_code) ✅
+- [x] 沙箱脚本生成（自动导入标准库） ✅
+- [ ] Docker 容器能成功执行工具 (需要 Docker 环境)
+- [ ] 容器资源限制生效 (需要 Docker 环境)
+
+## 沙箱执行流程
+
+```
+用户 → Gateway → LLM → tool_call
+                    ↓
+          SANDBOX_ENABLED=true?
+                    ↓
+          registry.get_source_code(fn_name)
+                    ↓
+          SandboxExecutor.run_tool(fn_name, args, tool_code)
+                    ↓
+          _prepare_script() → 生成 Python 脚本
+                    ↓
+          Docker 容器执行脚本
+                    ↓
+          返回结果 → Gateway → LLM → 用户
+```
+
+**注意事项**：
+- MCP 工具无法沙箱化（外部进程），直接执行
+- 使用 `httpx` 等外部库的工具无法在沙箱中运行（容器只有标准库）
+- 网络被禁用 (`network_disabled=True`)，无法访问外部 API

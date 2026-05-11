@@ -28,11 +28,11 @@
 - [x] Web Chat (简单的 HTML/JS)
 - [x] 统一的 Channel Router
 
-## Phase 4: Skills 增强 & 沙箱
+## Phase 4: Skills 增强 & 沙箱 (进行中)
 
 - [ ] Skills 市场 / 社区共享
-- [ ] 沙箱执行 (Docker)
-- [ ] 工具组合编排 (多工具联动)
+- [x] 沙箱执行 (Docker) ✅ 基础实现完成
+- [x] 工具组合编排 (多工具联动) ✅ WorkflowEngine 实现
 
 ## Phase 5: Canvas & 可视化
 

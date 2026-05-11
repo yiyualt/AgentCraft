@@ -61,6 +61,18 @@ class TestTool:
                  description="", parameters={"type": "object"})
         assert t.run({}) == '{"key": "value"}'
 
+    def test_get_source_code(self):
+        """Tool can return its source code."""
+        def sample_fn(x: int) -> int:
+            return x * 2
+
+        t = Tool(fn=sample_fn, name="sample", description="", parameters={})
+        code = t.get_source_code()
+
+        assert code is not None
+        assert "def sample_fn" in code
+        assert "return x * 2" in code
+
 
 class TestToolRegistry:
     def test_register_and_get(self):
@@ -88,6 +100,21 @@ class TestToolRegistry:
                           }))
         assert reg.dispatch("double", {"x": 5}) == "10"
         assert "Unknown tool" in reg.dispatch("nonexistent", {})
+
+    def test_get_source_code(self):
+        """Registry can return tool source code."""
+        def sample_fn(x: int) -> int:
+            return x + 1
+
+        reg = ToolRegistry()
+        reg.register(Tool(fn=sample_fn, name="sample", description="", parameters={}))
+
+        code = reg.get_source_code("sample")
+        assert code is not None
+        assert "def sample_fn" in code
+
+        # Unknown tool returns None
+        assert reg.get_source_code("nonexistent") is None
 
     def test_default_registry_singleton(self):
         assert get_default_registry() is get_default_registry()

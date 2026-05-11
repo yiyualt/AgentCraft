@@ -1,6 +1,6 @@
 # Plan: Skills Enhancement Phase 4
 
-## Step 1: 沙箱执行基础
+## Step 1: 沙箱执行基础 ✅ (已完成)
 
 ### 目标
 - Docker 容器隔离执行工具
@@ -39,7 +39,7 @@ class SandboxConfig:
 uv run pytest tests/test_sandbox.py -v
 ```
 
-## Step 2: Workflow DSL 解析
+## Step 2: Workflow DSL 解析 ✅ (已完成)
 
 ### 目标
 - YAML 工作流定义解析
@@ -89,7 +89,7 @@ EOF
 uv run python -m workflows test-workflow.yaml
 ```
 
-## Step 3: Gateway 集成 Sandbox
+## Step 3: Gateway 集成 Sandbox ✅ (已完成)
 
 ### 目标
 - Gateway 可选启用沙箱模式
@@ -110,7 +110,7 @@ else:
     result = await _tool_registry.dispatch(fn_name, fn_args)
 ```
 
-## Step 4: Skills Registry 基础
+## Step 4: Skills Registry 基础 ✅ (已完成)
 
 ### 目标
 - 本地 Skill Pack 管理
@@ -154,7 +154,7 @@ uv run python -m skills.registry install cat-girl.pack
 ls ~/.agentcraft/skills/
 ```
 
-## Step 5: 条件分支与错误处理
+## Step 5: 条件分支与错误处理 ✅ (已完成 - 在 Step 2 中实现)
 
 ### 目标
 - Workflow 条件表达式

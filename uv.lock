@@ -2,12 +2,6 @@ version = 1
 revision = 3
 requires-python = ">=3.13"
 
-[manifest]
-members = [
-    "ollama-mlflow-demo",
-    "test-pdf",
-]
-
 [[package]]
 name = "aiohappyeyeballs"
 version = "2.6.1"
@@ -1468,10 +1462,12 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "ddgs" },
+    { name = "docker" },
     { name = "duckduckgo-search" },
     { name = "mlflow" },
     { name = "openai" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "tiktoken" },
 ]
 
@@ -1493,6 +1489,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "ddgs", specifier = ">=9.14.2" },
+    { name = "docker", specifier = ">=7.0.0" },
     { name = "duckduckgo-search", specifier = ">=8.1.1" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.0" },
     { name = "mlflow", specifier = ">=3.12.0" },
@@ -1500,6 +1497,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "tiktoken", specifier = ">=0.7.0" },
 ]
 provides-extras = ["dev"]
@@ -2417,11 +2415,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/c4/68/79977123bb7be889a
 wheels = [
     { url = "https://files.pythonhosted.org/packages/81/0d/13d1d239a25cbfb19e740db83143e95c772a1fe10202dda4b76792b114dd/starlette-0.52.1-py3-none-any.whl", hash = "sha256:0029d43eb3d273bc4f83a08720b4912ea4b071087a3b48db01b7c839f7954d74", size = 74272, upload-time = "2026-01-18T13:34:09.188Z" },
 ]
-
-[[package]]
-name = "test-pdf"
-version = "0.1.0"
-source = { virtual = "test-pdf" }
 
 [[package]]
 name = "threadpoolctl"
