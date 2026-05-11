@@ -21,12 +21,12 @@
 - [x] Skills 系统 (按需加载能力，注入到 prompt)
 - [x] 记忆管理 (短期 context window + 长期持久化)
 
-## Phase 3: Channel Adapters
+## Phase 3: Channel Adapters ✅ (已完成)
 
-- [ ] Telegram Bot 接入
-- [ ] Slack Bot 接入
-- [ ] Web Chat (简单的 HTML/JS)
-- [ ] 统一的 Channel Router
+- [x] Telegram Bot 接入
+- [ ] Slack Bot 接入 (低优先级，暂未实现)
+- [x] Web Chat (简单的 HTML/JS)
+- [x] 统一的 Channel Router
 
 ## Phase 4: Skills 增强 & 沙箱
 

@@ -19,10 +19,10 @@ open http://127.0.0.1:8000/chat
 
 ## 验证清单
 
-- [ ] Channel 基类接口清晰，可扩展
-- [ ] Telegram Bot 能接收消息并回复
-- [ ] 不同 Telegram 用户的消息隔离（独立 Session）
-- [ ] Telegram Bot 支持 /new 和 /history 命令
-- [ ] Web Chat 页面可正常加载和发送消息
-- [ ] Web Chat 支持流式响应（SSE streaming）
-- [ ] Channel 异常不影响 Gateway 主流程
+- [x] Channel 基类接口清晰，可扩展 ✅ (base.py: start/stop/send_message/handle_message)
+- [ ] Telegram Bot 能接收消息并回复 (需要 TELEGRAM_BOT_TOKEN)
+- [ ] 不同 Telegram 用户的消息隔离（独立 Session）(需要 Telegram 测试)
+- [ ] Telegram Bot 支持 /new 和 /history 命令 (需要 Telegram 测试)
+- [x] Web Chat 页面可正常加载和发送消息 ✅ (curl 测试通过)
+- [ ] Web Chat 支持流式响应（SSE streaming）(尚未实现，当前为非流式)
+- [x] Channel 异常不影响 Gateway 主流程 ✅ (独立 Channel 模块)

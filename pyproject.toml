@@ -28,6 +28,11 @@ markers = [
     "integration: marks tests that require a running LLM (Ollama) and valid API key",
 ]
 
+[tool.uv.workspace]
+members = [
+    "test-pdf",
+]
+
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
