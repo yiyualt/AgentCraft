@@ -182,10 +182,11 @@ class TestMessageClear:
 
 
 class TestCountTokens:
-    def test_rough_estimate(self, mgr):
+    def test_token_calculation(self, mgr):
         s = mgr.create_session("chat")
-        mgr.add_message(s.id, "user", "hello world")  # 11 chars -> 5 tokens
-        assert mgr.count_tokens(s.id) == 5
+        mgr.add_message(s.id, "user", "hello world")
+        # Using tiktoken: "hello world" = 3 tokens + role overhead 4 = 6
+        assert mgr.count_tokens(s.id) == 6
 
     def test_empty_session(self, mgr):
         s = mgr.create_session("chat")

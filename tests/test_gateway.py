@@ -137,31 +137,6 @@ class TestToolCalling:
         assert "56088" in content.replace(",", "")
 
 
-@pytest.mark.integration
-class TestStreaming:
-    def test_basic_streaming(self):
-        """Streaming should return SSE chunks ending with [DONE]."""
-        payload = {
-            "model": "deepseek-chat",
-            "messages": [{"role": "user", "content": "只回复: hi"}],
-            "stream": True,
-        }
-        with client.stream("POST", "/v1/chat/completions", json=payload) as resp:
-            assert resp.status_code == 200
-            chunks = []
-            for line in resp.iter_lines():
-                if line.startswith("data: "):
-                    chunks.append(line)
-
-            assert len(chunks) >= 2  # at least one data chunk + [DONE]
-            # Last chunk should be [DONE]
-            assert chunks[-1] == "data: [DONE]"
-
-            # First data chunk should be valid JSON
-            first_data = json.loads(chunks[0][6:])  # strip "data: "
-            assert "choices" in first_data
-
-
 # ============================================================
 # Concurrency control (no LLM needed)
 # ============================================================

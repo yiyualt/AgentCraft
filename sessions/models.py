@@ -22,6 +22,8 @@ class Session:
     token_count: int = 0
     status: str = "active"
     skills: str = ""
+    context_window: int = 64000
+    memory_strategy: str = "sliding_window"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -35,6 +37,8 @@ class Session:
             "token_count": self.token_count,
             "status": self.status,
             "skills": self.skills,
+            "context_window": self.context_window,
+            "memory_strategy": self.memory_strategy,
         }
 
 
@@ -48,6 +52,7 @@ class Message:
     tool_call_id: str | None = None
     name: str | None = None  # tool name for tool role
     created_at: str = ""
+    token_count: int = 0
 
     def to_openai_format(self) -> dict[str, Any]:
         """Convert to OpenAI-compatible message dict."""
@@ -81,7 +86,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     message_count INTEGER NOT NULL DEFAULT 0,
     token_count INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'active',
-    skills TEXT NOT NULL DEFAULT ''
+    skills TEXT NOT NULL DEFAULT '',
+    context_window INTEGER NOT NULL DEFAULT 64000,
+    memory_strategy TEXT NOT NULL DEFAULT 'sliding_window'
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -93,6 +100,7 @@ CREATE TABLE IF NOT EXISTS messages (
     tool_call_id TEXT,
     name TEXT,
     created_at TEXT NOT NULL,
+    token_count INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
@@ -107,10 +115,31 @@ def init_db(db_path: str) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
-    # Migrate existing databases that lack the skills column
+
+    # Migrate existing databases
+    # 1. skills column
     try:
         conn.execute("SELECT skills FROM sessions LIMIT 1")
     except sqlite3.OperationalError:
         conn.execute("ALTER TABLE sessions ADD COLUMN skills TEXT NOT NULL DEFAULT ''")
+
+    # 2. context_window column
+    try:
+        conn.execute("SELECT context_window FROM sessions LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE sessions ADD COLUMN context_window INTEGER NOT NULL DEFAULT 64000")
+
+    # 3. memory_strategy column
+    try:
+        conn.execute("SELECT memory_strategy FROM sessions LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE sessions ADD COLUMN memory_strategy TEXT NOT NULL DEFAULT 'sliding_window'")
+
+    # 4. token_count column in messages
+    try:
+        conn.execute("SELECT token_count FROM messages LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE messages ADD COLUMN token_count INTEGER NOT NULL DEFAULT 0")
+
     conn.commit()
     return conn

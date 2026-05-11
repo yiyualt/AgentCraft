@@ -1,7 +1,7 @@
 import json
 import os
 import time
-from typing import Any, AsyncGenerator
+from typing import Any
 
 import httpx
 import mlflow
@@ -9,7 +9,6 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
 from mlflow.entities import SpanType
 from openai import OpenAI
 
@@ -221,7 +220,6 @@ async def chat_completions(request: Request):
 
     payload = await request.json()
     model = payload.get("model", "deepseek-chat")
-    stream = payload.get("stream", False)
     session_id = request.headers.get("X-Session-Id")
 
     if _llm_semaphore.locked():
@@ -235,10 +233,7 @@ async def chat_completions(request: Request):
             },
         )
 
-    if stream:
-        return _handle_streaming(request, client, payload, model, session_id)
-    else:
-        return await _handle_non_streaming(request, client, payload, model, session_id)
+    return await _handle_non_streaming(request, client, payload, model, session_id)
 
 
 # ===== 辅助函数：生成 messages 摘要（不存完整内容） =====
@@ -287,13 +282,17 @@ async def _handle_non_streaming(
         session = _session_manager.get_session(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-        history = _session_manager.get_messages_openai(session_id)
+
+        # Use memory management to limit context window
+        max_tokens = session.context_window or 64000
+        history = _session_manager.get_messages_with_limit(session_id, max_tokens)
         messages = history + new_messages
 
         # ===== LOG: Session 状态 =====
         logger.info(f"session.skills={session.skills}")
         logger.info(f"session.system_prompt={session.system_prompt}")
-        logger.info(f"history messages count: {len(history)}")
+        logger.info(f"session.context_window={session.context_window}")
+        logger.info(f"history messages count: {len(history)} (truncated)")
 
         # Build system prompt from session system_prompt + enabled skills
         system_parts = []
@@ -557,119 +556,6 @@ async def _handle_non_streaming(
             logger.info("=" * 60)
 
         return result
-
-
-def _handle_streaming(
-    request: Request,
-    llm_client: OpenAI,
-    payload: dict[str, Any],
-    model: str,
-    session_id: str | None = None,
-) -> StreamingResponse:
-    """Proxy streaming response from LLM to client while recording to MLflow."""
-
-    # Load session history and save incoming messages
-    new_messages = list(payload.get("messages", []))
-    if session_id:
-        session = _session_manager.get_session(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-        history = _session_manager.get_messages_openai(session_id)
-        full_messages = history + new_messages
-        # Build system prompt from session system_prompt + enabled skills
-        system_parts = []
-        if session.system_prompt:
-            system_parts.append(session.system_prompt)
-        if session.skills:
-            skill_names = [n.strip() for n in session.skills.split(",") if n.strip()]
-            skill_prompt = _skill_loader.build_prompt(skill_names)
-            if skill_prompt:
-                system_parts.append(skill_prompt)
-        if system_parts and not any(m["role"] == "system" for m in full_messages):
-            full_messages.insert(0, {"role": "system", "content": "\n\n".join(system_parts)})
-        for msg in new_messages:
-            _session_manager.add_message(
-                session_id=session_id,
-                role=msg.get("role", "user"),
-                content=msg.get("content", ""),
-                tool_call_id=msg.get("tool_call_id"),
-                name=msg.get("name"),
-            )
-        payload = {**payload, "messages": full_messages}
-
-    stream_payload = {**payload, "stream": True}
-    inner_kwargs = {k: v for k, v in stream_payload.items() if k != "stream"}
-
-    mlflow.start_run(run_name=f"gateway-{model}")
-    mlflow.log_param("model", model)
-    mlflow.log_param("runtime", "openai")
-    mlflow.log_param("llm_base_url", LLM_BASE_URL)
-    mlflow.log_param("temperature", payload.get("temperature"))
-    mlflow.log_param("client_host", request.client.host if request.client else "unknown")
-    mlflow.log_param("path", "/v1/chat/completions")
-    mlflow.log_param("stream", True)
-    mlflow.log_dict(payload, "request.json")
-
-    async def generate() -> AsyncGenerator[str, None]:
-        collected_content: list[str] = []
-        collected_reasoning: list[str] = []
-        first_chunk_time = time.time()
-
-        try:
-            async with _llm_semaphore:
-                stream = await asyncio.to_thread(
-                    llm_client.chat.completions.create, **inner_kwargs, stream=True
-                )
-                for chunk in stream:
-                    chunk_dict = chunk.model_dump()
-                    yield f"data: {json.dumps(chunk_dict, ensure_ascii=False)}\n\n"
-
-                    delta = chunk_dict.get("choices", [{}])[0].get("delta", {})
-                    if delta.get("content"):
-                        collected_content.append(delta["content"])
-                    if delta.get("reasoning"):
-                        collected_reasoning.append(delta["reasoning"])
-
-                yield "data: [DONE]\n\n"
-
-        except Exception as e:
-            error_body = json.dumps({"error": {"message": str(e), "type": "stream_error"}}, ensure_ascii=False)
-            yield f"data: {error_body}\n\n"
-            yield "data: [DONE]\n\n"
-            return
-        finally:
-            latency = time.time() - first_chunk_time
-            full_answer = "".join(collected_content)
-            full_reasoning = "".join(collected_reasoning)
-
-            mlflow.log_metric("latency_seconds", latency)
-            full_result = {
-                "id": f"chatcmpl-{int(time.time())}",
-                "object": "chat.completion",
-                "choices": [{
-                    "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": full_answer,
-                        "reasoning": full_reasoning or None,
-                    },
-                }],
-            }
-            mlflow.log_dict(full_result, "response.json")
-            mlflow.log_text(full_answer or "", "answer.txt")
-            if full_reasoning:
-                mlflow.log_text(full_reasoning, "reasoning.txt")
-
-            if session_id and full_answer:
-                _session_manager.add_message(
-                    session_id=session_id,
-                    role="assistant",
-                    content=full_answer,
-                )
-
-            mlflow.end_run()
-
-    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 def _log_mlflow_artifacts(result: dict[str, Any]) -> None:

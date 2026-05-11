@@ -14,12 +14,12 @@
 - [x] 健康检查 + 模型列表 API
 - [x] MCP Stdio 支持 (通过 npx/uvx 启动外部 MCP server)
 
-## Phase 2: Agent Core
+## Phase 2: Agent Core ✅ (已完成)
 
 - [x] Session 管理 (多对话隔离 + SQLite 持久化)
 - [x] System Prompt 注入 (Persona / Instructions)
 - [x] Skills 系统 (按需加载能力，注入到 prompt)
-- [ ] 记忆管理 (短期 context window + 长期持久化)
+- [x] 记忆管理 (短期 context window + 长期持久化)
 
 ## Phase 3: Channel Adapters
 
