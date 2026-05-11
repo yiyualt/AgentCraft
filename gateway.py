@@ -3,12 +3,16 @@ import os
 import time
 from typing import Any
 
+from dotenv import load_dotenv
+load_dotenv()  # Load .env file before reading config
+
 import httpx
 import mlflow
 import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
 from mlflow.entities import SpanType
 from openai import OpenAI
 
@@ -17,6 +21,9 @@ from tools.builtin import *  # noqa: F401,F403 — register built-in tools
 from tools.mcp import MCPToolManager, MCPConfig
 from sessions import SessionManager
 from skills import SkillLoader, default_skill_dirs
+from channels import ChannelRouter
+from channels.telegram import TelegramChannel
+from channels.web import WebChannel
 
 # ===== Config =====
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5050")
@@ -36,9 +43,13 @@ import logging
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, "gateway.log")
+CHAT_LOG_FILE = os.path.join(LOG_DIR, "chat.log")
 
 logger = logging.getLogger("gateway")
 logger.setLevel(logging.DEBUG)
+
+chat_logger = logging.getLogger("chat")
+chat_logger.setLevel(logging.INFO)
 
 if not logger.handlers:
     file_handler = logging.FileHandler(LOG_FILE, mode="a", encoding="utf-8")
@@ -49,6 +60,12 @@ if not logger.handlers:
     )
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
+
+if not chat_logger.handlers:
+    chat_file_handler = logging.FileHandler(CHAT_LOG_FILE, mode="a", encoding="utf-8")
+    chat_file_handler.setLevel(logging.INFO)
+    chat_file_handler.setFormatter(formatter)
+    chat_logger.addHandler(chat_file_handler)
 
 # ===== MLflow =====
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
@@ -81,16 +98,22 @@ _session_manager = SessionManager()
 _skill_loader = SkillLoader(default_skill_dirs())
 _skill_loader.load()
 
+# ===== Channels =====
+_channel_router = ChannelRouter()
+_telegram_channel: TelegramChannel | None = None
+_web_channel: WebChannel | None = None
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Initialize MCP servers on startup, shut down on exit."""
-    global _mcp_manager, _unified_registry
+    """Initialize MCP servers and channels on startup, shut down on exit."""
+    global _mcp_manager, _unified_registry, _telegram_channel, _web_channel
 
     _app.state.session_manager = _session_manager
     _skill_loader.load()
     _app.state.skill_loader = _skill_loader
 
+    # MCP initialization
     config = MCPConfig.load()
     if config.enabled and config.get_enabled_servers():
         _mcp_manager = MCPToolManager()
@@ -104,8 +127,20 @@ async def lifespan(_app: FastAPI):
         _unified_registry = UnifiedToolRegistry(get_default_registry())
         _app.state.unified_registry = _unified_registry
 
+    # Initialize channels
+    _telegram_channel = TelegramChannel(_session_manager)
+    _channel_router.register(_telegram_channel)
+
+    _web_channel = WebChannel(_session_manager)
+    _channel_router.register(_web_channel)
+    _app.include_router(_web_channel.get_router())
+
+    await _channel_router.start_all()
+
     yield
 
+    # Cleanup
+    await _channel_router.stop_all()
     if _mcp_manager:
         await _mcp_manager.shutdown()
 
@@ -270,11 +305,21 @@ async def _handle_non_streaming(
     tools = user_tools if user_tools is not None else registry.list_tools()
 
     # ===== LOG: 初始状态 =====
-    logger.info("=" * 60)
-    logger.info(f"[TURN START] session_id={session_id}, model={model}")
-    logger.info(f"user_tools is None: {user_tools is None}")
-    logger.info(f"tools count: {len(tools)}")
-    logger.info(f"tool names: {[t['function']['name'] for t in tools]}")
+    logger.info("=" * 80)
+    logger.info(f"[REQUEST] session_id={session_id}, model={model}")
+
+    # 记录可用工具（区分来源）
+    mcp_tools = []
+    builtin_tools = []
+    for t in tools:
+        name = t['function']['name']
+        # MCP 工具名格式: mcp__server__tool
+        if name.startswith("mcp__"):
+            mcp_tools.append(name)
+        else:
+            builtin_tools.append(name)
+    logger.info(f"[TOOLS] builtin={builtin_tools}, mcp={mcp_tools}")
+    logger.debug(f"[TOOLS DETAIL] {json.dumps(tools, ensure_ascii=False, indent=2)}")
 
     # Build messages: session history + current request messages
     new_messages = list(payload.get("messages", []))
@@ -289,34 +334,28 @@ async def _handle_non_streaming(
         messages = history + new_messages
 
         # ===== LOG: Session 状态 =====
-        logger.info(f"session.skills={session.skills}")
-        logger.info(f"session.system_prompt={session.system_prompt}")
-        logger.info(f"session.context_window={session.context_window}")
-        logger.info(f"history messages count: {len(history)} (truncated)")
+        logger.info(f"[SESSION] skills={session.skills}, system_prompt={session.system_prompt[:100] if session.system_prompt else None}...")
+        logger.info(f"[SESSION] context_window={session.context_window}, history_count={len(history)}")
 
         # Build system prompt from session system_prompt + enabled skills
         system_parts = []
         if session.system_prompt:
             system_parts.append(session.system_prompt)
-            logger.info("added session.system_prompt to system_parts")
 
         if session.skills:
             skill_names = [n.strip() for n in session.skills.split(",") if n.strip()]
-            logger.info(f"parsed skill_names: {skill_names}")
+            logger.info(f"[SKILLS] enabled={skill_names}")
 
             skill_prompt = _skill_loader.build_prompt(skill_names)
-            logger.info(f"skill_prompt length: {len(skill_prompt) if skill_prompt else 0}")
             if skill_prompt:
-                logger.debug(f"skill_prompt content:\n{skill_prompt}")
+                logger.info(f"[SKILLS] prompt_length={len(skill_prompt)}")
+                logger.debug(f"[SKILLS PROMPT FULL]:\n{skill_prompt}")
                 system_parts.append(skill_prompt)
 
         if system_parts:
-            logger.info(f"system_parts count: {len(system_parts)}")
-            for i, part in enumerate(system_parts):
-                preview = part[:80].replace("\n", "\\n")
-                logger.info(f"  system_parts[{i}] preview: '{preview}...'")
-        else:
-            logger.info("system_parts is empty")
+            full_system_prompt = "\n\n".join(system_parts)
+            logger.info(f"[SYSTEM PROMPT] length={len(full_system_prompt)}")
+            logger.debug(f"[SYSTEM PROMPT FULL]:\n{full_system_prompt}")
 
         if system_parts and not any(m["role"] == "system" for m in messages):
             messages.insert(0, {"role": "system", "content": "\n\n".join(system_parts)})
@@ -328,17 +367,14 @@ async def _handle_non_streaming(
     kwargs = {k: v for k, v in payload.items() if k not in ("messages", "tools")}
 
     # ===== LOG: 最终发给 LLM 的 messages =====
-    logger.info(f"final messages count: {len(messages)}")
-    for i, m in enumerate(messages):
-        content = m.get("content", "") or ""
-        preview = content[:70].replace("\n", "\\n")
-        role = m["role"]
-        extra = ""
-        if role == "tool":
-            extra = f" tool_call_id={m.get('tool_call_id')}"
-        elif role == "assistant" and m.get("tool_calls"):
-            extra = f" tool_calls_count={len(m['tool_calls'])}"
-        logger.info(f"  messages[{i}] role={role}{extra}, content_preview='{preview}...'")
+    logger.info(f"[MESSAGES] count={len(messages)}")
+    logger.debug(f"[MESSAGES FULL]:\n{json.dumps(messages, ensure_ascii=False, indent=2)}")
+
+    # 记录用户输入到 chat.log
+    for m in new_messages:
+        if m.get("role") == "user":
+            content = m.get("content", "")
+            chat_logger.info(f"[USER] session={session_id}: {content[:200]}")
 
     # Save incoming messages to session
     if session_id:
@@ -384,6 +420,10 @@ async def _handle_non_streaming(
                 call_kwargs: dict[str, Any] = {"model": model, "messages": messages, **kwargs}
                 if tools:
                     call_kwargs["tools"] = tools
+
+                # 记录发给 LLM 的完整请求
+                logger.info(f"[LLM REQUEST] model={model}, messages_count={len(messages)}, tools_count={len(tools) if tools else 0}")
+                logger.debug(f"[LLM REQUEST FULL]:\n{json.dumps(call_kwargs, ensure_ascii=False, indent=2)}")
 
                 # ===== LLM CALL (带轮次序号 + messages 摘要) =====
                 with mlflow.start_span(
@@ -435,14 +475,14 @@ async def _handle_non_streaming(
 
                 tool_calls = message.get("tool_calls")
                 if not tool_calls:
-                    logger.info("no tool_calls → breaking loop")
+                    logger.info("[RESPONSE] no tool_calls, done")
                     break
 
                 n_turns += 1
-                logger.info(f"tool_calls detected, count={len(tool_calls)}, n_turns={n_turns}")
+                logger.info(f"[TOOL CALL] turn={n_turns}, tools={[tc['function']['name'] for tc in tool_calls]}")
 
                 if n_turns > 10:
-                    logger.warning("tool loop exceeded 10 turns, forcing break")
+                    logger.warning("[TOOL LIMIT] exceeded 10 turns, forcing break")
                     for tc in tool_calls:
                         messages.append({
                             "role": "tool",
@@ -480,11 +520,12 @@ async def _handle_non_streaming(
                             fn_args = json.loads(tc["function"]["arguments"])
                         except json.JSONDecodeError:
                             fn_args = {}
-                        logger.info(f"  -> dispatching tool: {fn_name}({json.dumps(fn_args, ensure_ascii=False)})")
+                        logger.info(f"[TOOL EXEC] {fn_name}({json.dumps(fn_args, ensure_ascii=False)})")
+                        logger.debug(f"[TOOL ARGS FULL]: {json.dumps(fn_args, ensure_ascii=False, indent=2)}")
 
                         tool_result = await registry.dispatch(fn_name, fn_args)
-                        result_preview = str(tool_result)[:70].replace("\n", "\\n")
-                        logger.info(f"  <- tool_result preview: '{result_preview}...'")
+                        logger.info(f"[TOOL RESULT] {fn_name}: length={len(str(tool_result))}")
+                        logger.debug(f"[TOOL RESULT FULL]: {tool_result}")
 
                         turn_log[-1]["tool_results"].append({
                             "name": fn_name,
@@ -500,6 +541,7 @@ async def _handle_non_streaming(
                     tool_span.set_outputs({
                         "executed_count": len(tool_calls),
                         "tool_names": [tc["function"]["name"] for tc in tool_calls],
+                        "full_results": [tr["result"] for tr in turn_log[-1]["tool_results"]],
                     })
 
             latency = time.time() - start_time
@@ -550,10 +592,15 @@ async def _handle_non_streaming(
                         name=msg.get("name"),
                     )
                     new_msg_count += 1
-                logger.info(f"persisted {new_msg_count} new messages to session")
+                logger.info(f"[PERSIST] {new_msg_count} messages saved to session")
 
-            logger.info(f"[TURN END] latency={latency:.3f}s, tool_loop_turns={n_turns}")
-            logger.info("=" * 60)
+            # 记录 assistant 响应到 chat.log
+            assistant_content = result["choices"][0]["message"].get("content", "")
+            if assistant_content:
+                chat_logger.info(f"[ASSISTANT] session={session_id}: {assistant_content[:500]}")
+
+            logger.info(f"[REQUEST END] latency={latency:.3f}s, turns={n_turns}")
+            logger.info("=" * 80)
 
         return result
 
