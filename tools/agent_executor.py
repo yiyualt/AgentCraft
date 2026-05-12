@@ -16,7 +16,7 @@ from typing import Any
 from openai import OpenAI
 
 from tools import UnifiedToolRegistry, get_default_registry
-from sessions import SessionManager
+from sessions import SessionManager, ForkContext, ForkManager, FORK_PLACEHOLDER
 
 # Use gateway logger to ensure logs go to gateway.log
 logger = logging.getLogger("gateway")
@@ -68,6 +68,16 @@ class AgentExecutor:
         self._session_manager = session_manager
         self._model = model
         self._base_url = base_url
+        self._fork_manager: ForkManager | None = None
+
+    def set_fork_manager(self, fork_manager: ForkManager) -> None:
+        """Set the fork manager for context inheritance."""
+        self._fork_manager = fork_manager
+        logger.info("[AgentExecutor] Fork manager initialized")
+
+    def get_fork_manager(self) -> ForkManager | None:
+        """Get the current fork manager."""
+        return self._fork_manager
 
     async def run(
         self,
@@ -75,6 +85,8 @@ class AgentExecutor:
         agent_type: str = "general-purpose",
         context: str | None = None,
         timeout: int = 180,  # Increased from 120 to 180
+        fork_context: ForkContext | None = None,
+        is_fork_child: bool = False,
     ) -> str:
         """Execute a sub-agent task.
 
@@ -83,18 +95,21 @@ class AgentExecutor:
             agent_type: Type of agent (explore, general-purpose, plan)
             context: Optional context to pass to the sub-agent
             timeout: Maximum execution time in seconds (default: 180)
+            fork_context: Optional fork context for inheriting parent conversation
+            is_fork_child: Whether this is a fork child (disables Agent tool)
 
         Returns:
             Result from the sub-agent execution
         """
+        # Recursive protection: fork children cannot spawn more agents
+        if is_fork_child:
+            logger.warning("[FORK] Fork child cannot spawn sub-agents, executing directly")
+
         if agent_type not in AGENT_TYPES:
             return f"[Error] Unknown agent type: {agent_type}. Available: {list(AGENT_TYPES.keys())}"
 
         agent_config = AGENT_TYPES[agent_type]
         start_time = time.time()
-
-        # Build system prompt
-        system_prompt = self._build_system_prompt(agent_type, agent_config, context)
 
         # Build tool list (filter if specified)
         all_tools = self._registry.list_tools()
@@ -104,11 +119,29 @@ class AgentExecutor:
         else:
             tools = all_tools
 
-        # Initial message
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": task},
-        ]
+        # Fork children cannot use Agent tool (recursive protection)
+        if is_fork_child:
+            tools = [t for t in tools if t["function"]["name"] != "Agent"]
+            logger.info(f"[FORK] Agent tool disabled for fork child, tools: {[t['function']['name'] for t in tools]}")
+
+        # Build messages based on fork context or new context
+        if fork_context:
+            # Use fork context - inherited messages with placeholder replaced
+            messages = fork_context.inherited_messages.copy()
+            # Replace placeholder with actual task
+            for i, msg in enumerate(messages):
+                if msg.get("content") == FORK_PLACEHOLDER:
+                    messages[i] = {"role": "user", "content": task}
+                    logger.info(f"[FORK] Replaced placeholder with task at index {i}")
+                    break
+            logger.info(f"[FORK] Using fork context with {len(messages)} inherited messages")
+        else:
+            # Build new context from scratch
+            system_prompt = self._build_system_prompt(agent_type, agent_config, context)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": task},
+            ]
 
         logger.info(f"[AgentExecutor] Starting {agent_type} agent for task: {task[:100]}...")
         logger.info(f"[AgentExecutor] Tools available: {[t['function']['name'] for t in tools]}")

@@ -23,7 +23,7 @@ from tools.agent_executor import AgentExecutor, set_agent_executor  # Agent exec
 from tools.skill_tools import *  # noqa: F401,F403 — register Skill tool
 from tools.mcp import MCPToolManager, MCPConfig
 from tools.sandbox import SandboxExecutor, SandboxConfig
-from sessions import SessionManager
+from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig
 from skills import SkillLoader, default_skill_dirs
 from channels import ChannelRouter
 from channels.telegram import TelegramChannel
@@ -100,6 +100,52 @@ _llm_semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLM)
 _rate_limit_buckets: dict[str, list[float]] = {}
 _rate_limit_lock = asyncio.Lock()
 
+
+def _clean_orphan_tool_messages(messages: list[dict]) -> list[dict]:
+    """Remove orphan tool messages without preceding tool_calls.
+
+    Tool messages must have a preceding assistant message with tool_calls.
+    This ensures messages list is valid for LLM API.
+    """
+    cleaned = []
+    last_assistant_tool_calls = None
+    removed_count = 0
+
+    for msg in messages:
+        role = msg.get("role")
+
+        if role == "assistant":
+            # Track tool_calls from this assistant message
+            last_assistant_tool_calls = msg.get("tool_calls")
+            cleaned.append(msg)
+        elif role == "tool":
+            # Check if there's a preceding assistant with tool_calls
+            if last_assistant_tool_calls:
+                # Verify tool_call_id matches
+                tool_call_id = msg.get("tool_call_id")
+                if tool_call_id:
+                    matching_ids = [tc["id"] for tc in last_assistant_tool_calls]
+                    if tool_call_id in matching_ids:
+                        cleaned.append(msg)
+                    else:
+                        removed_count += 1
+                else:
+                    removed_count += 1
+            else:
+                removed_count += 1
+        else:
+            # Keep system and user messages
+            cleaned.append(msg)
+            # Reset tool_calls tracker after user message
+            if role == "user":
+                last_assistant_tool_calls = None
+
+    if removed_count > 0:
+        logger.info(f"[MESSAGES] Cleaned orphan tool messages: removed {removed_count}")
+
+    return cleaned
+
+
 # ===== MCP Tool Manager =====
 _mcp_manager: MCPToolManager | None = None
 _unified_registry: UnifiedToolRegistry | None = None
@@ -118,6 +164,9 @@ _sandbox_executor: SandboxExecutor | None = None
 # ===== Canvas =====
 _canvas_manager: CanvasManager | None = None
 _canvas_channel: CanvasChannel | None = None
+
+# ===== Compaction =====
+_compaction_manager: CompactionManager | None = None
 
 # ===== Channels =====
 _channel_router = ChannelRouter()
@@ -177,6 +226,26 @@ async def lifespan(_app: FastAPI):
     )
     set_agent_executor(agent_executor)
     logger.info("[AgentExecutor] Initialized with unified registry")
+
+    # Compaction Manager initialization
+    global _compaction_manager
+    compaction_config = CompactionConfig()
+    _compaction_manager = CompactionManager(
+        session_manager=_session_manager,
+        llm_client=client,
+        config=compaction_config,
+    )
+    _app.state.compaction_manager = _compaction_manager
+    logger.info("[Compaction] CompactionManager initialized")
+
+    # Fork Manager initialization
+    from sessions import ForkManager, TokenCalculator
+    fork_manager = ForkManager(
+        session_manager=_session_manager,
+        token_calculator=TokenCalculator(),
+    )
+    agent_executor.set_fork_manager(fork_manager)
+    logger.info("[Fork] ForkManager initialized")
 
     # Initialize channels
     _telegram_channel = TelegramChannel(_session_manager)
@@ -303,6 +372,24 @@ def get_session_messages(session_id: str, limit: int = 50) -> list[dict[str, Any
     return _session_manager.get_messages_openai(session_id, limit)
 
 
+@app.post("/v1/sessions/{session_id}/messages")
+async def add_session_message(session_id: str, request: Request) -> dict[str, Any]:
+    """Add a message directly to session (for testing/bulk operations)."""
+    body = await request.json()
+    session = _session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    msg = _session_manager.add_message(
+        session_id=session_id,
+        role=body.get("role", "user"),
+        content=body.get("content", ""),
+        tool_call_id=body.get("tool_call_id"),
+        name=body.get("name"),
+    )
+    return {"id": msg.id, "token_count": msg.token_count}
+
+
 @app.get("/v1/skills")
 def list_skills() -> list[dict[str, Any]]:
     return [s.to_dict() for s in _skill_loader.list_skills()]
@@ -424,6 +511,9 @@ async def _handle_non_streaming(
 
     kwargs = {k: v for k, v in payload.items() if k not in ("messages", "tools")}
 
+    # ===== Clean orphan tool messages =====
+    messages = _clean_orphan_tool_messages(messages)
+
     # ===== LOG: 最终发给 LLM 的 messages =====
     logger.info(f"[MESSAGES] count={len(messages)}")
     logger.debug(f"[MESSAGES FULL]:\n{json.dumps(messages, ensure_ascii=False, indent=2)}")
@@ -475,6 +565,33 @@ async def _handle_non_streaming(
             turn_log: list[dict[str, Any]] = []
 
             while True:
+                # ===== Auto-compaction check =====
+                if session_id and _compaction_manager and session:
+                    calculator = TokenCalculator(model)
+                    current_tokens = calculator.count_messages(messages)
+
+                    # Check if compaction needed
+                    level = _compaction_manager.check_compaction_needed(
+                        session_id=session_id,
+                        current_tokens=current_tokens,
+                        context_window=session.context_window or 64000,
+                    )
+
+                    if level:
+                        logger.info(f"[COMPACTION] Triggering level {level} for session {session_id}")
+                        # Calculate target tokens (40% of context window)
+                        target_tokens = int((session.context_window or 64000) * 0.4)
+                        messages = await _compaction_manager.compact(
+                            session_id=session_id,
+                            messages=messages,
+                            level=level,
+                            calculator=calculator,
+                            target_tokens=target_tokens,
+                        )
+                        # Log new token count
+                        new_tokens = calculator.count_messages(messages)
+                        logger.info(f"[COMPACTION] New token count: {new_tokens}")
+
                 call_kwargs: dict[str, Any] = {"model": model, "messages": messages, **kwargs}
                 if tools:
                     call_kwargs["tools"] = tools

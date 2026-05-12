@@ -133,12 +133,29 @@ class SummaryStrategy(MemoryStrategy):
         return result
 
     def _generate_summary(self, messages: list[dict[str, Any]]) -> str:
-        """Use LLM to generate conversation summary."""
-        prompt = "Summarize the following conversation concisely (max 200 words):\n\n"
+        """Use LLM to generate conversation summary preserving key information."""
+        prompt = """Summarize the following conversation history, preserving:
+
+1. Key decisions made and their rationale
+2. Files created, modified, or read (with brief description)
+3. Important tool calls and their results
+4. Errors encountered and how they were resolved
+5. Current task state and next steps
+
+Format as concise bullet points. Maximum 200 words.
+
+Conversation to summarize:
+"""
         for msg in messages:
             role = msg["role"]
             content = (msg.get("content") or "")[:200]
-            prompt += f"{role}: {content}\n"
+
+            # Include tool call info
+            if msg.get("tool_calls"):
+                tool_names = [tc["function"]["name"] for tc in msg["tool_calls"]]
+                content += f"\n[Tools called: {', '.join(tool_names)}]"
+
+            prompt += f"\n{role}: {content}"
 
         try:
             response = self._llm_client.chat.completions.create(
