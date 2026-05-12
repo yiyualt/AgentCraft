@@ -216,6 +216,78 @@
             gap: 10px;
         }
 
+        .interactive-component .form-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .interactive-component .form-field label {
+            font-size: 0.85em;
+            color: #81d4fa;
+        }
+
+        .interactive-component .prompt-text {
+            margin-bottom: 10px;
+            color: #eee;
+            font-size: 0.95em;
+        }
+
+        /* Button styles */
+        .interactive-component button.primary { background: #4fc3f7; color: #1a1a2e; }
+        .interactive-component button.success { background: #4caf50; color: #fff; }
+        .interactive-component button.warning { background: #ff9800; color: #fff; }
+        .interactive-component button.danger { background: #f44336; color: #fff; }
+
+        /* Slider */
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .slider-input {
+            width: 150px;
+            accent-color: #4fc3f7;
+        }
+
+        .slider-value {
+            background: #0f3460;
+            padding: 4px 8px;
+            border-radius: 4px;
+            min-width: 40px;
+            text-align: center;
+        }
+
+        /* Select */
+        .select-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .select-input {
+            padding: 8px 12px;
+            background: #0f3460;
+            color: #eee;
+            border: 1px solid #333;
+            border-radius: 4px;
+            min-width: 120px;
+        }
+
+        /* Checkbox */
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .checkbox-container input[type="checkbox"] {
+            accent-color: #4fc3f7;
+            width: 18px;
+            height: 18px;
+        }
+
         .history-item {
             font-size: 0.75em;
             color: #666;
@@ -337,6 +409,11 @@
                 handleCanvasUpdate(data);
             });
 
+            eventSource.addEventListener('canvas_interact', (event) => {
+                const data = JSON.parse(event.data);
+                handleInteractiveComponent(data);
+            });
+
             eventSource.addEventListener('heartbeat', () => {
                 // Keep alive, no action needed
             });
@@ -449,9 +526,197 @@
             const history = document.getElementById('history');
             const item = document.createElement('div');
             item.className = 'history-item';
-            const preview = data.content.substring(0, 40);
-            item.textContent = `${data.mode}: ${preview}${data.content.length > 40 ? '...' : ''}`;
+            const preview = data.content?.substring(0, 40) || data.component_type;
+            item.textContent = `${data.mode || data.type}: ${preview}`;
             history.appendChild(item);
+        }
+
+        // ===== Handle Interactive Component =====
+        function handleInteractiveComponent(data) {
+            console.log('Interactive component:', data);
+
+            clearEmptyState();
+
+            const { component_type, id, config, prompt } = data;
+
+            const div = document.createElement('div');
+            div.className = 'interactive-component';
+            div.id = id;
+
+            // Add prompt if provided
+            if (prompt) {
+                const promptEl = document.createElement('div');
+                promptEl.className = 'prompt-text';
+                promptEl.innerHTML = marked.parse(prompt);
+                div.appendChild(promptEl);
+            }
+
+            // Create component based on type
+            switch (component_type) {
+                case 'button':
+                    const btn = document.createElement('button');
+                    btn.textContent = config.label || 'Click';
+                    btn.className = config.style || 'primary';
+                    btn.onclick = () => handleInteraction(id, 'click', { label: config.label });
+                    div.appendChild(btn);
+                    break;
+
+                case 'form':
+                    const form = document.createElement('form');
+                    form.onsubmit = (e) => {
+                        e.preventDefault();
+                        const formData = {};
+                        form.querySelectorAll('input, select').forEach(input => {
+                            formData[input.name] = input.value;
+                        });
+                        handleInteraction(id, 'submit', formData);
+                    };
+                    (config.fields || []).forEach(field => {
+                        const fieldDiv = document.createElement('div');
+                        fieldDiv.className = 'form-field';
+                        if (field.label) {
+                            const label = document.createElement('label');
+                            label.textContent = field.label;
+                            fieldDiv.appendChild(label);
+                        }
+                        const input = document.createElement('input');
+                        input.type = field.type || 'text';
+                        input.name = field.name;
+                        input.placeholder = field.placeholder || '';
+                        input.required = field.required || false;
+                        fieldDiv.appendChild(input);
+                        form.appendChild(fieldDiv);
+                    });
+                    const submitBtn = document.createElement('button');
+                    submitBtn.textContent = config.submit_label || 'Submit';
+                    submitBtn.className = 'primary';
+                    form.appendChild(submitBtn);
+                    div.appendChild(form);
+                    break;
+
+                case 'slider':
+                    const sliderDiv = document.createElement('div');
+                    sliderDiv.className = 'slider-container';
+                    const slider = document.createElement('input');
+                    slider.type = 'range';
+                    slider.min = config.min || 0;
+                    slider.max = config.max || 100;
+                    slider.value = config.default || 50;
+                    slider.className = 'slider-input';
+                    slider.onchange = () => handleInteraction(id, 'change', { value: slider.value });
+                    const sliderLabel = document.createElement('span');
+                    sliderLabel.className = 'slider-label';
+                    sliderLabel.textContent = config.label || '';
+                    const sliderValue = document.createElement('span');
+                    sliderValue.className = 'slider-value';
+                    sliderValue.textContent = slider.value;
+                    slider.oninput = () => sliderValue.textContent = slider.value;
+                    sliderDiv.appendChild(sliderLabel);
+                    sliderDiv.appendChild(slider);
+                    sliderDiv.appendChild(sliderValue);
+                    div.appendChild(sliderDiv);
+                    break;
+
+                case 'select':
+                    const selectDiv = document.createElement('div');
+                    selectDiv.className = 'select-container';
+                    if (config.label) {
+                        const selectLabel = document.createElement('label');
+                        selectLabel.textContent = config.label;
+                        selectDiv.appendChild(selectLabel);
+                    }
+                    const select = document.createElement('select');
+                    select.className = 'select-input';
+                    (config.options || []).forEach(opt => {
+                        const option = document.createElement('option');
+                        option.value = opt.value;
+                        option.textContent = opt.label;
+                        select.appendChild(option);
+                    });
+                    select.onchange = () => handleInteraction(id, 'select', { value: select.value });
+                    selectDiv.appendChild(select);
+                    div.appendChild(selectDiv);
+                    break;
+
+                case 'checkbox':
+                    const checkDiv = document.createElement('div');
+                    checkDiv.className = 'checkbox-container';
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.id = `${id}-check`;
+                    checkbox.checked = config.checked || false;
+                    checkbox.onchange = () => handleInteraction(id, 'change', { checked: checkbox.checked });
+                    const checkLabel = document.createElement('label');
+                    checkLabel.textContent = config.label || '';
+                    checkLabel.htmlFor = checkbox.id;
+                    checkDiv.appendChild(checkbox);
+                    checkDiv.appendChild(checkLabel);
+                    div.appendChild(checkDiv);
+                    break;
+            }
+
+            document.getElementById('main-canvas').appendChild(div);
+            addToHistory(data);
+        }
+
+        // ===== Handle Interaction (send event back) =====
+        async function handleInteraction(componentId, eventType, eventData) {
+            console.log('Interaction:', componentId, eventType, eventData);
+
+            // Disable component temporarily
+            const component = document.getElementById(componentId);
+            if (component) {
+                component.style.opacity = '0.7';
+                component.style.pointerEvents = 'none';
+            }
+
+            // Add user interaction message to canvas
+            addUserMessage(`[Interaction] ${eventType}: ${JSON.stringify(eventData)}`);
+
+            try {
+                // Send event to backend
+                const resp = await fetch(`/canvas/event/${sessionId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: eventType,
+                        component_id: componentId,
+                        data: eventData
+                    })
+                });
+
+                if (!resp.ok) {
+                    throw new Error('Event send failed');
+                }
+
+                // Now trigger a new agent request with the interaction as context
+                await fetch('/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Session-Id': sessionId
+                    },
+                    body: JSON.stringify({
+                        model: 'deepseek-chat',
+                        messages: [{
+                            role: 'user',
+                            content: `用户通过交互组件 ${componentId} 触发了 ${eventType} 事件，数据: ${JSON.stringify(eventData)}`
+                        }]
+                    })
+                });
+
+                // Re-enable component
+                if (component) {
+                    component.style.opacity = '1';
+                    component.style.pointerEvents = 'auto';
+                }
+            } catch (e) {
+                console.error('Interaction error:', e);
+                if (component) {
+                    component.style.opacity = '1';
+                    component.style.pointerEvents = 'auto';
+                }
+            }
         }
 
         // ===== Send Message =====

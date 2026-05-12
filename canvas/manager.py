@@ -76,18 +76,7 @@ class CanvasManager:
         section: str = "main",
         action: str = "append",
     ) -> bool:
-        """Push update to SSE queue (called by canvas_update tool).
-
-        Args:
-            session_id: Target session
-            content: Content to display
-            mode: Rendering mode (markdown/html/code/table)
-            section: Target section (main/sidebar)
-            action: How to apply (append/replace/clear)
-
-        Returns:
-            True if pushed successfully, False if no queue
-        """
+        """Push update to SSE queue (called by canvas_update tool)."""
         queue = self._queues.get(session_id)
         if queue is None:
             logger.warning(f"[Canvas] No queue for session {session_id}")
@@ -109,6 +98,37 @@ class CanvasManager:
             return True
         except asyncio.QueueFull:
             logger.warning(f"[Canvas] Queue full for {session_id}, dropping update")
+            return False
+
+    async def push_interactive(
+        self,
+        session_id: str,
+        component_type: str,
+        component_id: str,
+        config: dict,
+        prompt: str,
+    ) -> bool:
+        """Push interactive component to SSE queue (called by canvas_interact tool)."""
+        queue = self._queues.get(session_id)
+        if queue is None:
+            logger.warning(f"[Canvas] No queue for session {session_id}")
+            return False
+
+        update = {
+            "type": "canvas_interact",
+            "id": component_id,
+            "component_type": component_type,
+            "config": config,
+            "prompt": prompt,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        try:
+            await queue.put(update)
+            logger.info(f"[Canvas] Pushed interactive component to {session_id}: type={component_type}")
+            return True
+        except asyncio.QueueFull:
+            logger.warning(f"[Canvas] Queue full for {session_id}, dropping component")
             return False
 
     def has_active_session(self, session_id: str) -> bool:
