@@ -28,17 +28,20 @@
 - [x] Web Chat (简单的 HTML/JS)
 - [x] 统一的 Channel Router
 
-## Phase 4: Skills 增强 & 沙箱 (进行中)
+## Phase 4: Skills 增强 & 沙箱 (部分完成)
 
 - [ ] Skills 市场 / 社区共享
-- [x] 沙箱执行 (Docker) ✅ 基础实现完成
+- [x] Skills Registry & Prompt 注入 ✅ 完成
+- [x] 沙箱执行 (Docker) ✅ SandboxExecutor 实现
 - [x] 工具组合编排 (多工具联动) ✅ WorkflowEngine 实现
+- [x] 子代理委托 (Agent Executor) ✅ 三种代理类型实现
 
-## Phase 5: Canvas & 可视化
+## Phase 5: Canvas & 可视化 (部分完成)
 
-- [ ] Agent-driven Web UI
-- [ ] Live Canvas (实时更新)
-- [ ] 文件/图片/代码渲染
+- [x] CanvasManager (队列管理) ✅ 完成
+- [x] SSE 实时推送 ✅ CanvasChannel 实现
+- [ ] Agent-driven Web UI (完整交互)
+- [x] Lab Website ✅ 首页、团队、论文等页面完成
 
 ## Phase 6: Agent 构建 App
 

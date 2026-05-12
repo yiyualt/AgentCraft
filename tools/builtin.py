@@ -391,7 +391,7 @@ async def agent_delegate(
             task=task,
             agent_type=subagent_type,
             context=None,
-            timeout=120,
+            timeout=180,  # Increased from 120 to 180
         )
         return result
     except Exception as e:

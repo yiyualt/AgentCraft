@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from typing import Any
 
@@ -17,7 +18,8 @@ from openai import OpenAI
 from tools import UnifiedToolRegistry, get_default_registry
 from sessions import SessionManager
 
-logger = logging.getLogger(__name__)
+# Use gateway logger to ensure logs go to gateway.log
+logger = logging.getLogger("gateway")
 
 
 # Agent type definitions
@@ -72,7 +74,7 @@ class AgentExecutor:
         task: str,
         agent_type: str = "general-purpose",
         context: str | None = None,
-        timeout: int = 120,
+        timeout: int = 180,  # Increased from 120 to 180
     ) -> str:
         """Execute a sub-agent task.
 
@@ -80,7 +82,7 @@ class AgentExecutor:
             task: The task description for the sub-agent
             agent_type: Type of agent (explore, general-purpose, plan)
             context: Optional context to pass to the sub-agent
-            timeout: Maximum execution time in seconds
+            timeout: Maximum execution time in seconds (default: 180)
 
         Returns:
             Result from the sub-agent execution
@@ -171,11 +173,14 @@ class AgentExecutor:
             if tools:
                 call_kwargs["tools"] = tools
 
+            logger.info(f"[AgentExecutor] Calling LLM with model={self._model}, turn={n_turns}")
+
             response = await asyncio.to_thread(
                 self._client.chat.completions.create,
                 **call_kwargs,
             )
             result = response.model_dump()
+            logger.info(f"[AgentExecutor] LLM response received, finish_reason={result['choices'][0].get('finish_reason')}")
 
             choice = result["choices"][0]
             message = choice["message"]

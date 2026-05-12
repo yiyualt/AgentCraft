@@ -287,7 +287,21 @@ class TestBuiltinTools:
         result = builtin.web_search("Python programming language")
         assert "No results" not in result or "Error" not in result
 
-    def test_agent_tool(self):
-        result = builtin.agent_delegate("Write a poem")
-        assert "Agent delegation requested" in result
-        assert "Write a poem" in result
+    @pytest.mark.asyncio
+    async def test_agent_tool_not_initialized(self):
+        """Test Agent tool when executor is not initialized."""
+        # Directly call async function - executor not initialized in test context
+        result = await builtin.agent_delegate("Write a poem")
+        assert "[Error]" in result
+        assert "not initialized" in result
+
+    @pytest.mark.asyncio
+    async def test_agent_tool_via_registry(self):
+        """Test Agent tool dispatch through registry."""
+        from tools import UnifiedToolRegistry
+        import asyncio
+
+        registry = UnifiedToolRegistry(get_default_registry())
+        # When executor not initialized, should return error
+        result = await registry.dispatch("Agent", {"prompt": "test task"})
+        assert "Error" in result or "not initialized" in result
