@@ -18,6 +18,7 @@ from openai import OpenAI
 
 from tools import get_default_registry, UnifiedToolRegistry
 from tools.builtin import *  # noqa: F401,F403 — register built-in tools
+from tools.canvas_tools import set_canvas_manager  # Canvas tools
 from tools.mcp import MCPToolManager, MCPConfig
 from tools.sandbox import SandboxExecutor, SandboxConfig
 from sessions import SessionManager
@@ -25,6 +26,7 @@ from skills import SkillLoader, default_skill_dirs
 from channels import ChannelRouter
 from channels.telegram import TelegramChannel
 from channels.web import WebChannel
+from canvas import CanvasManager, CanvasChannel
 
 # ===== Config =====
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5050")
@@ -110,6 +112,10 @@ _skill_loader.load()
 # ===== Sandbox Executor =====
 _sandbox_executor: SandboxExecutor | None = None
 
+# ===== Canvas =====
+_canvas_manager: CanvasManager | None = None
+_canvas_channel: CanvasChannel | None = None
+
 # ===== Channels =====
 _channel_router = ChannelRouter()
 _telegram_channel: TelegramChannel | None = None
@@ -119,11 +125,17 @@ _web_channel: WebChannel | None = None
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Initialize MCP servers and channels on startup, shut down on exit."""
-    global _mcp_manager, _unified_registry, _telegram_channel, _web_channel, _sandbox_executor
+    global _mcp_manager, _unified_registry, _telegram_channel, _web_channel, _sandbox_executor, _canvas_manager, _canvas_channel
 
     _app.state.session_manager = _session_manager
     _skill_loader.load()
     _app.state.skill_loader = _skill_loader
+
+    # Canvas initialization (before channels, so tools can use it)
+    _canvas_manager = CanvasManager()
+    _app.state.canvas_manager = _canvas_manager
+    set_canvas_manager(_canvas_manager)
+    logger.info("[Canvas] CanvasManager initialized")
 
     # Sandbox initialization
     if SANDBOX_ENABLED:
@@ -159,6 +171,12 @@ async def lifespan(_app: FastAPI):
     _web_channel = WebChannel(_session_manager)
     _channel_router.register(_web_channel)
     _app.include_router(_web_channel.get_router())
+
+    # Canvas channel (SSE streaming workspace)
+    _canvas_channel = CanvasChannel(_canvas_manager)
+    _channel_router.register(_canvas_channel)
+    _app.include_router(_canvas_channel.get_router())
+    logger.info("[Canvas] CanvasChannel registered at /canvas")
 
     await _channel_router.start_all()
 
@@ -551,6 +569,11 @@ async def _handle_non_streaming(
                         logger.info(f"[TOOL EXEC] {fn_name}({json.dumps(fn_args, ensure_ascii=False)})")
                         logger.debug(f"[TOOL ARGS FULL]: {json.dumps(fn_args, ensure_ascii=False, indent=2)}")
 
+                        # Set session_id context for canvas tools
+                        if _canvas_manager:
+                            from canvas import set_current_session_id
+                            set_current_session_id(session_id)
+
                         # Execute in sandbox or directly
                         if SANDBOX_ENABLED and _sandbox_executor:
                             # Sandbox execution: get tool source code first
@@ -568,6 +591,11 @@ async def _handle_non_streaming(
                         else:
                             # Direct execution via registry
                             tool_result = await registry.dispatch(fn_name, fn_args)
+
+                        # Clear session_id context after execution
+                        if _canvas_manager:
+                            from canvas import set_current_session_id
+                            set_current_session_id(None)
 
                         logger.info(f"[TOOL RESULT] {fn_name}: length={len(str(tool_result))}")
                         logger.debug(f"[TOOL RESULT FULL]: {tool_result}")

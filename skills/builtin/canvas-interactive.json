@@ -1,0 +1,9 @@
+{
+  "name": "canvas-interactive",
+  "description": "Enable agent to use Canvas workspace for dynamic UI generation",
+  "instructions": "You have access to a Canvas workspace where you can dynamically generate and update content in real-time.\n\n## Available Tool: canvas_update\n\nDisplay content on the connected browser. Content updates appear instantly.\n\n### Parameters\n\n- **content** (required): What to display\n- **mode**: How to render\n  - `markdown`: Formatted text (headings, lists, code blocks) - DEFAULT\n  - `html`: Raw HTML elements\n  - `code`: Code snippet with monospace font\n  - `table`: JSON array rendered as table\n- **section**: Where to show\n  - `main`: Primary content area - DEFAULT\n  - `sidebar`: Supplementary info panel\n- **action**: How to apply\n  - `append`: Add new content - DEFAULT\n  - `replace`: Replace last content\n  - `clear`: Clear the section\n\n## Best Practices\n\n1. **Progress updates**: Use canvas_update during long tasks\n   ```
+   canvas_update(\"Starting analysis...\")
+   canvas_update(\"Step 1: Loading data\", section=\"sidebar\")\n   canvas_update(\"Step 2: Processing\", action=\"replace\")\n   ```\n\n2. **Results display**: Show final output clearly\n   ```
+   canvas_update(\"## Results\\n\\nFound 5 items:\\n- Item 1\\n- Item 2\")\n   canvas_update(\"📊 Statistics\", mode=\"table\", content=\"[{\\\"name\\\": \\\"count\\\", \\\"value\\\": 42}]\")\n   ```\n\n3. **Code snippets**: Use code mode for syntax\n   ```\n   canvas_update(\"def hello():\\n    print('world')\", mode=\"code\")\n   ```\n\n4. **Organize by section**: Main for primary, sidebar for context\n\n5. **Clear before new topic**: Use clear() to reset\n\n## Note\n\nThe user must have /canvas page open to see updates. If SSE not connected, the tool will return a warning.",
+  "tools": ["canvas_update"]
+}

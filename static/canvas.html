@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentCraft Canvas</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0f0f1a;
+            color: #eee;
+            height: 100vh;
+        }
+
+        .canvas-container {
+            display: grid;
+            grid-template-columns: 1fr 280px;
+            grid-template-rows: auto 1fr auto;
+            height: 100vh;
+        }
+
+        header {
+            grid-column: 1 / -1;
+            background: #16213e;
+            padding: 12px 20px;
+            border-bottom: 1px solid #333;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        header h1 {
+            color: #4fc3f7;
+            font-size: 1.2em;
+        }
+
+        .status {
+            font-size: 0.85em;
+            padding: 4px 12px;
+            border-radius: 4px;
+        }
+
+        .status.connected { background: #2e7d32; color: #fff; }
+        .status.disconnected { background: #c62828; color: #fff; }
+
+        .main-canvas {
+            background: #1a1a2e;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .sidebar {
+            background: #16213e;
+            border-left: 1px solid #333;
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        .sidebar h3 {
+            color: #4fc3f7;
+            font-size: 0.95em;
+            margin-bottom: 10px;
+        }
+
+        .sidebar hr {
+            border-color: #333;
+            margin: 15px 0;
+        }
+
+        .session-info {
+            font-size: 0.8em;
+            color: #888;
+        }
+
+        .input-footer {
+            grid-column: 1 / -1;
+            background: #16213e;
+            padding: 12px 20px;
+            border-top: 1px solid #333;
+            display: flex;
+            gap: 10px;
+        }
+
+        #input {
+            flex: 1;
+            padding: 10px 14px;
+            background: #0f3460;
+            color: #eee;
+            border: 1px solid #333;
+            border-radius: 8px;
+            font-size: 0.95em;
+        }
+
+        #input:focus {
+            outline: none;
+            border-color: #4fc3f7;
+        }
+
+        #send {
+            padding: 10px 20px;
+            background: #4fc3f7;
+            color: #1a1a2e;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        #send:hover {
+            background: #29b6f6;
+        }
+
+        /* Content sections */
+        .content-section {
+            margin: 12px 0;
+            padding: 15px;
+            background: #0f3460;
+            border-radius: 8px;
+            border: 1px solid #1e3a5f;
+        }
+
+        .content-section.markdown {
+            line-height: 1.6;
+        }
+
+        .content-section.markdown h1 { font-size: 1.4em; margin: 10px 0; color: #4fc3f7; }
+        .content-section.markdown h2 { font-size: 1.2em; margin: 8px 0; color: #81d4fa; }
+        .content-section.markdown h3 { font-size: 1.1em; margin: 6px 0; }
+        .content-section.markdown p { margin: 8px 0; }
+        .content-section.markdown ul, .content-section.markdown ol { margin: 8px 0; padding-left: 20px; }
+        .content-section.markdown code {
+            background: #1e1e1e;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Fira Code', monospace;
+        }
+        .content-section.markdown pre {
+            background: #1e1e1e;
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .content-section.markdown pre code {
+            padding: 0;
+        }
+
+        .content-section.code {
+            background: #1e1e1e;
+            font-family: 'Fira Code', monospace;
+            overflow-x: auto;
+        }
+
+        .content-section.code pre {
+            margin: 0;
+        }
+
+        .content-section.table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .content-section.table th {
+            background: #1e3a5f;
+            padding: 8px;
+            text-align: left;
+            border-bottom: 2px solid #4fc3f7;
+        }
+
+        .content-section.table td {
+            padding: 8px;
+            border-bottom: 1px solid #333;
+        }
+
+        .content-section.html {
+            /* Raw HTML styling */
+        }
+
+        /* Interactive components */
+        .interactive-component {
+            margin: 12px 0;
+            padding: 12px;
+            background: #16213e;
+            border-radius: 8px;
+            border: 1px solid #4fc3f7;
+        }
+
+        .interactive-component button {
+            padding: 8px 16px;
+            background: #4fc3f7;
+            color: #1a1a2e;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .interactive-component button:hover {
+            background: #29b6f6;
+        }
+
+        .interactive-component input[type="text"],
+        .interactive-component input[type="number"],
+        .interactive-component select {
+            padding: 8px;
+            background: #0f3460;
+            color: #eee;
+            border: 1px solid #333;
+            border-radius: 4px;
+        }
+
+        .interactive-component form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .history-item {
+            font-size: 0.75em;
+            color: #666;
+            margin: 5px 0;
+            padding: 4px;
+            background: #0f3460;
+            border-radius: 4px;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #666;
+            padding: 40px;
+        }
+
+        .empty-state p {
+            margin: 10px 0;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="canvas-container">
+        <header>
+            <h1>🎨 AgentCraft Canvas</h1>
+            <span id="status" class="status disconnected">Disconnected</span>
+        </header>
+
+        <div id="main-canvas" class="main-canvas">
+            <div class="empty-state">
+                <p>Waiting for agent updates...</p>
+                <p style="font-size: 0.85em;">Connect SSE to receive real-time content</p>
+            </div>
+        </div>
+
+        <div id="sidebar" class="sidebar">
+            <h3>Session</h3>
+            <p id="session-info" class="session-info">No session</p>
+            <hr>
+            <h3>History</h3>
+            <div id="history"></div>
+        </div>
+
+        <div class="input-footer">
+            <input type="text" id="input" placeholder="Send message to agent...">
+            <button id="send">Send</button>
+        </div>
+    </div>
+
+    <script>
+        // ===== Configuration =====
+        const API_BASE = '/canvas';
+        let sessionId = null;
+        let eventSource = null;
+
+        // ===== Initialization =====
+        async function init() {
+            // Get or create session with canvas skill
+            try {
+                const resp = await fetch('/v1/sessions', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        name: `canvas-${Date.now()}`,
+                        model: 'deepseek-chat',
+                        skills: 'canvas-interactive'  // Enable canvas skill
+                    })
+                });
+
+                if (!resp.ok) {
+                    throw new Error('Failed to create session');
+                }
+
+                const data = await resp.json();
+                sessionId = data.id || data.session_id;
+                document.getElementById('session-info').textContent = `Session: ${sessionId}`;
+
+                // Connect SSE
+                connectSSE();
+            } catch (e) {
+                console.error('Init error:', e);
+                document.getElementById('session-info').textContent = 'Error: ' + e.message;
+            }
+        }
+
+        // ===== SSE Connection =====
+        function connectSSE() {
+            if (!sessionId) return;
+
+            eventSource = new EventSource(`${API_BASE}/stream/${sessionId}`);
+
+            eventSource.onopen = () => {
+                console.log('SSE connected');
+                document.getElementById('status').textContent = 'Connected';
+                document.getElementById('status').className = 'status connected';
+                clearEmptyState();
+            };
+
+            eventSource.onerror = (e) => {
+                console.error('SSE error:', e);
+                document.getElementById('status').textContent = 'Disconnected';
+                document.getElementById('status').className = 'status disconnected';
+
+                // Reconnect after 3s
+                setTimeout(() => {
+                    if (sessionId) {
+                        console.log('Reconnecting...');
+                        connectSSE();
+                    }
+                }, 3000);
+            };
+
+            eventSource.addEventListener('connected', (event) => {
+                console.log('Connected event:', event.data);
+            });
+
+            eventSource.addEventListener('canvas_update', (event) => {
+                const data = JSON.parse(event.data);
+                handleCanvasUpdate(data);
+            });
+
+            eventSource.addEventListener('heartbeat', () => {
+                // Keep alive, no action needed
+            });
+        }
+
+        // ===== Clear Empty State =====
+        function clearEmptyState() {
+            const main = document.getElementById('main-canvas');
+            const empty = main.querySelector('.empty-state');
+            if (empty) empty.remove();
+        }
+
+        // ===== Canvas Update Handler =====
+        function handleCanvasUpdate(data) {
+            console.log('Canvas update:', data);
+
+            const { mode, content, section, action } = data;
+
+            const targetArea = section === 'sidebar'
+                ? document.getElementById('sidebar')
+                : document.getElementById('main-canvas');
+
+            // Handle clear action
+            if (action === 'clear') {
+                const sections = targetArea.querySelectorAll('.content-section');
+                sections.forEach(s => s.remove());
+                return;
+            }
+
+            // Create content section with canvas indicator
+            const div = document.createElement('div');
+            div.className = `content-section ${mode}`;
+            div.id = `section-${Date.now()}`;
+            div.innerHTML = `<div style="color: #666; font-size: 0.85em; margin-bottom: 8px;">🎨 Canvas (${mode})</div>`;
+
+            // Render content based on mode
+            switch (mode) {
+                case 'markdown':
+                    div.innerHTML += marked.parse(content);
+                    break;
+                case 'html':
+                    div.innerHTML += content;
+                    break;
+                case 'code':
+                    const pre = document.createElement('pre');
+                    const codeEl = document.createElement('code');
+                    codeEl.textContent = content;
+                    pre.appendChild(codeEl);
+                    div.appendChild(pre);
+                    break;
+                case 'table':
+                    div.innerHTML += renderTable(content);
+                    break;
+                default:
+                    div.innerHTML += content;
+            }
+
+            // Apply action
+            if (action === 'replace') {
+                const sections = targetArea.querySelectorAll('.content-section');
+                if (sections.length > 0) {
+                    sections[sections.length - 1].replaceWith(div);
+                } else {
+                    targetArea.appendChild(div);
+                }
+            } else {
+                // append
+                targetArea.appendChild(div);
+            }
+
+            // Auto-scroll
+            targetArea.scrollTop = targetArea.scrollHeight;
+
+            // Add to history
+            addToHistory(data);
+        }
+
+        // ===== Render Table =====
+        function renderTable(content) {
+            try {
+                const data = JSON.parse(content);
+                if (Array.isArray(data) && data.length > 0) {
+                    let html = '<table>';
+                    // Header
+                    html += '<thead><tr>';
+                    Object.keys(data[0]).forEach(key => {
+                        html += `<th>${key}</th>`;
+                    });
+                    html += '</tr></thead>';
+                    // Body
+                    html += '<tbody>';
+                    data.forEach(row => {
+                        html += '<tr>';
+                        Object.values(row).forEach(val => {
+                            html += `<td>${val}</td>`;
+                        });
+                        html += '</tr>';
+                    });
+                    html += '</tbody></table>';
+                    return html;
+                }
+            } catch (e) {
+                // Not valid JSON, show as text
+            }
+            return `<pre>${content}</pre>`;
+        }
+
+        // ===== Add to History =====
+        function addToHistory(data) {
+            const history = document.getElementById('history');
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            const preview = data.content.substring(0, 40);
+            item.textContent = `${data.mode}: ${preview}${data.content.length > 40 ? '...' : ''}`;
+            history.appendChild(item);
+        }
+
+        // ===== Send Message =====
+        async function sendMessage() {
+            const input = document.getElementById('input');
+            const text = input.value.trim();
+            if (!text || !sessionId) return;
+
+            input.value = '';
+
+            // Show user message in canvas
+            addUserMessage(text);
+
+            try {
+                // Call gateway chat API
+                const resp = await fetch('/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Session-Id': sessionId
+                    },
+                    body: JSON.stringify({
+                        model: 'deepseek-chat',
+                        messages: [{ role: 'user', content: text }]
+                    })
+                });
+
+                if (!resp.ok) {
+                    throw new Error('Request failed: ' + resp.status);
+                }
+
+                const data = await resp.json();
+                const assistantReply = data.choices?.[0]?.message?.content;
+
+                // Show assistant text reply if present
+                if (assistantReply) {
+                    addAssistantMessage(assistantReply);
+                }
+
+                console.log('Message sent');
+            } catch (e) {
+                console.error('Send error:', e);
+                addErrorMessage(e.message);
+            }
+        }
+
+        // ===== Add User Message =====
+        function addUserMessage(text) {
+            clearEmptyState();
+            const div = document.createElement('div');
+            div.className = 'content-section markdown';
+            div.style.background = '#1e3a5f';
+            div.innerHTML = `<div style="color: #81d4fa; font-weight: 500; margin-bottom: 8px;">👤 You:</div>${marked.parse(text)}`;
+            document.getElementById('main-canvas').appendChild(div);
+            document.getElementById('main-canvas').scrollTop = document.getElementById('main-canvas').scrollHeight;
+        }
+
+        // ===== Add Assistant Message =====
+        function addAssistantMessage(text) {
+            const div = document.createElement('div');
+            div.className = 'content-section markdown';
+            div.innerHTML = `<div style="color: #4fc3f7; font-weight: 500; margin-bottom: 8px;">🤖 Agent:</div>${marked.parse(text)}`;
+            document.getElementById('main-canvas').appendChild(div);
+            document.getElementById('main-canvas').scrollTop = document.getElementById('main-canvas').scrollHeight;
+        }
+
+        // ===== Add Error Message =====
+        function addErrorMessage(text) {
+            const div = document.createElement('div');
+            div.className = 'content-section markdown';
+            div.style.background = '#3e1e1e';
+            div.innerHTML = `<div style="color: #f44; font-weight: 500;">❌ Error:</div>${text}`;
+            document.getElementById('main-canvas').appendChild(div);
+        }
+
+        // ===== Event Listeners =====
+        document.getElementById('send').onclick = sendMessage;
+        document.getElementById('input').onkeypress = (e) => {
+            if (e.key === 'Enter') sendMessage();
+        };
+
+        // ===== Start =====
+        init();
+    </script>
+</body>
+</html>
