@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Research: Human-Agent Interaction - Office AI Agent Lab</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="nav-logo">Office AI Agent Lab</a>
+            <div class="nav-menu">
+                <a href="index.html" class="nav-link">Home</a>
+                <a href="team.html" class="nav-link">Team</a>
+                <a href="publications.html" class="nav-link">Publications</a>
+                <a href="projects.html" class="nav-link">Projects</a>
+                <a href="source.html" class="nav-link">Source</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="container">
+            <h1 class="page-title">Deep Research: Human-Agent Interaction</h1>
+            <p class="research-meta">Last Updated: May 2025 | Focus: LLM-based Human-Agent Systems (LLM-HAS)</p>
+
+            <!-- Overview -->
+            <section class="research-section">
+                <h2 class="section-title">1. Overview</h2>
+                <p class="research-text">
+                    Human-Agent Interaction (HAI) represents the critical frontier where AI autonomy meets human oversight. While fully autonomous agents promise efficiency, they face reliability challenges (hallucinations, handling complex tasks, safety risks) that limit real-world deployment. LLM-based Human-Agent Systems (LLM-HAS) address these limitations by incorporating human feedback, information, and control into agent workflows.
+                </p>
+                <div class="key-stat">
+                    <span class="stat-highlight">Key Finding:</span>
+                    According to Deloitte's 2026 Global Human Capital Trends, organizations that intentionally design human-AI interactions are <strong>2.5x more likely</strong> to report better financial results and <strong>2x more likely</strong> to provide meaningful work. Yet only <strong>6%</strong> say they're leading in this area.
+                </div>
+                <p class="research-text">
+                    Nearly <strong>60% of workers</strong> now use AI intentionally at work, but few organizations are designing for how humans and machines actually interact. The problem: <strong>59% take a tech-focused approach</strong>, layering AI onto legacy systems rather than reimagining collaboration.
+                </p>
+            </section>
+
+            <!-- Core Framework -->
+            <section class="research-section">
+                <h2 class="section-title">2. LLM-HAS Framework (Zou et al., 2025)</h2>
+
+                <p class="research-text">
+                    The first comprehensive survey of LLM-based Human-Agent Systems identifies five core components:
+                </p>
+
+                <div class="framework-components">
+                    <div class="component-card">
+                        <h4>Environment & Profiling</h4>
+                        <p>Task environment definition, agent role specification, capability boundaries, and interaction context setup.</p>
+                    </div>
+                    <div class="component-card">
+                        <h4>Human Feedback</h4>
+                        <p>Feedback types: explicit (corrections), implicit (behavior signals), strategic (goal refinement), operational (execution guidance).</p>
+                    </div>
+                    <div class="component-card">
+                        <h4>Interaction Types</h4>
+                        <p>Supervision, delegation, collaboration, coaching, iterative partnership—each requiring different design patterns.</p>
+                    </div>
+                    <div class="component-card">
+                        <h4>Orchestration</h4>
+                        <p>Task decomposition, role assignment, workflow sequencing, handoff protocols between human and agent.</p>
+                    </div>
+                    <div class="component-card">
+                        <h4>Communication</h4>
+                        <p>Natural language, structured outputs, visual interfaces, multimodal channels (audio, video, text).</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Interaction Types -->
+            <section class="research-section">
+                <h2 class="section-title">3. Interaction Type Taxonomy</h2>
+
+                <p class="research-text">
+                    Deloitte identifies six distinct interaction types, each requiring specific hardwiring (formal elements) and softwiring (culture, behaviors):
+                </p>
+
+                <div class="interaction-grid">
+                    <div class="interaction-card">
+                        <div class="interaction-icon">👤→🤖</div>
+                        <h4>AI as Tool</h4>
+                        <p>Human operates AI like traditional software. Full human agency, AI executes specified commands.</p>
+                        <div class="interaction-elements">
+                            <span>Hardwire: UI design, tool APIs</span>
+                            <span>Softwire: Training, familiarity</span>
+                        </div>
+                    </div>
+                    <div class="interaction-card">
+                        <div class="interaction-icon">🤖→👤</div>
+                        <h4>AI as Direct Report</h4>
+                        <p>Human supervises AI output. AI executes tasks, human reviews and approves. 95% routine automation possible.</p>
+                        <div class="interaction-elements">
+                            <span>Hardwire: Approval workflows, escalation</span>
+                            <span>Softwire: Trust building, oversight habits</span>
+                        </div>
+                    </div>
+                    <div class="interaction-card">
+                        <div class="interaction-icon">🤖→👤</div>
+                        <h4>AI as Boss</h4>
+                        <p>AI directs human work. Algorithms assign tasks, schedule, prioritize. Requires ethical guardrails.</p>
+                        <div class="interaction-elements">
+                            <span>Hardwire: Escalation paths, override rights</span>
+                            <span>Softwire: Fairness perception, agency</span>
+                        </div>
+                    </div>
+                    <div class="interaction-card">
+                        <div class="interaction-icon">🤖💡👤</div>
+                        <h4>AI as Coach</h4>
+                        <p>AI provides guidance and feedback. MetLife's call center coach improved satisfaction 13%, reduced stress.</p>
+                        <div class="interaction-elements">
+                            <span>Hardwire: Feedback channels, metrics</span>
+                            <span>Softwire: Learning culture, openness</span>
+                        </div>
+                    </div>
+                    <div class="interaction-card">
+                        <div class="interaction-icon">👥🤖</div>
+                        <h4>AI as Collaborator</h4>
+                        <p>Iterative partnership. Human and AI work together continuously, each contributing expertise.</p>
+                        <div class="interaction-elements">
+                            <span>Hardwire: Shared context, handoff rules</span>
+                            <span>Softwire: Trust, communication</span>
+                        </div>
+                    </div>
+                    <div class="interaction-card">
+                        <div class="interaction-icon">🤖✨👤</div>
+                        <h4>AI as Muse</h4>
+                        <p>AI sparks creativity. Idea generation, brainstorming, exploration without execution pressure.</p>
+                        <div class="interaction-elements">
+                            <span>Hardwire: Creative interfaces</span>
+                            <span>Softwire: Experimentation safety</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="key-finding">
+                    <strong>Case Study: 7-Eleven</strong> redesigned recruiter roles when AI automated 95% of routine hiring. Instead of replacing recruiters, they shifted to strategic focus—enabling store leaders, improving quality. Result: elevated talent fit, reduced turnover.
+                </div>
+            </section>
+
+            <!-- Human-in-the-Loop -->
+            <section class="research-section">
+                <h2 class="section-title">4. Human-in-the-Loop (HITL) Architecture</h2>
+
+                <h3 class="subsection-title">4.1 Why HITL Matters</h3>
+                <p class="research-text">
+                    Gartner predicts <strong>50% of AI agent deployment failures by 2030</strong> will stem from governance gaps. McKinsey reports 62% experimenting with AI agents, but only 23% scaling in business functions. The gap: insufficient oversight architecture.
+                </p>
+
+                <h3 class="subsection-title">4.2 Regulatory Context</h3>
+                <ul class="research-list">
+                    <li><strong>EU AI Act (August 2026):</strong> Article 14 mandates human oversight capabilities for high-risk AI systems</li>
+                    <li><strong>CFPB:</strong> Lenders must explain AI decisions—unexplainable models cannot be used</li>
+                    <li><strong>NIST IR 8596:</strong> Requires HITL checks and confidence thresholds for reliability</li>
+                </ul>
+
+                <h3 class="subsection-title">4.3 Escalation Trigger Design</h3>
+                <p class="research-text">
+                    Effective HITL requires precise criteria distinguishing autonomous execution from human intervention:
+                </p>
+
+                <div class="trigger-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Trigger Type</th>
+                                <th>Criteria</th>
+                                <th>Example Threshold</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Confidence Score</strong></td>
+                                <td>Model self-reported certainty</td>
+                                <td>Below 0.85 for high-risk</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Financial Threshold</strong></td>
+                                <td>Transaction amount limits</td>
+                                <td>Exceeding $10,000</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Reputational Risk</strong></td>
+                                <td>VIP clients, public-facing</td>
+                                <td>Executive review required</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Task Complexity</strong></td>
+                                <td>Outside training distribution</td>
+                                <td>Multi-agent chain > 5 steps</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Regulatory Trigger</strong></td>
+                                <td>Compliance requirements</td>
+                                <td>Healthcare, credit decisions</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3 class="subsection-title">4.4 Architectural Patterns</h3>
+                <div class="pattern-comparison">
+                    <div class="pattern-box">
+                        <h4>Synchronous Approval</h4>
+                        <p><strong>Use:</strong> Irreversible, high-stakes decisions</p>
+                        <p>Pauses execution pending human authorization. Zero risk of unapproved action but introduces latency.</p>
+                        <p><em>Examples: Financial transactions, data deletion, account modifications</em></p>
+                    </div>
+                    <div class="pattern-box">
+                        <h4>Asynchronous Audit</h4>
+                        <p><strong>Use:</strong> Reversible, lower-risk decisions</p>
+                        <p>Execute immediately, log for later review. Near-zero latency but delayed error detection.</p>
+                        <p><em>Examples: Content classification, recommendations, internal processes</em></p>
+                    </div>
+                    <div class="pattern-box">
+                        <h4>Multi-Tier Oversight</h4>
+                        <p><strong>Use:</strong> Complex workflows across departments</p>
+                        <p>Planning oversight (strategic) + execution autonomy (tactical). Executive visibility without bottlenecks.</p>
+                        <p><em>Examples: Multi-department projects, budget planning</em></p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Trust Calibration -->
+            <section class="research-section">
+                <h2 class="section-title">5. Trust & Trust Calibration</h2>
+
+                <h3 class="subsection-title">5.1 The Trust Challenge</h3>
+                <p class="research-text">
+                    Stanford SALT Lab research identifies worker concerns about AI automation:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Lack of trust (45%):</strong> Workers don't believe AI performs reliably</li>
+                    <li><strong>Job replacement fear (23%):</strong> Employment security concerns</li>
+                    <li><strong>Absence of human touch (16.3%):</strong> Tasks requiring interpersonal connection</li>
+                </ul>
+
+                <h3 class="subsection-title">5.2 Trust Calibration Framework</h3>
+                <p class="research-text">
+                    Research (Lee & See, 2004) establishes: <em>"Trust is better calibrated when systems make their limits as legible as their capabilities."</em> Key principles:
+                </p>
+
+                <div class="trust-principles">
+                    <div class="principle-item">
+                        <span class="principle-num">1</span>
+                        <div class="principle-content">
+                            <h4>Transparency of Limitations</h4>
+                            <p>Make uncertainty visible. Show confidence scores, failure modes, boundary conditions.</p>
+                        </div>
+                    </div>
+                    <div class="principle-item">
+                        <span class="principle-num">2</span>
+                        <div class="principle-content">
+                            <h4>Calibration vs Discrimination</h4>
+                            <p>Both must be measured. Calibration: confidence matches success rate. Discrimination: scores separate correct from incorrect outputs.</p>
+                        </div>
+                    </div>
+                    <div class="principle-item">
+                        <span class="principle-num">3</span>
+                        <div class="principle-content">
+                            <h4>Continuous Feedback Loop</h4>
+                            <p>Human corrections improve agent performance over time. Structured feedback feeds into retraining.</p>
+                        </div>
+                    </div>
+                    <div class="principle-item">
+                        <span class="principle-num">4</span>
+                        <div class="principle-content">
+                            <h4>Verbalized Confidence Issues</h4>
+                            <p>LLM self-reported confidence shows systematic overconfidence—a documented reliability limitation.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Interaction Models -->
+            <section class="research-section">
+                <h2 class="section-title">6. Next-Generation: Interaction Models</h2>
+
+                <p class="research-text">
+                    Thinking Machines Lab (May 2026) introduced <strong>Interaction Models</strong>—models that handle interaction natively rather than through external scaffolding. This represents a fundamental shift from turn-based to continuous, real-time interaction.
+                </p>
+
+                <h3 class="subsection-title">6.1 The Collaboration Bottleneck</h3>
+                <p class="research-text">
+                    Current models treat autonomy as the primary capability, pushing humans out of the loop. But real work benefits from <em>collaborative process</em>—humans clarify, give feedback along the way. Problem: current interfaces have <strong>no room for humans</strong>.
+                </p>
+
+                <h3 class="subsection-title">6.2 Key Capabilities</h3>
+                <ul class="research-list">
+                    <li><strong>Seamless dialog management:</strong> Model tracks thinking, yielding, self-correction implicitly—no separate dialog component</li>
+                    <li><strong>Verbal/visual interjections:</strong> Model jumps in as needed, not only when user finishes speaking</li>
+                    <li><strong>Simultaneous speech:</strong> User and model can speak concurrently (e.g., live translation)</li>
+                    <li><strong>Time-awareness:</strong> Direct sense of elapsed time</li>
+                    <li><strong>Concurrent tool calls:</strong> Search, browse, generate UI while speaking/listening</li>
+                </ul>
+
+                <h3 class="subsection-title">6.3 Architecture: Micro-Turns</h3>
+                <p class="research-text">
+                    Time-aligned micro-turns (200ms chunks) enable near real-time concurrency across modalities. No artificial turn boundaries. The model can:
+                </p>
+                <ul class="research-list">
+                    <li>Interrupt when user says something wrong (proactive interjection)</li>
+                    <li>React to visual cues (tell me when I've written a bug)</li>
+                    <li>Speak while listening (live translation)</li>
+                    <li>Watch and commentate (sports game commentary)</li>
+                </ul>
+
+                <div class="key-finding">
+                    <strong>Benchmark Results:</strong> TML-Interaction-Small achieves <strong>best interaction quality</strong> while being more intelligent than any non-thinking model. First model with strong intelligence AND interactivity combined.
+                </div>
+            </section>
+
+            <!-- Design Principles -->
+            <section class="research-section">
+                <h2 class="section-title">7. Design Principles (H-ACD Framework)</h2>
+
+                <p class="research-text">
+                    Human-Agent Centered Design (H-ACD) reframes design practice—not just interfaces, but <em>relationships</em> between people and systems that reason, act, adapt autonomously.
+                </p>
+
+                <div class="design-principles-grid">
+                    <div class="dp-card">
+                        <h4>Outcome-Driven</h4>
+                        <p>Define human and business outcomes to amplify. Focus on results transcending what humans or AI achieve alone.</p>
+                    </div>
+                    <div class="dp-card">
+                        <h4>Contextual</h4>
+                        <p>Tailor solutions to each workflow, team, risk profile, and human-AI relationship. No one-size-fits-all.</p>
+                    </div>
+                    <div class="dp-card">
+                        <h4>Transparent</h4>
+                        <p>Make roles, decision rights, trust thresholds, accountability explicit. Everyone understands how contributions combine.</p>
+                    </div>
+                    <div class="dp-card">
+                        <h4>Adaptive</h4>
+                        <p>Design for continuous learning, feedback, evolution. Sustain outcomes as needs change.</p>
+                    </div>
+                    <div class="dp-card">
+                        <h4>Human-Centered</h4>
+                        <p>Elevate human agency, creativity, judgment, empathy, leadership. AI amplifies, never diminishes human qualities.</p>
+                    </div>
+                    <div class="dp-card">
+                        <h4>Empowering</h4>
+                        <p>Workers confident to challenge, escalate, experiment, learn from success and failure.</p>
+                    </div>
+                </div>
+
+                <h3 class="subsection-title">7.1 Macro vs Micro Design</h3>
+                <p class="research-text">
+                    Effective design operates at two levels:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Macro Level:</strong> Strategic ambition, governance, design principles, ethics, infrastructure (organization-wide)</li>
+                    <li><strong>Micro Level:</strong> Work journeys, role definition, human-AI relationship, team composition, performance (task-specific)</li>
+                </ul>
+            </section>
+
+            <!-- Policy Architecture -->
+            <section class="research-section">
+                <h2 class="section-title">8. Policy-Driven Control Architecture</h2>
+
+                <p class="research-text">
+                    As oversight rules expand, hardcoded checks become brittle. Centralized policy architecture enables fleet-wide governance:
+                </p>
+
+                <div class="policy-architecture">
+                    <div class="policy-card">
+                        <h4>❌ Hardcoded Guardrails</h4>
+                        <ul>
+                            <li>Logic in individual agent code</li>
+                            <li>Single update requires full redeploy</li>
+                            <li>Context compaction can remove rules</li>
+                            <li>Prompt injection vulnerability</li>
+                        </ul>
+                    </div>
+                    <div class="policy-card good">
+                        <h4>✅ Centralized Policies</h4>
+                        <ul>
+                            <li>Policy changes without app redeploy</li>
+                            <li>Fleet-wide governance manageable</li>
+                            <li>Policies stored on server (not in context)</li>
+                            <li>Separation: devs own hooks, compliance owns rules</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <p class="research-text">
+                    Example: <code>@control()</code> decorator turns any function into governed decision point. Compliance updates PII policy across every agent with single change—no code updates, no redeployment, no restarts.
+                </p>
+            </section>
+
+            <!-- Feedback Mechanisms -->
+            <section class="research-section">
+                <h2 class="section-title">9. Feedback Mechanisms</h2>
+
+                <h3 class="subsection-title">9.1 Feedback Types (IJCAI 2025 Survey)</h3>
+                <div class="feedback-types">
+                    <div class="feedback-card">
+                        <h4>Explicit Feedback</h4>
+                        <p>Direct corrections, approvals, rejections. User actively provides guidance.</p>
+                        <span class="fb-example">Example: "Change this to X"</span>
+                    </div>
+                    <div class="feedback-card">
+                        <h4>Implicit Feedback</h4>
+                        <p>Behavior signals: time spent, scroll patterns, acceptance rate. No active user input.</p>
+                        <span class="fb-example">Example: User ignores suggestion → low confidence</span>
+                    </div>
+                    <div class="feedback-card">
+                        <h4>Strategic Feedback</h4>
+                        <p>Goal refinement, priority adjustment. Shapes agent's understanding of objectives.</p>
+                        <span class="fb-example">Example: "Focus on accuracy over speed"</span>
+                    </div>
+                    <div class="feedback-card">
+                        <h4>Operational Feedback</h4>
+                        <p>Execution guidance, step-by-step intervention during task execution.</p>
+                        <span class="fb-example">Example: HAC policy model determines intervention timing</span>
+                    </div>
+                </div>
+
+                <h3 class="subsection-title">9.2 Closing the Feedback Loop</h3>
+                <p class="research-text">
+                    Human corrections must systematically improve performance, not just fix individual errors:
+                </p>
+                <ul class="research-list">
+                    <li>Standardized interfaces for reviewer reasoning</li>
+                    <li>Categorical feedback enabling pattern analysis</li>
+                    <li>Automated integration into retraining workflows</li>
+                    <li>Continuous calibration based on production data</li>
+                </ul>
+            </section>
+
+            <!-- Applications -->
+            <section class="research-section">
+                <h2 class="section-title">10. Applications</h2>
+
+                <div class="app-examples">
+                    <div class="app-item">
+                        <h4>Customer Service</h4>
+                        <p>MetLife: AI coach for call center. Real-time coaching improved satisfaction 13%, reduced stress, lowered call times.</p>
+                    </div>
+                    <div class="app-item">
+                        <h4>Recruiting</h4>
+                        <p>7-Eleven: "Rita" automates 95% routine hiring. Recruiters shift to strategic role—enabling store leaders, improving quality.</p>
+                    </div>
+                    <div class="app-item">
+                        <h4>Healthcare</h4>
+                        <p>AI-assisted diagnosis requires human oversight by design. Trust calibration critical for adoption.</p>
+                    </div>
+                    <div class="app-item">
+                        <h4>Financial Services</h4>
+                        <p>Confidence thresholds for transactions. Synchronous approval for amounts exceeding limits.</p>
+                    </div>
+                    <div class="app-item">
+                        <h4>Research & Development</h4>
+                        <p>AI as collaborator/muse. Iterative partnership for idea generation and exploration.</p>
+                    </div>
+                    <div class="app-item">
+                        <h4>Content Creation</h4>
+                        <p>AI generates drafts, human reviews. Asynchronous audit for lower-risk content.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Challenges -->
+            <section class="research-section">
+                <h2 class="section-title">11. Challenges & Open Problems</h2>
+
+                <ul class="research-list">
+                    <li><strong>Non-determinism violation:</strong> Trust requires predictable behavior; agents act probabilistically</li>
+                    <li><strong>Confidence calibration:</strong> LLM self-reported confidence systematically overconfident</li>
+                    <li><strong>Worker resistance:</strong> 45% lack trust, 23% fear job replacement</li>
+                    <li><strong>Hidden consequences:</strong> Shifting routine tasks leaves humans with more complex, demanding work</li>
+                    <li><strong>Worker isolation:</strong> AI replacing peer collaboration</li>
+                    <li><strong>Long sessions:</strong> Continuous interaction accumulates context—memory management challenges</li>
+                    <li><strong>Compute/deployment:</strong> Streaming audio/video requires reliable connectivity</li>
+                    <li><strong>Safety:</strong> Real-time interfaces stress safety differently than turn-based</li>
+                </ul>
+            </section>
+
+            <!-- Future Directions -->
+            <section class="research-section">
+                <h2 class="section-title">12. Future Directions</h2>
+
+                <ul class="research-list">
+                    <li><strong>Native interaction models:</strong> Interactivity scales with intelligence, not bolted-on harnesses</li>
+                    <li><strong>Multimodal collaboration:</strong> Audio, video, text in continuous two-way exchange</li>
+                    <li><strong>Visual proactivity:</strong> Agents respond to visual world changes, not just audio cues</li>
+                    <li><strong>Agency-preserving control:</strong> Human autonomy protected while leveraging AI capabilities</li>
+                    <li><strong>Explainability integration:</strong> Interaction-centric explanations, not post-hoc XAI</li>
+                    <li><strong>Standardized benchmarks:</strong> FD-bench, TimeSpeak, CueSpeak for interaction quality</li>
+                    <li><strong>Cross-functional governance:</strong> IT, HR, legal, operations as unified oversight</li>
+                </ul>
+            </section>
+
+            <!-- Key Papers -->
+            <section class="research-section">
+                <h2 class="section-title">13. Key Papers (2024-2026)</h2>
+
+                <div class="paper-list">
+                    <div class="paper-item">
+                        <span class="paper-venue">arxiv 2025</span>
+                        <p class="paper-title">LLM-Based Human-Agent Collaboration and Interaction Systems: A Survey</p>
+                        <p class="paper-authors">Zou, Huang, Wu et al. (UI Chicago, Tokyo, Tsinghua)</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">IJCAI 2025</span>
+                        <p class="paper-title">A Survey on the Feedback Mechanism of LLM-based AI Agents</p>
+                        <p class="paper-authors">Liu et al.</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">Deloitte 2026</span>
+                        <p class="paper-title">Getting Human and Machine Relationships Right</p>
+                        <p class="paper-authors">Global Human Capital Trends</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">Thinking Machines 2026</span>
+                        <p class="paper-title">Interaction Models: A Scalable Approach to Human-AI Collaboration</p>
+                        <p class="paper-authors">Thinking Machines Lab</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">Microsoft 2025</span>
+                        <p class="paper-title">A Unified Framework for Human–Agent Collaboration</p>
+                        <p class="paper-authors">Microsoft Research</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">Stanford SALT Lab 2025</span>
+                        <p class="paper-title">Future of Work with AI Agents: Worker Preferences and HAS Scale</p>
+                        <p class="paper-authors">WORKBank Project</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- References -->
+            <section class="research-section">
+                <h2 class="section-title">14. References</h2>
+                <ul class="ref-list">
+                    <li><a href="https://arxiv.org/html/2505.00753v4">LLM-Based Human-Agent Collaboration Survey</a></li>
+                    <li><a href="https://www.deloitte.com/us/en/insights/topics/talent/human-capital-trends/2026/human-ai-interaction-design.html">Deloitte: Human AI Interaction Design</a></li>
+                    <li><a href="https://thinkingmachines.ai/blog/interaction-models/">Thinking Machines: Interaction Models</a></li>
+                    <li><a href="https://galileo.ai/blog/human-in-the-loop-agent-oversight">Galileo: HITL Oversight Guide</a></li>
+                    <li><a href="https://www.designative.info/2026/01/15/designing-human-agent-interaction-principles-for-trustworthy-collaboration/">H-ACD Design Principles</a></li>
+                    <li><a href="https://futureofwork.saltlab.stanford.edu/">Stanford: Future of Work with AI Agents</a></li>
+                    <li><a href="https://www.ijcai.org/proceedings/2025/1175.pdf">IJCAI: Feedback Mechanisms Survey</a></li>
+                    <li><a href="https://www.microsoft.com/en-us/research/wp-content/uploads/2025/12/Human_Agent_Framework.pdf">Microsoft: Unified Framework</a></li>
+                </ul>
+            </section>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Office AI Agent Lab</p>
+        </div>
+    </footer>
+</body>
+</html>

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 from typing import Any, Callable
@@ -15,6 +16,7 @@ class Tool:
         self.name = name
         self.description = description
         self.parameters = parameters
+        self._is_async = inspect.iscoroutinefunction(fn)
 
     def to_openai_tool(self) -> dict[str, Any]:
         return {
@@ -26,11 +28,26 @@ class Tool:
             },
         }
 
-    def run(self, arguments: dict[str, Any]) -> str:
-        result = self.fn(**arguments)
-        if not isinstance(result, str):
-            result = json.dumps(result, ensure_ascii=False)
-        return result
+    def run(self, arguments: dict[str, Any]) -> Any:
+        """Run the tool function (sync or async).
+
+        For async tools, runs in the current event loop or creates a new one.
+        """
+        if self._is_async:
+            # Try to run in existing event loop
+            try:
+                loop = asyncio.get_running_loop()
+                # We're in an async context, need to use run_until_complete pattern
+                # But we can't block the running loop, so we return a coroutine
+                return self.fn(**arguments)
+            except RuntimeError:
+                # No running loop, create a new one
+                return asyncio.run(self.fn(**arguments))
+        else:
+            result = self.fn(**arguments)
+            if not isinstance(result, str):
+                result = json.dumps(result, ensure_ascii=False)
+            return result
 
     def get_source_code(self) -> str | None:
         """Get the source code of the tool function.
@@ -174,10 +191,16 @@ class UnifiedToolRegistry:
         Returns:
             Tool result as string
         """
-        # Try local tools first (synchronous)
+        # Try local tools first
         local_tool = self._local_registry.get(name)
         if local_tool:
-            return local_tool.run(arguments)
+            result = local_tool.run(arguments)
+            # Handle async tools (result is a coroutine)
+            if inspect.iscoroutine(result):
+                result = await result
+            if not isinstance(result, str):
+                result = json.dumps(result, ensure_ascii=False)
+            return result
 
         # Try MCP tools (async)
         if self._mcp_manager and self._mcp_manager.is_tool_available(name):

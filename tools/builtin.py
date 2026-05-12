@@ -327,34 +327,75 @@ def web_fetch(url: str) -> str:
 
 
 # ============================================================
-# Agent tool (meta) — simplified delegation
+# Agent tool (meta) — sub-agent delegation
 # ============================================================
 
 
 @tool(
     name="Agent",
-    description="Delegate a sub-task to a specialized sub-agent. "
-                "Use this for complex or independent sub-tasks that should be handled "
-                "with focused attention. The sub-agent will report back results.",
+    description="Launch a new agent to handle complex, multi-step tasks. "
+                "Each agent type has specific capabilities and tools available to it.\n\n"
+                "Available agent types:\n"
+                "- explore: Fast read-only search agent for locating code. Use for file pattern searches, "
+                "grep for symbols/keywords, or answering 'where is X defined / which files reference Y.' "
+                "NOT for code review or open-ended analysis.\n"
+                "- general-purpose: General-purpose agent for researching complex questions, "
+                "searching for code, and executing multi-step tasks. Use when not confident "
+                "in finding the right match in first few tries.\n"
+                "- plan: Software architect agent for designing implementation plans. "
+                "Returns step-by-step plans, identifies critical files, considers trade-offs.\n\n"
+                "Usage notes:\n"
+                "- Always include a short description summarizing what the agent will do.\n"
+                "- The agent starts fresh with no context from this conversation.\n"
+                "- Clearly tell the agent whether to write code or just do research.\n"
+                "- For a short response, say so ('report in under 200 words').",
     parameters={
         "type": "object",
         "properties": {
-            "task": {
+            "description": {
                 "type": "string",
-                "description": "A clear, self-contained description of the sub-task to delegate",
+                "description": "A short (3-5 word) description of the task",
+            },
+            "prompt": {
+                "type": "string",
+                "description": "The task for the agent to perform. Be specific and self-contained.",
+            },
+            "subagent_type": {
+                "type": "string",
+                "enum": ["explore", "general-purpose", "plan"],
+                "description": "The type of specialized agent to use (default: general-purpose)",
             },
         },
-        "required": ["task"],
+        "required": ["prompt"],
     },
 )
-def agent_delegate(task: str) -> str:
-    """Delegation is a placeholder for future multi-agent orchestration.
-    Currently returns guidance for the calling LLM to handle the task itself."""
-    return (
-        f"[Agent delegation requested, but sub-agent dispatch is not yet implemented. "
-        f"Please handle this task directly using your available tools.]\n"
-        f"Requested task: {task}"
-    )
+async def agent_delegate(
+    prompt: str,
+    description: str | None = None,
+    subagent_type: str = "general-purpose",
+) -> str:
+    """Delegate a sub-task to a specialized sub-agent."""
+    from tools.agent_executor import get_agent_executor
+
+    executor = get_agent_executor()
+    if executor is None:
+        return "[Error] Agent executor not initialized. Cannot delegate task."
+
+    # Build task description
+    task = prompt
+    if description:
+        task = f"[{description}] {prompt}"
+
+    try:
+        result = await executor.run(
+            task=task,
+            agent_type=subagent_type,
+            context=None,
+            timeout=120,
+        )
+        return result
+    except Exception as e:
+        return f"[Agent Error] {type(e).__name__}: {e}"
 
 
 @tool(

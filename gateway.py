@@ -19,6 +19,7 @@ from openai import OpenAI
 from tools import get_default_registry, UnifiedToolRegistry
 from tools.builtin import *  # noqa: F401,F403 — register built-in tools
 from tools.canvas_tools import set_canvas_manager  # Canvas tools
+from tools.agent_executor import AgentExecutor, set_agent_executor  # Agent executor
 from tools.mcp import MCPToolManager, MCPConfig
 from tools.sandbox import SandboxExecutor, SandboxConfig
 from sessions import SessionManager
@@ -163,6 +164,17 @@ async def lifespan(_app: FastAPI):
     else:
         _unified_registry = UnifiedToolRegistry(get_default_registry())
         _app.state.unified_registry = _unified_registry
+
+    # Agent Executor initialization
+    agent_executor = AgentExecutor(
+        llm_client=client,
+        registry=_unified_registry,
+        session_manager=_session_manager,
+        model="deepseek-chat",
+        base_url=LLM_BASE_URL,
+    )
+    set_agent_executor(agent_executor)
+    logger.info("[AgentExecutor] Initialized with unified registry")
 
     # Initialize channels
     _telegram_channel = TelegramChannel(_session_manager)

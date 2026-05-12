@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Research: Multi-Agent Collaboration - Office AI Agent Lab</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="nav-logo">Office AI Agent Lab</a>
+            <div class="nav-menu">
+                <a href="index.html" class="nav-link">Home</a>
+                <a href="team.html" class="nav-link">Team</a>
+                <a href="publications.html" class="nav-link">Publications</a>
+                <a href="projects.html" class="nav-link">Projects</a>
+                <a href="source.html" class="nav-link">Source</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="container">
+            <h1 class="page-title">Deep Research: Multi-Agent Collaboration</h1>
+            <p class="research-meta">Last Updated: May 2025 | Focus: LLM-based Multi-Agent Systems</p>
+
+            <!-- Overview -->
+            <section class="research-section">
+                <h2 class="section-title">1. Overview</h2>
+                <p class="research-text">
+                    Multi-agent collaboration represents a paradigm shift in AI systems, where multiple autonomous agents work together to solve complex problems that exceed the capabilities of individual agents. With the advent of Large Language Models (LLMs), multi-agent systems have evolved from traditional rule-based approaches to intelligent, conversational agents capable of reasoning, planning, and coordinating through natural language.
+                </p>
+                <p class="research-text">
+                    Recent research shows that multi-agent systems outperform single-agent approaches by 90% on complex research tasks (Anthropic, 2025). The key insight is that <strong>token usage alone explains 80% of performance variance</strong> in multi-agent evaluations, validating architectures that distribute work across agents with separate context windows.
+                </p>
+            </section>
+
+            <!-- Core Mechanisms -->
+            <section class="research-section">
+                <h2 class="section-title">2. Core Collaboration Mechanisms</h2>
+
+                <h3 class="subsection-title">2.1 Communication Protocols</h3>
+                <p class="research-text">
+                    Effective multi-agent collaboration relies on well-defined communication mechanisms. The three primary paradigms are:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Direct Messaging:</strong> Point-to-point communication between specific agents, useful for task delegation and status updates.</li>
+                    <li><strong>Broadcasting:</strong> Messages sent to all agents simultaneously, effective for global announcements and shared discoveries.</li>
+                    <li><strong>Shared Memory/Blackboard:</strong> Common data repositories where agents read/write information, enabling asynchronous collaboration.</li>
+                </ul>
+
+                <h3 class="subsection-title">2.2 Coordination Patterns</h3>
+                <p class="research-text">
+                    Research identifies four primary coordination patterns in LLM-based multi-agent systems:
+                </p>
+                <div class="pattern-grid">
+                    <div class="pattern-card">
+                        <h4>Hierarchical (Orchestrator-Worker)</h4>
+                        <p>A lead agent decomposes tasks and delegates to specialized subagents. Anthropic's Research system uses this pattern, achieving 90.2% improvement over single-agent approaches.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Collaborative (Peer-to-Peer)</h4>
+                        <p>Agents share context and communicate directly without a central coordinator. Effective for brainstorming and joint reasoning tasks.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Competitive</h4>
+                        <p>Agents compete to produce optimal solutions, with selection mechanisms choosing the best output. Useful for quality assurance and diverse perspectives.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Sequential</h4>
+                        <p>Agents pass outputs to next agents in a pipeline. Each agent specializes in a transformation step, like a production line.</p>
+                    </div>
+                </div>
+
+                <h3 class="subsection-title">2.3 Thought Communication</h3>
+                <p class="research-text">
+                    A recent NeurIPS 2025 paper introduces <em>Thought Communication</em>, a paradigm where agents communicate through latent thoughts rather than explicit messages. This approach reduces information loss and enables more nuanced collaboration by sharing reasoning processes directly.
+                </p>
+            </section>
+
+            <!-- Key Frameworks -->
+            <section class="research-section">
+                <h2 class="section-title">3. Key Frameworks & Tools</h2>
+
+                <div class="framework-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Framework</th>
+                                <th>Architecture</th>
+                                <th>Key Features</th>
+                                <th>Best Use Cases</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>AutoGen</strong></td>
+                                <td>Conversational</td>
+                                <td>Flexible agent roles, human-in-loop, code execution</td>
+                                <td>Research, coding, complex reasoning</td>
+                            </tr>
+                            <tr>
+                                <td><strong>CrewAI</strong></td>
+                                <td>Role-based</td>
+                                <td>Defined roles/tasks, sequential/parallel workflows</td>
+                                <td>Enterprise automation, content creation</td>
+                            </tr>
+                            <tr>
+                                <td><strong>LangGraph</strong></td>
+                                <td>Graph-based</td>
+                                <td>State machines, cycles, conditional edges</td>
+                                <td>Complex workflows, debugging</td>
+                            </tr>
+                            <tr>
+                                <td><strong>OpenAI Agents SDK</strong></td>
+                                <td>Orchestrator</td>
+                                <td>Built-in handoffs, tracing, evaluations</td>
+                                <td>Production applications</td>
+                            </tr>
+                            <tr>
+                                <td><strong>CAMEL</strong></td>
+                                <td>Role-playing</td>
+                                <td>Inception prompting, cooperative agents</td>
+                                <td>Dialogue simulation, data generation</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3 class="subsection-title">3.1 Framework Selection Criteria</h3>
+                <ul class="research-list">
+                    <li><strong>Task Complexity:</strong> Sequential workflows suit LangGraph; conversational tasks suit AutoGen.</li>
+                    <li><strong>Human Interaction:</strong> AutoGen excels at human-in-the-loop; CrewAI for fully autonomous.</li>
+                    <li><strong>Production Readiness:</strong> OpenAI Agents SDK and LangGraph offer robust observability.</li>
+                    <li><strong>Token Budget:</strong> CrewAI is more efficient; AutoGen uses more tokens for flexibility.</li>
+                </ul>
+            </section>
+
+            <!-- Applications -->
+            <section class="research-section">
+                <h2 class="section-title">4. Applications</h2>
+
+                <div class="application-grid">
+                    <div class="app-card">
+                        <h4>Research & Information Gathering</h4>
+                        <p>Multi-agent systems parallelize web searches across specialized subagents. Anthropic's Research feature uses lead agent + subagents architecture for complex queries.</p>
+                        <span class="app-tag">Breadth-first queries</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Software Development</h4>
+                        <p>Agents分工协作: architect designs, coder implements, reviewer checks, tester validates. CrewAI and AutoGen are popular for this workflow.</p>
+                        <span class="app-tag">Code generation + QA</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Content Creation</h4>
+                        <p>Writer, editor, fact-checker agents collaborate on articles. Sequential pattern ensures quality at each stage.</p>
+                        <span class="app-tag">Multi-stage refinement</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Decision Making</h4>
+                        <p>Competitive agents propose different strategies; aggregator selects optimal. Useful for investment analysis, strategic planning.</p>
+                        <span class="app-tag">Diverse perspectives</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Office Automation</h4>
+                        <p>Email agents, calendar agents, document agents coordinate office workflows. Our lab's focus area.</p>
+                        <span class="app-tag">Workflow orchestration</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Embodied AI</h4>
+                        <p>Multi-robot coordination, swarm intelligence. IJCAI 2025 research on generative multi-agent collaboration in embodied systems.</p>
+                        <span class="app-tag">Physical world tasks</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Challenges -->
+            <section class="research-section">
+                <h2 class="section-title">5. Challenges & Open Problems</h2>
+
+                <h3 class="subsection-title">5.1 Coordination Complexity</h3>
+                <p class="research-text">
+                    Multi-agent systems introduce emergent behaviors. Small changes to one agent unpredictably affect others. Anthropic reports issues like "agents spawning 50 subagents for simple queries" or "scouring the web endlessly for nonexistent sources."
+                </p>
+
+                <h3 class="subsection-title">5.2 Token Efficiency</h3>
+                <p class="research-text">
+                    Multi-agent systems use ~15× more tokens than single-agent chats. Economic viability requires high-value tasks where the cost justifies performance gains.
+                </p>
+
+                <h3 class="subsection-title">5.3 Evaluation Difficulty</h3>
+                <p class="research-text">
+                    Traditional evaluations assume fixed paths, but multi-agent systems take different valid paths to reach goals. LLM-as-judge methods scale but miss edge cases; human evaluation remains essential.
+                </p>
+
+                <h3 class="subsection-title">5.4 Reliability & Responsibility</h3>
+                <p class="research-text">
+                    Recent surveys identify four pillars: Reliability, Transparency, Accountability, Fairness. When agents fail, determining responsibility is complex. Error propagation across agents compounds failures.
+                </p>
+
+                <h3 class="subsection-title">5.5 Asynchronous Execution</h3>
+                <p class="research-text">
+                    Current systems execute synchronously, creating bottlenecks. Asynchronous execution would enable better parallelism but adds coordination challenges.
+                </p>
+            </section>
+
+            <!-- Future Directions -->
+            <section class="research-section">
+                <h2 class="section-title">6. Future Directions</h2>
+
+                <ul class="research-list">
+                    <li><strong>Agentic Capability Internalization:</strong> Models like Claude 4 increasingly internalize multi-agent capabilities (reflection, planning), reducing need for explicit multi-agent architectures.</li>
+                    <li><strong>Thought-Level Communication:</strong> Moving beyond natural language to share reasoning states directly.</li>
+                    <li><strong>Hybrid Human-Agent Teams:</strong> Better integration of human oversight and intervention.</li>
+                    <li><strong>Standardized Protocols:</strong> MCP (Model Context Protocol) and A2A (Agent-to-Agent) protocols emerging for interoperability.</li>
+                    <li><strong>Specialized Agent Models:</strong> Fine-tuning models for specific agent roles (researcher, coder, reviewer).</li>
+                    <li><strong>Memory Systems:</strong> Long-term memory and context management across extended multi-agent sessions.</li>
+                </ul>
+            </section>
+
+            <!-- Key Papers -->
+            <section class="research-section">
+                <h2 class="section-title">7. Key Papers (2024-2025)</h2>
+
+                <div class="paper-list">
+                    <div class="paper-item">
+                        <span class="paper-venue">ACM CSUR 2025</span>
+                        <p class="paper-title">A Survey of Multi-AI Agent Collaboration: Theories, Frameworks, and Applications</p>
+                        <p class="paper-authors">Zhang et al.</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">NeurIPS 2025</span>
+                        <p class="paper-title">Multi-Agent Collaboration Mechanisms: A Survey of LLMs</p>
+                        <p class="paper-authors">Tran et al.</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">NeurIPS 2025</span>
+                        <p class="paper-title">Thought Communication in Multiagent Collaboration</p>
+                        <p class="paper-authors">Zheng et al.</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">Anthropic 2025</span>
+                        <p class="paper-title">How We Built Our Multi-Agent Research System</p>
+                        <p class="paper-authors">Hadfield, Zhang, Lien et al.</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">IJCAI 2025</span>
+                        <p class="paper-title">Generative Multi-Agent Collaboration in Embodied AI</p>
+                        <p class="paper-authors">Wu et al.</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">ACL 2025</span>
+                        <p class="paper-title">LLM-Based Human-Agent Collaboration and Interaction Survey</p>
+                        <p class="paper-authors">Multiple</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- References -->
+            <section class="research-section">
+                <h2 class="section-title">8. References</h2>
+                <ul class="ref-list">
+                    <li><a href="https://www.anthropic.com/engineering/multi-agent-research-system">Anthropic Engineering Blog: Multi-Agent Research System</a></li>
+                    <li><a href="https://cora.ucc.ie/server/api/core/bitstreams/e0305ac0-e1df-45b1-98c5-09510a44b4bd/content">Multi-Agent Collaboration Mechanisms Survey</a></li>
+                    <li><a href="https://dl.acm.org/doi/full/10.1145/3745238.3745531">ACM Survey on Multi-AI Agent Collaboration</a></li>
+                    <li><a href="https://artusai.co/blog/collaboration-and-coordination-in-multi-agent-systems">Artus AI: Collaboration and Coordination in MAS</a></li>
+                    <li><a href="https://gurusup.com/blog/best-multi-agent-frameworks-2026">Best Multi-Agent Frameworks 2026</a></li>
+                    <li><a href="https://openreview.net/forum?id=tq9lyV9Cml">Thought Communication (OpenReview)</a></li>
+                </ul>
+            </section>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Office AI Agent Lab</p>
+        </div>
+    </footer>
+</body>
+</html>
