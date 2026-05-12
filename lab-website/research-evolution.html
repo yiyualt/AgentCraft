@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Office Agent Evolution - Office LLM-Agent Lab (OfficeClaw)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="nav-logo">Office LLM-Agent Lab (OfficeClaw)</a>
+            <div class="nav-menu">
+                <a href="index.html" class="nav-link">Home</a>
+                <a href="team.html" class="nav-link">Team</a>
+                <a href="publications.html" class="nav-link">Publications</a>
+                <a href="projects.html" class="nav-link">Projects</a>
+                <a href="source.html" class="nav-link">Source</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="container">
+            <h1 class="page-title">Office Agent Evolution</h1>
+            <p class="research-meta">Last Updated: May 2025 | Focus: Data Flywheel for Office Agents | Phase: Phase 3</p>
+
+            <!-- Overview -->
+            <section class="research-section">
+                <h2 class="section-title">1. Overview</h2>
+                <p class="research-text">
+                    Agent Self-Evolution refers to the capability of AI agents to continuously improve through a closed-loop feedback system where execution data flows back into model training. Unlike static deployments, self-evolving agents form a <strong>data flywheel</strong>: better agent → more usage → more data → better training → better agent.
+                </p>
+                <p class="research-text">
+                    The core insight from NVIDIA's production deployment (NVInfo AI, 30,000+ users): <strong>human-in-the-loop feedback, when structured within a data flywheel, transforms enterprise AI agents into self-improving systems</strong>. Over 3 months, 495 negative samples revealed two failure modes; targeted fine-tuning achieved 96% accuracy with 10x smaller model and 70% latency improvement.
+                </p>
+                <div class="key-stat">
+                    <span class="stat-highlight">Core Problem:</span>
+                    Agents plateau after deployment. Edge cases emerge, user needs evolve, failure patterns repeat. Without systematic feedback integration, agents cannot adapt. Self-evolving architectures create <strong>automated improvement loops</strong> where production data continuously refines model capabilities.
+                </div>
+            </section>
+
+            <!-- Data Flywheel Architecture -->
+            <section class="research-section">
+                <h2 class="section-title">2. Data Flywheel Architecture</h2>
+
+                <h3 class="subsection-title">2.1 Flywheel Components</h3>
+                <p class="research-text">
+                    NVIDIA's Data Flywheel Blueprint defines five core stages:
+                </p>
+                <div class="has-scale">
+                    <div class="has-item">
+                        <span class="has-level">1</span>
+                        <span class="has-desc"><strong>Monitor:</strong> Collect execution traces, user feedback, failure signals from production agent</span>
+                    </div>
+                    <div class="has-item">
+                        <span class="has-level">2</span>
+                        <span class="has-desc"><strong>Analyze:</strong> Identify failure patterns, error taxonomy, performance bottlenecks from collected data</span>
+                    </div>
+                    <div class="has-item">
+                        <span class="has-level">3</span>
+                        <span class="has-desc highlight"><strong>Plan:</strong> Determine improvement strategy—fine-tuning target, data curation scope, distillation approach</span>
+                    </div>
+                    <div class="has-item">
+                        <span class="has-level">4</span>
+                        <span class="has-desc"><strong>Execute:</strong> Implement model updates via NeMo microservices: fine-tuning, distillation, evaluation</span>
+                    </div>
+                    <div class="has-item">
+                        <span class="has-level">5</span>
+                        <span class="has-desc"><strong>Deploy:</strong> Rollout improved model with staged validation, rollback capability</span>
+                    </div>
+                </div>
+
+                <h3 class="subsection-title">2.2 MAPE-K Control Loop</h3>
+                <p class="research-text">
+                    Adapted from autonomic computing (IBM), MAPE-K (Monitor-Analyze-Plan-Execute with Knowledge) provides a framework for self-adaptive systems:
+                </p>
+                <div class="pattern-grid">
+                    <div class="pattern-card">
+                        <h4>Monitor (M)</h4>
+                        <p>Probes observe agent execution: success rates, latency, user feedback, error frequencies. Continuous instrumentation.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Analyze (A)</h4>
+                        <p>Detect anomalies, classify failures, identify improvement opportunities. Pattern recognition on collected traces.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Plan (P)</h4>
+                        <p>Generate adaptation strategies: which component to improve, what data to use, what technique to apply.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Execute (E)</h4>
+                        <p>Apply changes: model fine-tuning, prompt updates, skill library modification. Effectors modify target system.</p>
+                    </div>
+                </div>
+                <p class="research-text">
+                    <strong>Knowledge (K):</strong> Shared knowledge base across MAPE stages—failure taxonomy, historical fixes, user preferences, model versioning.
+                </p>
+
+                <h3 class="subsection-title">2.3 NVIDIA NVInfo AI Case Study</h3>
+                <ul class="research-list">
+                    <li><strong>Scale:</strong> 30,000+ employees, MoE Knowledge Assistant for RAG pipeline</li>
+                    <li><strong>Collected:</strong> 495 negative samples over 3 months post-deployment</li>
+                    <li><strong>Failure Analysis:</strong> Routing errors (5.25%), Query rephrasal errors (3.2%)</li>
+                    <li><strong>Fix 1 (Routing):</strong> Llama 3.1 70B → fine-tuned 8B variant; 96% accuracy, 10x smaller, 70% latency improvement</li>
+                    <li><strong>Fix 2 (Rephrasal):</strong> Fine-tuning yielded 3.7% accuracy gain, 40% latency reduction</li>
+                </ul>
+            </section>
+
+            <!-- Trajectory Data -->
+            <section class="research-section">
+                <h2 class="section-title">3. Trajectory Data & Training Pipeline</h2>
+
+                <h3 class="subsection-title">3.1 What is Trajectory Data?</h3>
+                <p class="research-text">
+                    Agent trajectory = complete record of execution sequence: task input → agent reasoning → actions taken → observations received → intermediate states → final outcome. Each step captures (thought, action, result) tuple.
+                </p>
+                <div class="framework-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Data Type</th>
+                                <th>Content</th>
+                                <th>Use Case</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Full Trajectory</strong></td>
+                                <td>Complete execution sequence</td>
+                                <td>Behavior cloning, replay analysis</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Critical Steps Only</strong></td>
+                                <td>Key decision points</td>
+                                <td>ATLAS: efficient fine-tuning, better generalization</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Failure Trajectories</strong></td>
+                                <td>Unsuccessful executions</td>
+                                <td>Error pattern learning, recovery training</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Success Trajectories</strong></td>
+                                <td>Completed tasks</td>
+                                <td>Positive examples for fine-tuning</td>
+                            </tr>
+                            <tr>
+                                <td><strong>User-Corrected</strong></td>
+                                <td>Agent output + human edit</td>
+                                <td>Preference learning, alignment</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3 class="subsection-title">3.2 AgentInstruct Dataset (AgentTuning)</h3>
+                <p class="research-text">
+                    Tsinghua/Zhipu constructed AgentInstruct—the first instruction-tuning dataset for agent capabilities:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Size:</strong> 1,866 high-quality trajectories from 6 agent tasks</li>
+                    <li><strong>Tasks:</strong> ALFWorld, WebShop, Mind2Web, Knowledge Graph, Operating System, Database</li>
+                    <li><strong>Construction:</strong> Instruction generation → trajectory interaction → trajectory filter (5.28% pass rate)</li>
+                    <li><strong>Training:</strong> Hybrid fine-tuning with AgentInstruct + general-domain instructions</li>
+                </ul>
+                <div class="key-finding">
+                    <strong>Result:</strong> AgentLM-70B comparable to GPT-3.5-turbo on unseen agent tasks. AgentTuning enables agent capabilities without compromising general abilities. First attempt to instruction-tune LLMs using interaction trajectories.
+                </div>
+
+                <h3 class="subsection-title">3.3 Trajectory Filtering & Curation</h3>
+                <p class="research-text">
+                    Raw trajectories require curation before training:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Success filtering:</strong> Only completed trajectories used for positive training</li>
+                    <li><strong>Length pruning:</strong> Remove excessively long/short trajectories (abnormal patterns)</li>
+                    <li><strong>Diversity sampling:</strong> Ensure task distribution balance across scenarios</li>
+                    <li><strong>Quality scoring:</strong> Rank trajectories by efficiency, correctness, user satisfaction</li>
+                    <li><strong>Error annotation:</strong> Tag failure points for targeted improvement training</li>
+                </ul>
+            </section>
+
+            <!-- Training Methods -->
+            <section class="research-section">
+                <h2 class="section-title">4. Self-Improvement Training Methods</h2>
+
+                <h3 class="subsection-title">4.1 Supervised Fine-Tuning (SFT)</h3>
+                <p class="research-text">
+                    Most common approach: fine-tune on collected trajectories:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Behavior cloning:</strong> Model learns to replicate successful agent actions</li>
+                    <li><strong>Mixed training:</strong> AgentInstruct + general instructions preserves broad capabilities</li>
+                    <li><strong>Task-specific:</strong> Fine-tune on domain-specific trajectories (medical coding, legal review)</li>
+                </ul>
+
+                <h3 class="subsection-title">4.2 Model Distillation</h3>
+                <p class="research-text">
+                    Compress large teacher model into smaller student using trajectory data:
+                </p>
+                <div class="pattern-grid">
+                    <div class="pattern-card">
+                        <h4>Teacher → Student</h4>
+                        <p>Large model (70B) generates trajectories. Small model (8B) fine-tuned on teacher outputs. NVIDIA: 96% accuracy with 10x smaller model.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Step-wise Distillation</h4>
+                        <p>SOD framework: adaptively reweights critical steps. Focus training on decision points, not every action.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>On-Policy Distillation</h4>
+                        <p>Student generates trajectories; teacher provides feedback. Student learns from own exploration guided by teacher.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Training-Free Distillation</h4>
+                        <p>AgentDistill: direct reuse of Model-Based Procedural Memory without additional training. Efficient knowledge transfer.</p>
+                    </div>
+                </div>
+
+                <h3 class="subsection-title">4.3 Reinforcement Learning Approaches</h3>
+                <p class="research-text">
+                    RL enables learning from outcome feedback, not just trajectory imitation:
+                </p>
+                <div class="framework-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Mechanism</th>
+                                <th>Application</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>RLHF</strong></td>
+                                <td>Human preferences → reward model → policy optimization</td>
+                                <td>Alignment, quality improvement</td>
+                            </tr>
+                            <tr>
+                                <td><strong>DPO</strong></td>
+                                <td>Direct preference optimization without explicit reward model</td>
+                                <td>Simpler pipeline, same effect</td>
+                            </tr>
+                            <tr>
+                                <td><strong>SAGE (Skill Augmented GRPO)</strong></td>
+                                <td>Sequential rollout + skill-integrated reward</td>
+                                <td>Self-improving agents with skill library</td>
+                            </tr>
+                            <tr>
+                                <td><strong>PbRL</strong></td>
+                                <td>Preference-based RL from trajectory comparisons</td>
+                                <td>Best policy identification</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3 class="subsection-title">4.4 SAGE Framework</h3>
+                <p class="research-text">
+                    Skill Augmented GRPO for self-Evolution (arxiv 2512.17102):
+                </p>
+                <ul class="research-list">
+                    <li><strong>Sequential Rollout:</strong> Agent deploys across chain of similar tasks; skills accumulate across rollout</li>
+                    <li><strong>Skill Library Integration:</strong> Skills from previous tasks available for subsequent tasks</li>
+                    <li><strong>Skill-integrated Reward:</strong> Complements outcome rewards; rewards skill generation/utilization</li>
+                    <li><strong>Results:</strong> 8.9% higher completion, 26% fewer steps, 59% fewer tokens vs existing approaches</li>
+                </ul>
+            </section>
+
+            <!-- Self-Evolution Frameworks -->
+            <section class="research-section">
+                <h2 class="section-title">5. Self-Evolution Frameworks</h2>
+
+                <h3 class="subsection-title">5.1 AutoMATES: Evolutionary Trajectory System</h3>
+                <p class="research-text">
+                    Automated Multi-agent Trajectory Evolution System (SSRN 6140555):
+                </p>
+                <ul class="research-list">
+                    <li><strong>Bootstrap cycle:</strong> (1) generate candidate trajectories → (2) critique and select → (3) refine via self-play → (4) update skill library</li>
+                    <li><strong>Evolutionary selection:</strong> High-potential sequences survive; low-quality pruned</li>
+                    <li><strong>Self-improving data flywheel:</strong> Unlike passive replay, actively bootstraps high-quality training data</li>
+                </ul>
+
+                <h3 class="subsection-title">5.2 SE-Agent: Self-Evolution Trajectory Optimization</h3>
+                <p class="research-text">
+                    NeurIPS 2025 framework for LLM code agents:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Trajectory-level evolution:</strong> Exchange information across reasoning paths</li>
+                    <li><strong>Multi-agent collaboration:</strong> Agents share successful trajectories, learn from each other</li>
+                    <li><strong>Results:</strong> Up to 55% relative improvement across five LLMs</li>
+                </ul>
+
+                <h3 class="subsection-title">5.3 Darwin Gödel Machine (DGM)</h3>
+                <p class="research-text">
+                    Open-ended evolution of self-improving systems (arxiv 2505.22954):
+                </p>
+                <ul class="research-list">
+                    <li><strong>Self-referential modification:</strong> System iteratively modifies its own code, improving improvement capability</li>
+                    <li><strong>Archive evolution:</strong> Stores progressively refined self-architectures; evolutionary memory</li>
+                    <li><strong>Open-ended exploration:</strong> No fixed target; continuous discovery of new capabilities</li>
+                </ul>
+
+                <h3 class="subsection-title">5.4 Trajectory-Informed Memory Generation</h3>
+                <p class="research-text">
+                    arxiv 2603.10600 framework:
+                </p>
+                <div class="pattern-grid">
+                    <div class="pattern-card">
+                        <h4>Trajectory Intelligence Extractor</h4>
+                        <p>Semantic analysis of agent reasoning patterns. Extracts high-level strategies from execution traces.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Memory Synthesis</h4>
+                        <p>Converts trajectory patterns into reusable procedural memory. Generalizes across similar tasks.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Retrieval Optimization</h4>
+                        <p>Determines when/what memory to retrieve. Context-aware procedural recall.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Self-Improvement Loop</h4>
+                        <p>New trajectories feed back into memory. Continuous knowledge expansion.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Feedback Integration -->
+            <section class="research-section">
+                <h2 class="section-title">6. Feedback Integration Pipeline</h2>
+
+                <h3 class="subsection-title">6.1 Feedback Sources</h3>
+                <div class="scenario-grid">
+                    <div class="scenario-card">
+                        <div class="scenario-icon">👤</div>
+                        <h4>Human Feedback</h4>
+                        <p>Explicit corrections, approvals, rejections. Highest quality but limited scale. NVInfo AI: 495 samples from 30K users.</p>
+                        <div class="scenario-examples">
+                            <span>Explicit correction</span>
+                            <span>Approval/rejection</span>
+                            <span>Quality rating</span>
+                        </div>
+                    </div>
+                    <div class="scenario-card">
+                        <div class="scenario-icon">🤖</div>
+                        <h4>LLM-as-Judge</h4>
+                        <p>Automated evaluation of agent outputs. Scalable but may miss edge cases. Used in automated retraining loops.</p>
+                        <div class="scenario-examples">
+                            <span>Output quality eval</span>
+                            <span>Reasoning check</span>
+                            <span>Consistency audit</span>
+                        </div>
+                    </div>
+                    <div class="scenario-card">
+                        <div class="scenario-icon">📊</div>
+                        <h4>Execution Metrics</h4>
+                        <p>Success rate, latency, token usage, step count. Objective but may not capture quality nuances.</p>
+                        <div class="scenario-examples">
+                            <span>Success rate</span>
+                            <span>Latency</span>
+                            <span>Error frequency</span>
+                        </div>
+                    </div>
+                    <div class="scenario-card">
+                        <div class="scenario-icon">🔄</div>
+                        <h4>Self-Reflection</h4>
+                        <p>Agent critiques own outputs. Reflexion, CRITIC frameworks. Enables improvement without external feedback.</p>
+                        <div class="scenario-examples">
+                            <span>Self-critique</span>
+                            <span>Error detection</span>
+                            <span>Plan revision</span>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="subsection-title">6.2 Feedback Processing Pipeline</h3>
+                <div class="has-scale">
+                    <div class="has-item">
+                        <span class="has-level">Collect</span>
+                        <span class="has-desc">Instrument agent to capture feedback signals: user interactions, execution metrics, failure events</span>
+                    </div>
+                    <div class="has-item">
+                        <span class="has-level">Curate</span>
+                        <span class="has-desc">Filter, clean, annotate feedback data. Separate positive/negative samples, tag error types</span>
+                    </div>
+                    <div class="has-item">
+                        <span class="has-level highlight">Synthesize</span>
+                        <span class="has-desc">Generate training data from feedback: corrected outputs, preference pairs, skill definitions</span>
+                    </div>
+                    <div class="has-item">
+                        <span class="has-level">Train</span>
+                        <span class="has-desc">Apply training method: SFT, distillation, RLHF/DPO. NeMo microservices for fine-tuning</span>
+                    </div>
+                    <div class="has-item">
+                        <span class="has-level">Evaluate</span>
+                        <span class="has-desc">Validate improved model: held-out tasks, regression testing, A/B comparison</span>
+                    </div>
+                    <div class="has-item">
+                        <span class="has-level">Deploy</span>
+                        <span class="has-desc">Staged rollout with monitoring. Rollback if metrics degrade. Close flywheel loop.</span>
+                    </div>
+                </div>
+
+                <h3 class="subsection-title">6.3 OpenAI Self-Evolving Cookbook</h3>
+                <p class="research-text">
+                    OpenAI's partner cookbook defines self-healing workflow:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Feedback capture:</strong> Human review + LLM-as-judge evals + structured feedback signals</li>
+                    <li><strong>Meta-prompting:</strong> LLM analyzes failures, generates improved prompts/instructions</li>
+                    <li><strong>Iterative refinement:</strong> Automated prompt optimization loop with evaluation gates</li>
+                    <li><strong>Promotion workflow:</strong> Validated improvements promoted to production</li>
+                </ul>
+            </section>
+
+            <!-- Model Update Cycle -->
+            <section class="research-section">
+                <h2 class="section-title">7. Model Update Cycle</h2>
+
+                <h3 class="subsection-title">7.1 When to Trigger Updates</h3>
+                <div class="trigger-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Trigger</th>
+                                <th>Threshold</th>
+                                <th>Response</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Success rate decline</strong></td>
+                                <td>Below 85% baseline</td>
+                                <td>Investigate, collect failure samples, targeted fine-tuning</td>
+                            </tr>
+                            <tr>
+                                <td><strong>New failure pattern</strong></td>
+                                <td>Recurring error type</td>
+                                <td>Add training examples for this pattern, update taxonomy</td>
+                            </tr>
+                            <tr>
+                                <td><strong>User feedback accumulation</strong></td>
+                                <td>50+ negative samples</td>
+                                <td>Batch training update, validation before deploy</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Latency degradation</strong></td>
+                                <td>Above 2x baseline</td>
+                                <td>Distillation to smaller model, efficiency optimization</td>
+                            </tr>
+                            <tr>
+                                <td><strong>New task type emergence</strong></td>
+                                <td>Usage pattern shift</td>
+                                <td>Expand trajectory collection, domain adaptation training</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3 class="subsection-title">7.2 Staged Deployment</h3>
+                <ul class="research-list">
+                    <li><strong>Shadow deployment:</strong> New model runs alongside old; outputs compared, not served to users</li>
+                    <li><strong>A/B testing:</strong> Split user traffic; measure relative performance metrics</li>
+                    <li><strong>Gradual rollout:</strong> 1% → 10% → 50% → 100% traffic shift with checkpoints</li>
+                    <li><strong>Rollback mechanism:</strong> Automatic revert if metrics degrade beyond threshold</li>
+                    <li><strong>Version tracking:</strong> Model registry with performance history per version</li>
+                </ul>
+
+                <h3 class="subsection-title">7.3 Catastrophic Forgetting Prevention</h3>
+                <p class="research-text">
+                    Fine-tuning on new data risks forgetting old capabilities:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Mixed training:</strong> Include original general-domain data with new agent trajectories</li>
+                    <li><strong>Elastic weight consolidation:</strong> Protect important weights from drastic changes</li>
+                    <li><strong>Progressive fine-tuning:</strong> Incremental updates, not wholesale replacement</li>
+                    <li><strong>Regression testing:</strong> Validate general capabilities (MMLU, HumanEval) after each update</li>
+                </ul>
+            </section>
+
+            <!-- Office Applications -->
+            <section class="research-section">
+                <h2 class="section-title">8. Office Agent Self-Evolution Applications</h2>
+
+                <div class="application-grid">
+                    <div class="app-card">
+                        <h4>Email Response Quality Improvement</h4>
+                        <p>User corrections → fine-tune tone, format preferences. Negative feedback: "Too formal" → adjust style. Flywheel: 100 corrections → 15% tone improvement.</p>
+                        <span class="app-tag">Preference learning</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Meeting Scheduling Accuracy</h4>
+                        <p>Failed scheduling attempts → learn conflict patterns. User overrides → preference capture. Routing optimization: find slots faster over time.</p>
+                        <span class="app-tag">Error pattern learning</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Document Generation Distillation</h4>
+                        <p>Large model generates drafts; user edits collected. Small model fine-tuned on user-approved outputs. Cost reduction while maintaining quality.</p>
+                        <span class="app-tag">Teacher→Student distillation</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Research Assistant Evolution</h4>
+                        <p>User-rated search results → refine ranking. Rejected sources → learn quality criteria. Skill library: "Find authoritative sources" skill evolves.</p>
+                        <span class="app-tag">Skill library evolution</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Code Review Agent Improvement</h4>
+                        <p>Developer accepts/rejects suggestions → preference pairs. DPO training: optimize for accepted patterns. 55% improvement via SE-Agent trajectory evolution.</p>
+                        <span class="app-tag">Preference optimization</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Medical Coding Agent (NVIDIA Case)</h4>
+                        <p>WWT demo: Data Flywheel Blueprint for medical coding. Continuous model refinement from coding corrections. Accuracy maintained while shrinking model size.</p>
+                        <span class="app-tag">Production case study</span>
+                    </div>
+                </div>
+
+                <h3 class="subsection-title">8.1 Self-Evolution Benefits for Office Agents</h3>
+                <ul class="research-list">
+                    <li><strong>Continuous adaptation:</strong> Agent evolves as organizational policies, preferences change</li>
+                    <li><strong>Cost optimization:</strong> Large → small model distillation reduces inference cost</li>
+                    <li><strong>Error elimination:</strong> Recurring failures identified and systematically fixed</li>
+                    <li><strong>Team knowledge accumulation:</strong> Trajectory sharing enables team-level improvement</li>
+                </ul>
+            </section>
+
+            <!-- Challenges -->
+            <section class="research-section">
+                <h2 class="section-title">9. Challenges & Open Problems</h2>
+
+                <ul class="research-list">
+                    <li><strong>Feedback scarcity:</strong> Most users don't provide explicit feedback; implicit signals noisy (NVInfo: 495 samples from 30K users = 1.6% feedback rate)</li>
+                    <li><strong>Credit assignment:</strong> Which step in multi-turn trajectory caused failure? Attribution across long action sequences</li>
+                    <li><strong>Privacy constraints:</strong> Production data may contain sensitive information; cannot directly use for training</li>
+                    <li><strong>Alignment drift:</strong> Optimization for metrics may diverge from user preferences; reward hacking risk</li>
+                    <li><strong>Evaluation cost:</strong> Human evaluation essential but expensive; LLM-as-judge has blind spots</li>
+                    <li><strong>Stability vs improvement:</strong> Balancing continuous updates with production reliability</li>
+                    <li><strong>Skill library coherence:</strong> New skills may conflict with existing; library management complexity</li>
+                    <li><strong>Open-ended evolution bounds:</strong> When does self-improvement plateau? What prevents degradation?</li>
+                </ul>
+            </section>
+
+            <!-- Future Directions -->
+            <section class="research-section">
+                <h2 class="section-title">10. Future Directions</h2>
+
+                <ul class="research-list">
+                    <li><strong>Automated feedback generation:</strong> Reduce reliance on human feedback; self-evaluation mechanisms</li>
+                    <li><strong>Cross-agent trajectory sharing:</strong> Team-level flywheels; learn from colleagues' experiences</li>
+                    <li><strong>Skill library evolution:</strong> Automated skill creation, refinement, pruning from trajectories</li>
+                    <li><strong>Constitutional self-improvement:</strong> Self-modification within safety bounds; guardrails for evolution</li>
+                    <li><strong>Multi-objective optimization:</strong> Balance accuracy, latency, cost, user satisfaction simultaneously</li>
+                    <li><strong>Federated data flywheels:</strong> Privacy-preserving trajectory aggregation across organizations</li>
+                    <li><strong>Self-evolution benchmarks:</strong> Standard evaluation for continuous improvement systems</li>
+                    <li><strong>Neuro-symbolic hybrid:</strong> Combine learned behaviors with explicit constraints for reliability</li>
+                </ul>
+            </section>
+
+            <!-- Key Papers -->
+            <section class="research-section">
+                <h2 class="section-title">11. Key Papers (2023-2026)</h2>
+
+                <div class="paper-list">
+                    <div class="paper-item">
+                        <span class="paper-venue">EACL Industry 2026</span>
+                        <p class="paper-title">Applying MAPE Control Loops to AI Agent Improvement</p>
+                        <p class="paper-authors">Shukla et al. (NVIDIA)</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">arxiv 2023</span>
+                        <p class="paper-title">AgentTuning: Enabling Generalized Agent Abilities for LLMs</p>
+                        <p class="paper-authors">Zeng et al. (Tsinghua/Zhipu)</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">arxiv 2025</span>
+                        <p class="paper-title">SAGE: Reinforcement Learning for Self-Improving Agent with Skill Library</p>
+                        <p class="paper-authors">Wang et al.</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">SSRN 2026</span>
+                        <p class="paper-title">AutoMATES: Self-Improving Agent Training via Evolutionary Trajectory Selection</p>
+                        <p class="paper-authors">Zhu et al.</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">NeurIPS 2025</span>
+                        <p class="paper-title">SE-Agent: Self-Evolution Trajectory Optimization in Multi-Agent Collaboration</p>
+                        <p class="paper-authors">JARVIS-Xs</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">ACL Findings 2025</span>
+                        <p class="paper-title">ATLAS: Agent Tuning via Learning Critical Steps</p>
+                        <p class="paper-authors">Chen et al.</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">arxiv 2026</span>
+                        <p class="paper-title">Darwin Gödel Machine: Open-Ended Evolution of Self-Improving Agents</p>
+                        <p class="paper-authors">Multiple</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- References -->
+            <section class="research-section">
+                <h2 class="section-title">12. References</h2>
+                <ul class="ref-list">
+                    <li><a href="https://arxiv.org/abs/2510.27051">MAPE Control Loops for AI Agent Improvement (NVIDIA)</a></li>
+                    <li><a href="https://github.com/THUDM/AgentTuning">AgentTuning: AgentInstruct Dataset & AgentLM</a></li>
+                    <li><a href="https://build.nvidia.com/nvidia/build-an-enterprise-data-flywheel">NVIDIA Data Flywheel Blueprint</a></li>
+                    <li><a href="https://arxiv.org/abs/2512.17102">SAGE: RL for Self-Improving Agent</a></li>
+                    <li><a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6140555">AutoMATES: Evolutionary Trajectory System</a></li>
+                    <li><a href="https://github.com/JARVIS-Xs/SE-Agent">SE-Agent: Self-Evolution Framework</a></li>
+                    <li><a href="https://arxiv.org/abs/2505.22954">Darwin Gödel Machine</a></li>
+                    <li><a href="https://developers.openai.com/cookbook/examples/partners/self_evolving_agents/">OpenAI: Self-Evolving Agents Cookbook</a></li>
+                </ul>
+            </section>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Office LLM-Agent Lab (OfficeClaw)</p>
+        </div>
+    </footer>
+</body>
+</html>

@@ -35,6 +35,33 @@ class SkillLoader:
     def get_skill(self, name: str) -> Skill | None:
         return self._skills.get(name)
 
+    def build_skill_listing(self, max_desc_chars: int = 1536) -> str:
+        """Build a system reminder listing available skills.
+
+        This is the Claude Code style skill listing - only names and descriptions,
+        not full instructions. The model will decide which skill to invoke.
+
+        Args:
+            max_desc_chars: Maximum characters per description (default 1536)
+
+        Returns:
+            Skill listing string for system reminder injection
+        """
+        skills = self.list_skills()
+        if not skills:
+            return ""
+
+        lines = ["The following skills are available for use with the Skill tool:"]
+        for s in skills:
+            desc = s.description
+            # Truncate description if too long
+            if len(desc) > max_desc_chars:
+                desc = desc[:max_desc_chars] + "..."
+
+            lines.append(f"- {s.name}: {desc}")
+
+        return "\n".join(lines)
+
     def build_prompt(self, names: list[str]) -> str:
         """Build a system prompt fragment from the given skill names."""
         if not names:

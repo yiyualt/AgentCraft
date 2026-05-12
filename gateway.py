@@ -20,6 +20,7 @@ from tools import get_default_registry, UnifiedToolRegistry
 from tools.builtin import *  # noqa: F401,F403 — register built-in tools
 from tools.canvas_tools import set_canvas_manager  # Canvas tools
 from tools.agent_executor import AgentExecutor, set_agent_executor  # Agent executor
+from tools.skill_tools import *  # noqa: F401,F403 — register Skill tool
 from tools.mcp import MCPToolManager, MCPConfig
 from tools.sandbox import SandboxExecutor, SandboxConfig
 from sessions import SessionManager
@@ -109,6 +110,7 @@ _session_manager = SessionManager()
 # ===== Skills =====
 _skill_loader = SkillLoader(default_skill_dirs())
 _skill_loader.load()
+set_skill_loader(_skill_loader)  # Set skill loader for Skill tool
 
 # ===== Sandbox Executor =====
 _sandbox_executor: SandboxExecutor | None = None
@@ -395,20 +397,18 @@ async def _handle_non_streaming(
         logger.info(f"[SESSION] skills={session.skills}, system_prompt={session.system_prompt[:100] if session.system_prompt else None}...")
         logger.info(f"[SESSION] context_window={session.context_window}, history_count={len(history)}")
 
-        # Build system prompt from session system_prompt + enabled skills
+        # Build system prompt from session system_prompt + skill listing
         system_parts = []
         if session.system_prompt:
             system_parts.append(session.system_prompt)
 
-        if session.skills:
-            skill_names = [n.strip() for n in session.skills.split(",") if n.strip()]
-            logger.info(f"[SKILLS] enabled={skill_names}")
-
-            skill_prompt = _skill_loader.build_prompt(skill_names)
-            if skill_prompt:
-                logger.info(f"[SKILLS] prompt_length={len(skill_prompt)}")
-                logger.debug(f"[SKILLS PROMPT FULL]:\n{skill_prompt}")
-                system_parts.append(skill_prompt)
+        # Inject skill listing (Claude Code style - all available skills)
+        # The model will decide which skill to invoke via Skill tool
+        skill_listing = _skill_loader.build_skill_listing()
+        if skill_listing:
+            logger.info(f"[SKILLS] listing_length={len(skill_listing)}")
+            logger.debug(f"[SKILLS LISTING]:\n{skill_listing}")
+            system_parts.append(skill_listing)
 
         if system_parts:
             full_system_prompt = "\n\n".join(system_parts)
@@ -612,6 +612,34 @@ async def _handle_non_streaming(
                         logger.info(f"[TOOL RESULT] {fn_name}: length={len(str(tool_result))}")
                         logger.debug(f"[TOOL RESULT FULL]: {tool_result}")
 
+                        # Handle Skill tool specially - inject skill instructions
+                        skill_injection = None
+                        if fn_name == "Skill":
+                            try:
+                                skill_data = json.loads(tool_result)
+                                if skill_data.get("success") and skill_data.get("skill_instructions"):
+                                    skill_name = skill_data.get("skill_name")
+                                    skill_desc = skill_data.get("skill_description")
+                                    skill_instructions = skill_data.get("skill_instructions")
+                                    skill_tools_list = skill_data.get("skill_tools", [])
+
+                                    # Build skill content message
+                                    skill_content = f"<skill>\nSkill '{skill_name}' loaded.\n\nDescription: {skill_desc}\n\nInstructions:\n{skill_instructions}\n"
+
+                                    if skill_tools_list:
+                                        skill_content += f"\nTools available in this skill:\n"
+                                        for t in skill_tools_list:
+                                            skill_content += f"- {t}\n"
+
+                                    skill_content += "</skill>"
+                                    skill_injection = skill_content
+                                    logger.info(f"[SKILL LOADED] {skill_name}, instructions_length={len(skill_instructions)}")
+
+                                    # Change tool_result to a simpler success message
+                                    tool_result = f"Successfully loaded skill '{skill_name}'"
+                            except json.JSONDecodeError:
+                                pass
+
                         turn_log[-1]["tool_results"].append({
                             "name": fn_name,
                             "arguments": fn_args,
@@ -622,6 +650,14 @@ async def _handle_non_streaming(
                             "tool_call_id": tc["id"],
                             "content": tool_result,
                         })
+
+                        # If Skill tool was invoked, inject skill instructions as assistant message
+                        if skill_injection:
+                            messages.append({
+                                "role": "assistant",
+                                "content": skill_injection,
+                            })
+                            logger.info(f"[SKILL INJECTION] added assistant message with skill instructions")
 
                     tool_span.set_outputs({
                         "executed_count": len(tool_calls),

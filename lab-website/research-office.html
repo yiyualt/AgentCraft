@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Office Agent Benchmark - Office LLM-Agent Lab (OfficeClaw)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="nav-logo">Office LLM-Agent Lab (OfficeClaw)</a>
+            <div class="nav-menu">
+                <a href="index.html" class="nav-link">Home</a>
+                <a href="team.html" class="nav-link">Team</a>
+                <a href="publications.html" class="nav-link">Publications</a>
+                <a href="projects.html" class="nav-link">Projects</a>
+                <a href="source.html" class="nav-link">Source</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="container">
+            <h1 class="page-title">Office Agent Benchmark</h1>
+            <p class="research-meta">Last Updated: May 2025 | Focus: Defining the Office Agent Problem Domain | Phase: Phase 1 (Academic Foundation)</p>
+            <p class="research-meta">Last Updated: May 2025 | Focus: Office-Specific Agent Challenges & Benchmarks</p>
+
+            <!-- Overview -->
+            <section class="research-section">
+                <h2 class="section-title">1. Overview: Why Office Agents Matter</h2>
+                <p class="research-text">
+                    Office environments present unique challenges for AI agents: multi-application workflows, file dependency chains, cross-tool coordination, and enterprise constraints. Unlike single-domain agents, office agents must navigate heterogeneous systems—email clients, calendars, document editors, databases, meeting platforms—while maintaining coherent task execution.
+                </p>
+                <p class="research-text">
+                    Recent benchmarks reveal a <strong>significant gap between agent and human performance</strong>: Workspace-Bench shows best agents achieve 68.7% success vs humans at 80.7%; WorkBench shows GPT-4 at 43% outcome success; OfficeBench shows GPT-4 Omni at 47% pass rate on cross-application workflows.
+                </p>
+                <div class="key-stat">
+                    <span class="stat-highlight">Core Challenge:</span>
+                    Office tasks require reasoning about file dependencies, understanding organizational context, coordinating across applications, and handling incomplete information—all while respecting enterprise constraints like permissions, compliance, and audit trails.
+                </div>
+            </section>
+
+            <!-- Office Benchmarks -->
+            <section class="research-section">
+                <h2 class="section-title">2. Office Agent Benchmarks (2024-2025)</h2>
+
+                <h3 class="subsection-title">2.1 Workspace-Bench (May 2025)</h3>
+                <p class="research-text">
+                    Workspace-Bench provides a comprehensive evaluation environment with realistic office workspaces:
+                </p>
+                <div class="benchmark-stats">
+                    <div class="stat-item">
+                        <span class="stat-value">5</span>
+                        <span class="stat-label">Worker Profiles</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">74</span>
+                        <span class="stat-label">File Types</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">20,476</span>
+                        <span class="stat-label">Files</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">388</span>
+                        <span class="stat-label">Tasks</span>
+                    </div>
+                </div>
+                <ul class="research-list">
+                    <li><strong>Worker Profiles:</strong> Software Developer, Project Manager, Accountant, HR Specialist, Marketing Analyst—each with realistic file organization patterns</li>
+                    <li><strong>Task Categories:</strong> Information location, file manipulation, content creation, cross-file reasoning, email/calendar operations</li>
+                    <li><strong>Key Finding:</strong> Best agent (GPT-4) achieves 68.7% success rate; human baseline 80.7%. Gap primarily in <strong>file dependency reasoning</strong>.</li>
+                    <li><strong>Unique Feature:</strong> Real file systems with dependencies (e.g., finding "the report mentioned in last week's meeting notes")</li>
+                </ul>
+
+                <h3 class="subsection-title">2.2 WorkBench (May 2024)</h3>
+                <p class="research-text">
+                    WorkBench introduces outcome-centric evaluation for office database tasks:
+                </p>
+                <div class="benchmark-stats">
+                    <div class="stat-item">
+                        <span class="stat-value">5</span>
+                        <span class="stat-label">Databases</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">26</span>
+                        <span class="stat-label">Tools</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">690</span>
+                        <span class="stat-label">Tasks</span>
+                    </div>
+                </div>
+                <ul class="research-list">
+                    <li><strong>Outcome-Centric Approach:</strong> Evaluates final state, not action sequence—enabling diverse valid paths</li>
+                    <li><strong>Task Types:</strong> Simple lookup, aggregation, comparison, multi-step reasoning, planning</li>
+                    <li><strong>GPT-4 Performance:</strong> 43% success on outcome achievement (much lower on complex planning tasks)</li>
+                    <li><strong>Key Innovation:</strong> Avoids reward hacking by focusing on goal achievement rather than intermediate steps</li>
+                </ul>
+
+                <h3 class="subsection-title">2.3 OfficeBench (July 2024)</h3>
+                <p class="research-text">
+                    OfficeBench focuses on cross-application workflow execution:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Cross-App Tasks:</strong> Workflows spanning Outlook (email), Excel (spreadsheets), Word (documents), PowerPoint (presentations)</li>
+                    <li><strong>GPT-4 Omni:</strong> 47% pass rate on 249 office workflow tasks</li>
+                    <li><strong>Challenge Categories:</strong> Information extraction, content transformation, cross-tool coordination, temporal reasoning</li>
+                    <li><strong>Key Finding:</strong> Application switching and state transfer between tools is a major failure point</li>
+                </ul>
+
+                <h3 class="subsection-title">2.4 Benchmark Comparison</h3>
+                <div class="framework-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Benchmark</th>
+                                <th>Focus</th>
+                                <th>Scale</th>
+                                <th>Agent Performance</th>
+                                <th>Human Baseline</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Workspace-Bench</strong></td>
+                                <td>File systems, dependencies</td>
+                                <td>388 tasks, 20K files</td>
+                                <td>68.7% (GPT-4)</td>
+                                <td>80.7%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>WorkBench</strong></td>
+                                <td>Database operations</td>
+                                <td>690 tasks, 5 DBs</td>
+                                <td>43% (GPT-4)</td>
+                                <td>~85%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>OfficeBench</strong></td>
+                                <td>Cross-application</td>
+                                <td>249 workflows</td>
+                                <td>47% (GPT-4 Omni)</td>
+                                <td>~90%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Office Task Categories -->
+            <section class="research-section">
+                <h2 class="section-title">3. Office Task Categories & Challenges</h2>
+
+                <div class="scenario-grid">
+                    <div class="scenario-card">
+                        <div class="scenario-icon">📧</div>
+                        <h4>Email Workflow</h4>
+                        <p>Read, triage, categorize, prioritize, draft, route. Requires understanding context, detecting urgency, extracting actions, scheduling follow-ups.</p>
+                        <div class="scenario-examples">
+                            <span>Spam detection</span>
+                            <span>Action extraction</span>
+                            <span>Auto-reply</span>
+                        </div>
+                        <div class="challenge-note">
+                            <strong>Challenge:</strong> Emails reference external documents, meetings, people—requires cross-referencing capabilities.
+                        </div>
+                    </div>
+                    <div class="scenario-card">
+                        <div class="scenario-icon">📅</div>
+                        <h4>Calendar Workflow</h4>
+                        <p>Schedule meetings, resolve conflicts, handle timezone coordination, send reminders, manage recurring events.</p>
+                        <div class="scenario-examples">
+                            <span>Conflict resolution</span>
+                            <span>Multi-party coordination</span>
+                            <span>Smart scheduling</span>
+                        </div>
+                        <div class="challenge-note">
+                            <strong>Challenge:</strong> Calendar actions affect email (invitations), documents (meeting notes), requiring coordinated updates.
+                        </div>
+                    </div>
+                    <div class="scenario-card">
+                        <div class="scenario-icon">📄</div>
+                        <h4>Document Workflow</h4>
+                        <p>Create, edit, summarize, review, compare, extract, format documents across formats (Word, PDF, Excel, PPT).</p>
+                        <div class="scenario-examples">
+                            <span>Contract review</span>
+                            <span>Report compilation</span>
+                            <span>Template matching</span>
+                        </div>
+                        <div class="challenge-note">
+                            <strong>Challenge:</strong> Documents often reference other files, version histories, embedded data—file dependency chains.
+                        </div>
+                    </div>
+                    <div class="scenario-card">
+                        <div class="scenario-icon">📊</div>
+                        <h4>Data/Spreadsheet Workflow</h4>
+                        <p>Query, analyze, visualize, report data. SQL generation, pivot tables, chart creation, insight extraction.</p>
+                        <div class="scenario-examples">
+                            <span>Data cleaning</span>
+                            <span>Statistical analysis</span>
+                            <span>Dashboard creation</span>
+                        </div>
+                        <div class="challenge-note">
+                            <strong>Challenge:</strong> Data sources scattered across files, databases, emails—requires aggregation reasoning.
+                        </div>
+                    </div>
+                    <div class="scenario-card">
+                        <div class="scenario-icon">🎥</div>
+                        <h4>Meeting Workflow</h4>
+                        <p>Transcribe, summarize, extract action items, distribute notes, schedule follow-ups, track commitments.</p>
+                        <div class="scenario-examples">
+                            <span>Transcription</span>
+                            <span>Action extraction</span>
+                            <span>Reminder creation</span>
+                        </div>
+                        <div class="challenge-note">
+                            <strong>Challenge:</strong> Meeting outcomes affect calendar (follow-ups), documents (notes), email (distributions)—multi-tool ripple effects.
+                        </div>
+                    </div>
+                    <div class="scenario-card">
+                        <div class="scenario-icon">🔗</div>
+                        <h4>Cross-Application Workflow</h4>
+                        <p>Tasks spanning multiple tools: email → calendar → document → meeting platform → spreadsheet.</p>
+                        <div class="scenario-examples">
+                            <span>Event planning</span>
+                            <span>Report pipeline</span>
+                            <span>Project tracking</span>
+                        </div>
+                        <div class="challenge-note">
+                            <strong>Challenge:</strong> State transfer between applications; maintaining coherence across tool switches.
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Core Challenges -->
+            <section class="research-section">
+                <h2 class="section-title">4. Core Office Agent Challenges</h2>
+
+                <h3 class="subsection-title">4.1 File Dependency Reasoning</h3>
+                <p class="research-text">
+                    Workspace-Bench identifies file dependency reasoning as the primary performance gap. Office files form complex dependency networks:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Reference Chains:</strong> Email mentions meeting → meeting has agenda document → agenda references report → report has data files</li>
+                    <li><strong>Version Histories:</strong> Understanding which version is "latest", "approved", or "draft"</li>
+                    <li><strong>Naming Ambiguity:</strong> "the quarterly report" could refer to multiple files; requires context inference</li>
+                    <li><strong>Implicit Dependencies:</strong> Files not directly referenced but needed for task completion</li>
+                </ul>
+
+                <h3 class="subsection-title">4.2 Cross-Application Coordination</h3>
+                <p class="research-text">
+                    OfficeBench reveals application switching as a major failure point:
+                </p>
+                <ul class="research-list">
+                    <li><strong>State Transfer:</strong> Information extracted in one app (email) must be correctly applied in another (calendar)</li>
+                    <li><strong>Format Conversion:</strong> Data in Excel must be incorporated into Word document; formatting, structure changes</li>
+                    <li><strong>Action Sequencing:</strong> Order matters: send email before updating calendar? Create document before meeting?</li>
+                    <li><strong>Tool API Differences:</strong> Each application has distinct API patterns, data models, constraints</li>
+                </ul>
+
+                <h3 class="subsection-title">4.3 Organizational Context</h3>
+                <p class="research-text">
+                    Enterprise environments impose constraints absent in general agent tasks:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Permission Systems:</strong> Agents must respect access controls; cannot read/write unauthorized files</li>
+                    <li><strong>Compliance Requirements:</strong> Audit trails, data retention policies, confidentiality rules</li>
+                    <li><strong>Organizational Knowledge:</strong> Who is who, department structures, reporting hierarchies</li>
+                    <li><strong>Business Processes:</strong> Established workflows, approval chains, review procedures</li>
+                </ul>
+
+                <h3 class="subsection-title">4.4 Temporal Reasoning</h3>
+                <p class="research-text">
+                    Office tasks frequently involve time-sensitive reasoning:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Relative Time References:</strong> "last week's meeting", "next quarter's report", "the email from yesterday"</li>
+                    <li><strong>Deadline Management:</strong> Task urgency, priority inference, scheduling conflicts</li>
+                    <li><strong>Recurring Patterns:</strong> Weekly meetings, monthly reports, quarterly reviews</li>
+                    <li><strong>Historical Context:</strong> Understanding project history, past decisions, evolution of documents</li>
+                </ul>
+            </section>
+
+            <!-- Integration with Methodology Cards -->
+            <section class="research-section">
+                <h2 class="section-title">5. Integration with Research Methodologies</h2>
+
+                <p class="research-text">
+                    Office Agent Domain research builds upon and extends our five methodology directions:
+                </p>
+
+                <div class="integration-grid">
+                    <div class="integration-card">
+                        <h4>Multi-Agent Collaboration</h4>
+                        <p>Office workflows naturally decompose across specialized agents: Email Agent, Calendar Agent, Document Agent, Data Agent. Coordination protocols, handoff mechanisms, consensus voting for complex decisions.</p>
+                        <span class="integration-tag">Agent specialization by office domain</span>
+                    </div>
+                    <div class="integration-card">
+                        <h4>Procedural Memory</h4>
+                        <p>Long-running office workflows (project tracking, quarterly reporting) require checkpoint persistence, state recovery, multi-session continuity. Meeting preparation → execution → follow-up spans days.</p>
+                        <span class="integration-tag">Multi-session workflow persistence</span>
+                    </div>
+                    <div class="integration-card">
+                        <h4>Agent-User Interaction</h4>
+                        <p>Office agents interact continuously: email triage notifications, meeting reminders, document review requests, approval workflows. User feedback shapes agent behavior (which emails to prioritize, how to format reports).</p>
+                        <span class="integration-tag">Continuous feedback integration</span>
+                    </div>
+                    <div class="integration-card">
+                        <h4>Agent Skills</h4>
+                        <p>Office skill libraries: email triage skill, calendar scheduling skill, document summarization skill, data analysis skill. MCP integration with enterprise tools (Outlook, Excel, SharePoint). Skill composition for cross-app workflows.</p>
+                        <span class="integration-tag">Domain-specific skill libraries</span>
+                    </div>
+                    <div class="integration-card">
+                        <h4>Self-Evolution</h4>
+                        <p>Office agents learn from user corrections: email categorization preferences, document formatting styles, scheduling priorities. Data flywheel from real office workflow executions improves agent performance.</p>
+                        <span class="integration-tag">Organizational preference learning</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Office Agent Systems -->
+            <section class="research-section">
+                <h2 class="section-title">6. Existing Office Agent Systems</h2>
+
+                <div class="framework-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>System</th>
+                                <th>Domain</th>
+                                <th>Key Features</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Otter.ai</strong></td>
+                                <td>Meeting transcription</td>
+                                <td>Real-time transcription, speaker identification, action item extraction, summary generation</td>
+                                <td>Production</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Microsoft Copilot</strong></td>
+                                <td>Office suite</td>
+                                <td>Word/Excel/PowerPoint/Outlook integration, enterprise context, Teams integration</td>
+                                <td>Production</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Google Duet AI</strong></td>
+                                <td>Google Workspace</td>
+                                <td>Gmail/Docs/Sheets/Slides/Calendar integration, enterprise security</td>
+                                <td>Production</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Notion AI</strong></td>
+                                <td>Document/workspace</td>
+                                <td>Summarization, drafting, Q&A, database queries within Notion workspace</td>
+                                <td>Production</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Superhuman AI</strong></td>
+                                <td>Email</td>
+                                <td>Auto-categorization, summary, draft reply, scheduled delivery optimization</td>
+                                <td>Production</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3 class="subsection-title">6.1 Limitations of Current Systems</h3>
+                <ul class="research-list">
+                    <li><strong>Single-Tool Focus:</strong> Most systems specialize in one domain (email, meetings, documents)—lack cross-application coordination</li>
+                    <li><strong>Limited Reasoning:</strong> Cannot handle file dependency chains, organizational context inference</li>
+                    <li><strong>Passive Operation:</strong> Respond to user commands but don't proactively manage workflows</li>
+                    <li><strong>No Memory Persistence:</strong> Session-based; don't maintain long-running project state</li>
+                    <li><strong>Weak Self-Improvement:</strong> Limited learning from user feedback patterns</li>
+                </ul>
+            </section>
+
+            <!-- Research Opportunities -->
+            <section class="research-section">
+                <h2 class="section-title">7. Research Opportunities</h2>
+
+                <h3 class="subsection-title">7.1 File Dependency Graph Construction</h3>
+                <p class="research-text">
+                    Building and maintaining office file dependency graphs:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Reference Extraction:</strong> NLP to detect file references in emails, documents, meeting notes</li>
+                    <li><strong>Dependency Modeling:</strong> Graph construction with typed edges (references, depends-on, version-of)</li>
+                    <li><strong>Temporal Dynamics:</strong> Graph updates as files change, new references added</li>
+                    <li><strong>Query Interfaces:</strong> "Find the data source for the Q3 report mentioned in last week's meeting"</li>
+                </ul>
+
+                <h3 class="subsection-title">7.2 Cross-Application State Machines</h3>
+                <p class="research-text">
+                    Unified workflow models spanning multiple office applications:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Abstract State Representation:</strong> Application-independent task state (e.g., "review pending", "approved")</li>
+                    <li><strong>Tool Translation Layers:</strong> Mapping abstract operations to application-specific APIs</li>
+                    <li><strong>Consistency Maintenance:</strong> Ensuring synchronized updates across related tools</li>
+                </ul>
+
+                <h3 class="subsection-title">7.3 Organizational Knowledge Integration</h3>
+                <p class="research-text">
+                    Agents that understand and leverage organizational context:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Entity Resolution:</strong> Matching "John from marketing" to organizational directory</li>
+                    <li><strong>Role-Based Actions:</strong> Understanding who can approve, who should be notified</li>
+                    <li><strong>Process Knowledge:</strong> Learning organizational workflows through observation</li>
+                </ul>
+
+                <h3 class="subsection-title">7.4 Office Agent Evaluation Frameworks</h3>
+                <p class="research-text">
+                    Building on Workspace-Bench, WorkBench, OfficeBench:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Real-World Task Collections:</strong> Crowdsourced office tasks from diverse organizations</li>
+                    <li><strong>Enterprise Simulators:</strong> Simulated office environments with realistic permission systems, file structures</li>
+                    <li><strong>Outcome Evaluation:</strong> Measuring actual office productivity improvement, not just task completion</li>
+                </ul>
+            </section>
+
+            <!-- Challenges -->
+            <section class="research-section">
+                <h2 class="section-title">8. Challenges & Open Problems</h2>
+
+                <ul class="research-list">
+                    <li><strong>Privacy & Security:</strong> Office agents access sensitive data; enterprise deployment requires robust security frameworks</li>
+                    <li><strong>Action Reversibility:</strong> Office actions have real consequences; undo mechanisms, confirmation workflows essential</li>
+                    <li><strong>Trust Calibration:</strong> Users need confidence in agent decisions; transparency, explainability critical</li>
+                    <li><strong>Tool Evolution:</strong> Office applications constantly update; agents must adapt to API changes</li>
+                    <li><strong>Cultural Variation:</strong> Office norms differ across organizations, regions; agents must learn local conventions</li>
+                    <li><strong>Grounding Problem:</strong> "Send to the team" requires knowing who the team is; organizational context acquisition</li>
+                    <li><strong>Error Propagation:</strong> One incorrect action can cascade (wrong email → wrong meeting → wrong document)</li>
+                    <li><strong>Human-in-Loop Design:</strong> Balancing automation with appropriate human oversight and intervention</li>
+                </ul>
+            </section>
+
+            <!-- Future Directions -->
+            <section class="research-section">
+                <h2 class="section-title">9. Future Directions</h2>
+
+                <ul class="research-list">
+                    <li><strong>Unified Office Agent Frameworks:</strong> Single agent architecture spanning all office tools</li>
+                    <li><strong>Office MCP Servers:</strong> Standardized interfaces for Outlook, Google Workspace, Notion, Slack</li>
+                    <li><strong>Enterprise Agent Governance:</strong> Policy frameworks for office agent deployment, audit, oversight</li>
+                    <li><strong>Office Skill Marketplace:</strong> Shareable, certified office agent skills (email triage, meeting prep, report generation)</li>
+                    <li><strong>Organizational Learning:</strong> Agents that adapt to specific company workflows, cultures</li>
+                    <li><strong>Office Agent Analytics:</strong> Monitoring agent performance impact on productivity</li>
+                    <li><strong>Hybrid Human-Agent Workflows:</strong> Optimal division of tasks between automation and human judgment</li>
+                </ul>
+            </section>
+
+            <!-- Key Papers -->
+            <section class="research-section">
+                <h2 class="section-title">10. Key Papers & Resources (2024-2025)</h2>
+
+                <div class="paper-list">
+                    <div class="paper-item">
+                        <span class="paper-venue">arxiv 2025</span>
+                        <p class="paper-title">Workspace-Bench: Evaluating LLMs on File-Based Workspaces</p>
+                        <p class="paper-authors">WorkBench Team</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">arxiv 2024</span>
+                        <p class="paper-title">WorkBench: Outcome-Centric Evaluation for Database Tasks</p>
+                        <p class="paper-authors">WorkBench Authors</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">arxiv 2024</span>
+                        <p class="paper-title">OfficeBench: Cross-Application Office Workflow Evaluation</p>
+                        <p class="paper-authors">OfficeBench Team</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">NeurIPS 2023</span>
+                        <p class="paper-title">Generative Agents: Interactive Simulacra of Human Behavior</p>
+                        <p class="paper-authors">Stanford AI Research</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">ACL 2024</span>
+                        <p class="paper-title">LEGOMem: Long-Term Memory for Office Task Planning</p>
+                        <p class="paper-authors">Memory Research Group</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- References -->
+            <section class="research-section">
+                <h2 class="section-title">11. References</h2>
+                <ul class="ref-list">
+                    <li><a href="https://arxiv.org/pdf/2605.03596v1">Workspace-Bench Paper (arxiv)</a></li>
+                    <li><a href="https://arxiv.org/pdf/2405.00823">WorkBench Paper (arxiv)</a></li>
+                    <li><a href="https://arxiv.org/pdf/2407.19056">OfficeBench Paper (arxiv)</a></li>
+                    <li><a href="https://otter.ai">Otter.ai: Meeting Transcription Agent</a></li>
+                    <li><a href="https://www.microsoft.com/en-us/microsoft-365/copilot">Microsoft Copilot: Office Suite Integration</a></li>
+                    <li><a href="https://workspace.google.com/solutions/ai/">Google Duet AI: Workspace Integration</a></li>
+                    <li><a href="https://notion.so/product/ai">Notion AI: Workspace Assistant</a></li>
+                </ul>
+            </section>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Office LLM-Agent Lab (OfficeClaw)</p>
+        </div>
+    </footer>
+</body>
+</html>
