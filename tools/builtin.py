@@ -7,6 +7,7 @@ inspired by Claude Code's tool set.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -15,6 +16,8 @@ from pathlib import Path
 import httpx
 
 from tools import tool
+
+logger = logging.getLogger("gateway")
 
 
 # ============================================================
@@ -421,6 +424,13 @@ async def agent_delegate(
                 if fork_context:
                     is_fork_child = True
                     logger.info(f"[FORK] Created fork from session {session_id}")
+                    # Push fork_start to canvas
+                    canvas_mgr = fork_manager.get_canvas_manager()
+                    if canvas_mgr:
+                        await canvas_mgr.push_fork_event(
+                            session_id, "fork_start",
+                            task=task[:100],
+                        )
                 else:
                     return "[FORK Error] Could not create fork context. Parent session may not have messages."
             else:
@@ -437,8 +447,26 @@ async def agent_delegate(
             fork_context=fork_context,
             is_fork_child=is_fork_child,
         )
+        # Push fork_complete to canvas
+        if is_fork_child:
+            canvas_mgr = fork_manager.get_canvas_manager() if fork_manager else None
+            if canvas_mgr:
+                await canvas_mgr.push_fork_event(
+                    session_id, "fork_complete",
+                    task=task[:100],
+                    result=str(result)[:200],
+                )
         return result
     except Exception as e:
+        # Push fork_error to canvas
+        if is_fork_child:
+            canvas_mgr = fork_manager.get_canvas_manager() if fork_manager else None
+            if canvas_mgr:
+                await canvas_mgr.push_fork_event(
+                    session_id, "fork_error",
+                    task=task[:100],
+                    error=str(e)[:200],
+                )
         return f"[Agent Error] {type(e).__name__}: {e}"
 
 

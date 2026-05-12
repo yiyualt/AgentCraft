@@ -305,3 +305,142 @@ class TestBuiltinTools:
         # When executor not initialized, should return error
         result = await registry.dispatch("Agent", {"prompt": "test task"})
         assert "Error" in result or "not initialized" in result
+
+
+class TestAgentFork:
+    """Test fork_from_current parameter in agent_delegate."""
+
+    @pytest.fixture
+    def mock_executor(self):
+        """Create mock executor with async run but sync get_fork_manager."""
+        from unittest.mock import MagicMock, AsyncMock
+        mock = MagicMock()
+        mock.run = AsyncMock(return_value="Fork agent result")
+        return mock
+
+    @pytest.fixture
+    def mock_fork_manager(self):
+        """Create mock ForkManager (no canvas manager to skip async canvas pushes)."""
+        from unittest.mock import MagicMock
+        from sessions.fork import ForkContext, FORK_PLACEHOLDER
+        fm = MagicMock()
+        ctx = ForkContext(
+            parent_session_id="session-1",
+            inherited_messages=[
+                {"role": "system", "content": "fork boilerplate"},
+                {"role": "user", "content": FORK_PLACEHOLDER},
+            ],
+            placeholder_index=1,
+            is_fork_child=True,
+        )
+        fm.create_fork_context.return_value = ctx
+        fm.get_canvas_manager.return_value = None
+        return fm
+
+    @pytest.mark.asyncio
+    async def test_fork_from_current_no_session(self):
+        """fork_from_current without current session returns error."""
+        from unittest.mock import patch, MagicMock
+
+        mock_exec = MagicMock()
+
+        with patch("tools.agent_executor.get_agent_executor", return_value=mock_exec), \
+             patch("canvas.get_current_session_id", return_value=None):
+            result = await builtin.agent_delegate("task", fork_from_current=True)
+            assert "[FORK Error]" in result
+            assert "No current session" in result
+
+    @pytest.mark.asyncio
+    async def test_fork_from_current_no_fork_manager(self):
+        """fork_from_current without fork manager returns error."""
+        from unittest.mock import patch, MagicMock
+
+        mock_exec = MagicMock()
+        mock_exec.get_fork_manager.return_value = None
+
+        with patch("tools.agent_executor.get_agent_executor", return_value=mock_exec), \
+             patch("canvas.get_current_session_id", return_value="session-1"):
+            result = await builtin.agent_delegate("task", fork_from_current=True)
+            assert "[FORK Error]" in result
+            assert "Fork manager not initialized" in result
+
+    @pytest.mark.asyncio
+    async def test_fork_from_current_success(self, mock_executor, mock_fork_manager):
+        """Successful fork creation and execution."""
+        from unittest.mock import patch
+
+        mock_executor.get_fork_manager.return_value = mock_fork_manager
+
+        with patch("tools.agent_executor.get_agent_executor", return_value=mock_executor), \
+             patch("canvas.get_current_session_id", return_value="session-1"):
+            result = await builtin.agent_delegate(
+                "summarize the history",
+                description="summary",
+                fork_from_current=True,
+            )
+            assert "Fork agent result" in result
+
+    @pytest.mark.asyncio
+    async def test_fork_from_current_passes_fork_context(self, mock_executor, mock_fork_manager):
+        """fork_from_current=True passes fork_context and is_fork_child to run()."""
+        from unittest.mock import patch
+
+        mock_executor.get_fork_manager.return_value = mock_fork_manager
+
+        with patch("tools.agent_executor.get_agent_executor", return_value=mock_executor), \
+             patch("canvas.get_current_session_id", return_value="session-1"):
+            await builtin.agent_delegate("do something", fork_from_current=True)
+
+        # Verify run() was called with fork_context and is_fork_child
+        call_kwargs = mock_executor.run.call_args
+        assert call_kwargs[1]["fork_context"] is not None
+        assert call_kwargs[1]["is_fork_child"] is True
+        assert call_kwargs[1]["fork_context"].parent_session_id == "session-1"
+
+    @pytest.mark.asyncio
+    async def test_fork_from_current_failed_context(self, mock_executor, mock_fork_manager):
+        """When create_fork_context returns None, error is returned."""
+        from unittest.mock import patch
+
+        mock_fork_manager.create_fork_context.return_value = None
+        mock_executor.get_fork_manager.return_value = mock_fork_manager
+
+        with patch("tools.agent_executor.get_agent_executor", return_value=mock_executor), \
+             patch("canvas.get_current_session_id", return_value="session-1"):
+            result = await builtin.agent_delegate("task", fork_from_current=True)
+            assert "[FORK Error]" in result
+            assert "Could not create fork context" in result
+
+    @pytest.mark.asyncio
+    async def test_fork_from_current_false_skips_fork(self, mock_executor):
+        """fork_from_current=False (default) does not create fork context."""
+        from unittest.mock import patch
+
+        with patch("tools.agent_executor.get_agent_executor", return_value=mock_executor), \
+             patch("canvas.get_current_session_id") as mock_get_sid:
+            await builtin.agent_delegate("task", subagent_type="explore", fork_from_current=False)
+
+        # Should NOT call get_current_session_id
+        mock_get_sid.assert_not_called()
+        # run() called without fork_context
+        call_kwargs = mock_executor.run.call_args
+        assert call_kwargs[1].get("fork_context") is None
+        assert call_kwargs[1].get("is_fork_child") is False
+
+    @pytest.mark.asyncio
+    async def test_fork_from_current_with_description(self, mock_executor, mock_fork_manager):
+        """Task includes description as prefix."""
+        from unittest.mock import patch
+
+        mock_executor.get_fork_manager.return_value = mock_fork_manager
+
+        with patch("tools.agent_executor.get_agent_executor", return_value=mock_executor), \
+             patch("canvas.get_current_session_id", return_value="session-1"):
+            await builtin.agent_delegate(
+                "summarize",
+                description="important summary",
+                fork_from_current=True,
+            )
+
+        call_kwargs = mock_executor.run.call_args
+        assert call_kwargs[1]["task"] == "[important summary] summarize"

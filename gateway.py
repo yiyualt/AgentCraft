@@ -23,7 +23,7 @@ from tools.agent_executor import AgentExecutor, set_agent_executor  # Agent exec
 from tools.skill_tools import *  # noqa: F401,F403 — register Skill tool
 from tools.mcp import MCPToolManager, MCPConfig
 from tools.sandbox import SandboxExecutor, SandboxConfig
-from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig
+from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, PermissionMode
 from skills import SkillLoader, default_skill_dirs
 from channels import ChannelRouter
 from channels.telegram import TelegramChannel
@@ -168,6 +168,12 @@ _canvas_channel: CanvasChannel | None = None
 # ===== Compaction =====
 _compaction_manager: CompactionManager | None = None
 
+# ===== Budget =====
+_budget_manager: BudgetManager | None = None
+
+# ===== Error Recovery =====
+_recovery_executor: ResilientExecutor | None = None
+
 # ===== Channels =====
 _channel_router = ChannelRouter()
 _telegram_channel: TelegramChannel | None = None
@@ -238,11 +244,36 @@ async def lifespan(_app: FastAPI):
     _app.state.compaction_manager = _compaction_manager
     logger.info("[Compaction] CompactionManager initialized")
 
+    # Budget Manager initialization
+    global _budget_manager
+    _budget_manager = BudgetManager()
+    _app.state.budget_manager = _budget_manager
+    logger.info("[Budget] BudgetManager initialized")
+
+    # Error Recovery initialization
+    global _recovery_executor
+    _recovery_executor = ResilientExecutor()
+    # Wire compaction callback for prompt_too_long recovery
+    async def _recovery_compact(messages):
+        calculator = TokenCalculator()
+        target = int((session.context_window or 64000) * 0.3)
+        return await _compaction_manager.compact(
+            session_id="recovery",
+            messages=messages,
+            level=3,  # Reactive
+            calculator=calculator,
+            target_tokens=target,
+        )
+    _recovery_executor.set_compaction_callback(_recovery_compact)
+    _app.state.recovery_executor = _recovery_executor
+    logger.info("[Recovery] ResilientExecutor initialized")
+
     # Fork Manager initialization
     from sessions import ForkManager, TokenCalculator
     fork_manager = ForkManager(
         session_manager=_session_manager,
         token_calculator=TokenCalculator(),
+        canvas_manager=_canvas_manager,
     )
     agent_executor.set_fork_manager(fork_manager)
     logger.info("[Fork] ForkManager initialized")
@@ -418,6 +449,55 @@ async def chat_completions(request: Request):
     return await _handle_non_streaming(request, client, payload, model, session_id)
 
 
+# ===== Slash command processing =====
+def _process_slash_command(content: str) -> str | None:
+    """Process slash commands like /goal. Returns response string or None."""
+    content = content.strip()
+    if not content.startswith("/"):
+        return None
+
+    parts = content.split(" ", 1)
+    command = parts[0].lower()
+    args = parts[1] if len(parts) > 1 else ""
+
+    if command == "/goal":
+        executor = get_agent_executor()
+        if not executor:
+            return "[Error] Agent executor not initialized"
+        if args:
+            result = executor.set_goal(args)
+            logger.info(f"[Goal] Set: {args}")
+            return result
+        else:
+            result = executor.clear_goal()
+            logger.info("[Goal] Cleared")
+            return result
+
+    if command == "/permission":
+        executor = get_agent_executor()
+        if not executor:
+            return "[Error] Agent executor not initialized"
+        if not args:
+            mode = executor.get_permission_mode()
+            return f"Current permission mode: **{mode.value}**\nAvailable modes: default, acceptEdits, bypass, auto, plan"
+        mode_map = {
+            "default": PermissionMode.DEFAULT,
+            "acceptedits": PermissionMode.ACCEPT_EDITS,
+            "accept_edits": PermissionMode.ACCEPT_EDITS,
+            "bypass": PermissionMode.BYPASS,
+            "auto": PermissionMode.AUTO,
+            "plan": PermissionMode.PLAN,
+        }
+        mode = mode_map.get(args.lower().replace(" ", "_"))
+        if mode is None:
+            return f"Unknown mode: {args}. Available: {list(mode_map.keys())}"
+        executor.set_permission_mode(mode)
+        return f"Permission mode set to: **{mode.value}**"
+
+    logger.info(f"[Command] Unknown slash command: {command}")
+    return None
+
+
 # ===== 辅助函数：生成 messages 摘要 =====
 def _summarize_messages(msgs: list[dict]) -> list[dict]:
     out = []
@@ -524,6 +604,26 @@ async def _handle_non_streaming(
             content = m.get("content", "")
             chat_logger.info(f"[USER] session={session_id}: {content[:200]}")
 
+    # ===== Slash command processing (/goal, etc.) =====
+    # Check if any new message is a slash command
+    for m in new_messages:
+        if m.get("role") == "user":
+            cmd_result = _process_slash_command(m.get("content", ""))
+            if cmd_result is not None:
+                logger.info(f"[COMMAND] Slash command processed: {cmd_result[:100]}")
+                return {
+                    "id": f"chatcmpl-{int(time.time())}",
+                    "object": "chat.completion",
+                    "created": int(time.time()),
+                    "model": model,
+                    "choices": [{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": cmd_result},
+                        "finish_reason": "stop",
+                    }],
+                    "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                }
+
     # Save incoming messages to session
     if session_id:
         for msg in new_messages:
@@ -592,6 +692,48 @@ async def _handle_non_streaming(
                         new_tokens = calculator.count_messages(messages)
                         logger.info(f"[COMPACTION] New token count: {new_tokens}")
 
+                # ===== Token Budget check =====
+                # Check budget and decide whether to continue
+                # Budget can be set via session metadata or defaults to 50000
+                if session_id and _budget_manager:
+                    # Get budget from session or use default
+                    session_budget = getattr(session, 'token_budget', None) if session else None
+                    budget = session_budget or 50000  # Default budget
+
+                    # Estimate current tokens (use calculator if available, or simple estimate)
+                    if 'calculator' in dir() and calculator:
+                        current_tokens = calculator.count_messages(messages)
+                    else:
+                        current_tokens = estimate_tokens_simple(messages)
+
+                    # Check budget decision
+                    decision = _budget_manager.check_budget(
+                        session_id=session_id,
+                        budget=budget,
+                        current_tokens=current_tokens,
+                    )
+
+                    # Handle stop decision
+                    if not decision.should_continue and hasattr(decision, 'completion_event'):
+                        logger.info(
+                            f"[BUDGET] Budget limit reached for session {session_id}: "
+                            f"tokens={current_tokens}, budget={budget}"
+                        )
+                        # Generate budget report message
+                        from sessions.budget import generate_budget_report
+                        report = generate_budget_report(decision.completion_event)
+                        # Inject budget report as final response
+                        messages.append({
+                            "role": "assistant",
+                            "content": f"[Budget Limit Reached]\n\n{report}",
+                        })
+                        break  # Exit the tool loop
+
+                    # Handle continue with nudge
+                    if decision.should_continue and hasattr(decision, 'nudge_message') and decision.nudge_message:
+                        # Inject nudge message to guide agent efficiency
+                        logger.info(f"[BUDGET] Progress: {decision.pct}% of budget used")
+
                 call_kwargs: dict[str, Any] = {"model": model, "messages": messages, **kwargs}
                 if tools:
                     call_kwargs["tools"] = tools
@@ -612,27 +754,55 @@ async def _handle_non_streaming(
                         "messages_summary": _summarize_messages(messages),
                         **kwargs,
                     })
-                    try:
-                        async with _llm_semaphore:
-                            response = await asyncio.to_thread(
-                                llm_client.chat.completions.create, **call_kwargs
+                    # LLM call with error recovery (retry network/rate-limit/timeout)
+                    result = None
+                    llm_error = None
+                    for attempt in range(3):
+                        try:
+                            async with _llm_semaphore:
+                                response = await asyncio.to_thread(
+                                    llm_client.chat.completions.create, **call_kwargs
+                                )
+                            result = response.model_dump()
+                            break  # Success — exit retry loop
+                        except Exception as e:
+                            llm_error = e
+                            error_kind = classify_error(e)
+                            strategy = get_retry_config(error_kind)
+
+                            # Auth errors: fail immediately
+                            if error_kind == ErrorKind.AUTH:
+                                logger.error(f"[RECOVERY] Auth error, not retrying: {e}")
+                                break
+
+                            # Non-retryable: fail
+                            if error_kind == ErrorKind.UNKNOWN or attempt >= strategy.max_retries:
+                                logger.error(f"[RECOVERY] {error_kind.value}: {e} (attempt {attempt + 1})")
+                                break
+
+                            delay = calculate_delay(attempt, strategy)
+                            logger.warning(
+                                f"[RECOVERY] {error_kind.value}: {e}. "
+                                f"Retrying in {delay:.1f}s (attempt {attempt + 1}/{strategy.max_retries})"
                             )
-                    except Exception as e:
+                            await asyncio.sleep(delay)
+
+                    if result is None:
                         llm_span.set_outputs({
-                            "error": str(e),
-                            "error_type": type(e).__name__,
+                            "error": str(llm_error),
+                            "error_type": type(llm_error).__name__ if llm_error else "unknown",
                         })
                         request_span.set_outputs({
-                            "error": str(e),
-                            "error_type": type(e).__name__,
+                            "error": str(llm_error),
+                            "error_type": type(llm_error).__name__ if llm_error else "unknown",
                             "latency_seconds": time.time() - start_time,
                         })
-                        logger.error(f"LLM API error: {type(e).__name__}: {e}")
+                        logger.error(f"LLM API error after retries: {llm_error}")
                         raise HTTPException(
                             status_code=502,
-                            detail={"error": {"message": str(e), "type": type(e).__name__}},
+                            detail={"error": {"message": str(llm_error), "type": type(llm_error).__name__ if llm_error else "unknown"}},
                         )
-                    result = response.model_dump()
+
                     llm_span.set_outputs({
                         "finish_reason": result["choices"][0].get("finish_reason"),
                         "has_tool_calls": bool(result["choices"][0]["message"].get("tool_calls")),

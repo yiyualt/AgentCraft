@@ -8,11 +8,11 @@ Fork机制允许子agent继承父agent的完整对话上下文，而不是从零
 
 | Goal | Status | Description |
 |------|--------|-------------|
-| Context继承 | ❌ | 子agent继承父agent的完整对话历史 |
-| Prompt Cache共享 | ❌ | 多个fork children共享相同的API请求前缀，最大化cache命中率 |
-| Placeholder机制 | ❌ | 用相同placeholder填充tool_result，保证byte-identical |
-| 递归保护 | ❌ | 防止fork children再次fork（避免无限递归） |
-| Worktree隔离 | ❌ | Fork可在独立git worktree执行，不影响主agent文件 |
+| Context继承 | ✅ | 子agent继承父agent的完整对话历史 |
+| Prompt Cache共享 | ✅ | 通过FORK_PLACEHOLDER固定token实现前缀共享 |
+| Placeholder机制 | ✅ | 所有fork children使用相同placeholder，保证cache命中 |
+| 递归保护 | ✅ | fork child移除Agent tool + BOILERPLATE指令防止再次fork |
+| Worktree隔离 | ❌ | Fork可在独立git worktree执行（可选，Phase 3未实现） |
 
 ## Current State
 
@@ -35,99 +35,109 @@ messages = [
 ```
 父agent对话历史: [msg1, msg2, msg3, assistant(tool_calls), ...]
                     ↓ Fork
-子agent继承: [...历史, assistant(tool_calls), user(placeholder_results..., directive)]
+子agent继承: [FORK_CHILD_BOILERPLATE, ...parent_history, user(FORK_PLACEHOLDER)]
+                    ↓ build_fork_messages()
+实际发送: [FORK_CHILD_BOILERPLATE, ...parent_history, user(actual_task)]
 ```
 
 **效果**：
 - 子agent自动理解背景，无需重复解释
-- 所有fork children共享相同的placeholder → cache命中
-- 只需写简短directive
+- 所有fork children共享相同的前缀 → cache命中
+- 只需写简短task描述
 
 ## Technical Design
 
 ### 1. Fork触发条件
 
-两种模式：
-- **显式Fork**: 用户调用时指定 `fork=True` 参数
-- **隐式Fork**: 省略 `subagent_type` 时自动fork（继承完整context）
+**显式Fork**: 用户调用Agent tool时指定 `fork_from_current=true` 参数
 
-### 2. Placeholder机制（关键）
+- 无此参数 → 传统sub-agent（从零开始，使用agent type的system prompt）
+- 有此参数 → Fork模式（继承当前session的完整context）
+
+### 2. ForkContext数据流
+
+```
+Agent tool (fork_from_current=true)
+  → get_current_session_id() → 获取父session_id
+  → ForkManager.create_fork_context(parent_session_id)
+    → 获取父session消息
+    → _clean_orphan_tool_messages() 清理孤立tool消息
+    → 如果超过max_tokens，应用SlidingWindowStrategy截断
+    → 构建: [FORK_CHILD_BOILERPLATE, ...parent_msgs, FORK_PLACEHOLDER]
+    → 返回 ForkContext
+  → AgentExecutor.run(fork_context=fork_context, is_fork_child=True)
+    → 替换FORK_PLACEHOLDER为实际task
+    → 移除Agent tool（递归保护）
+    → 执行agent loop
+```
+
+### 3. Placeholder机制（已简化实现）
+
+原始spec设计为每个tool_result使用相同placeholder。实际实现简化为：
+- 在继承消息列表末尾插入单个 `FORK_PLACEHOLDER` 占位符
+- `build_fork_messages()` 将其替换为实际task文本
+- 多个fork children继承相同的前缀（FORK_CHILD_BOILERPLATE + 父消息），保证prompt cache命中
 
 ```python
-PLACEHOLDER_RESULT = "Fork started — processing in background"
+FORK_PLACEHOLDER = "[FORK_TASK_PLACEHOLDER_8F2A]"
 
-def build_forked_messages(directive: str, last_assistant_msg: dict) -> list:
-    """
-    构建fork子agent的消息列表
+# create_fork_context() 在消息列表末尾插入placeholder
+inherited_messages = [fork_system_msg, ...parent_msgs, {"role": "user", "content": FORK_PLACEHOLDER}]
 
-    关键：所有tool_result使用相同的placeholder文本
-    保证byte-identical → prompt cache共享
-    """
-    # 1. 保留父agent最后的assistant消息（包含所有tool_use）
-    assistant_msg = {...last_assistant_msg, "uuid": new_uuid()}
-
-    # 2. 为每个tool_use创建相同placeholder的tool_result
-    tool_results = [
-        {
-            "role": "tool",
-            "tool_call_id": tc["id"],
-            "content": PLACEHOLDER_RESULT  # 所有fork相同！
-        }
-        for tc in last_assistant_msg.get("tool_calls", [])
-    ]
-
-    # 3. 最后加上唯一的directive
-    directive_msg = {
-        "role": "user",
-        "content": f"<fork>\nSTOP. READ THIS FIRST.\n...\n</fork>\nDirective: {directive}"
-    }
-
-    return [...parent_history, assistant_msg, *tool_results, directive_msg]
+# build_fork_messages() 或 run() 内联替换placeholder为实际task
+for i, msg in enumerate(messages):
+    if msg.get("content") == FORK_PLACEHOLDER:
+        messages[i] = {"role": "user", "content": task}
 ```
 
-### 3. Fork Child行为约束
+### 4. Fork Child行为约束
 
-Fork child收到特殊指令模板：
+Fork child收到特殊系统消息 `FORK_CHILD_BOILERPLATE`：
 ```
+<fork>
 STOP. READ THIS FIRST.
+
 You are a forked worker process. You are NOT the main agent.
 
 RULES:
-1. Do NOT spawn sub-agents (you are the executor)
-2. Do NOT converse or ask questions
-3. USE tools directly: Bash, Read, Write
+1. Do NOT spawn sub-agents (Agent tool is disabled for you)
+2. Do NOT ask questions - execute your task directly
+3. Use tools directly: Bash, Read, Write, Edit, Glob, Grep
 4. If you modify files, commit changes before reporting
 5. Report once at the end, be factual and concise
-6. Stay strictly within your directive's scope
+6. Stay strictly within your assigned scope
 
 Output format:
   Scope: <your assigned scope>
   Result: <key findings>
   Key files: <relevant paths>
-  Files changed: <list with commit hash>
+  Files changed: <list with commit hash if applicable>
   Issues: <list if any>
+</fork>
 ```
 
-### 4. 递归保护
+### 5. 递归保护（三层防护）
+
+1. **工具层**: `is_fork_child=True` 时，从tool列表中移除Agent tool
+2. **指令层**: FORK_CHILD_BOILERPLATE 指示LLM不要生成子agent
+3. **检测层**: `ForkManager.is_in_fork_child()` 扫描消息检测`<fork>`标签
 
 ```python
-FORK_BOILERPLATE_TAG = "fork"
+# AgentExecutor.run() 中
+if is_fork_child:
+    tools = [t for t in tools if t["function"]["name"] != "Agent"]
 
-def is_in_fork_child(messages: list) -> bool:
-    """检测是否已在fork child中，防止递归fork"""
+# ForkManager.is_in_fork_child() 中
+def is_in_fork_child(self, messages: list) -> bool:
     for msg in messages:
-        if msg["role"] == "user":
-            content = msg.get("content", "")
-            if isinstance(content, str) and f"<{FORK_BOILERPLATE_TAG}>" in content:
-                return True
+        if msg["role"] == "system" and "<fork>" in msg.get("content", ""):
+            return True
+        if msg["role"] == "user" and msg.get("content") == FORK_PLACEHOLDER:
+            return True
     return False
-
-# 在AgentExecutor.run()中检查
-if is_in_fork_child(messages):
-    return "[Error] Cannot fork from a fork child. Execute directly."
 ```
 
-### 5. Worktree隔离（可选）
+### 6. Worktree隔离（可选，未实现）
 
 ```python
 def create_worktree_isolation() -> str:
@@ -137,53 +147,69 @@ def create_worktree_isolation() -> str:
     # fork执行完成后清理
 ```
 
-Fork child收到额外提示：
-```
-You are operating in an isolated git worktree at {path}.
-Your changes stay in this worktree and will not affect the parent's files.
-```
-
 ## API Changes
 
-### Tool参数扩展
+### Agent Tool参数
 
 ```python
-# Agent tool参数
+# Agent tool参数（tools/builtin.py）
 {
     "prompt": "任务描述",
-    "subagent_type": "explore",  # 可选，指定则从零开始
-    "fork": True,                # 可选，强制fork模式
-    "isolation": "worktree"      # 可选，worktree隔离
+    "subagent_type": "explore | general-purpose | plan",
+    "fork_from_current": True/False,  # 是否继承当前对话context
 }
 ```
 
-**行为逻辑**：
-- 有 `subagent_type` → 传统sub-agent（从零开始）
-- 无 `subagent_type` + `fork=True` → Fork模式（继承context）
-- 无 `subagent_type` + 无 `fork` → 默认general-purpose（从零开始）
+**行为逻辑**（tools/builtin.py `agent_delegate()`）：
+- `fork_from_current=False`（默认）→ 传统sub-agent（从零开始）
+- `fork_from_current=True` → Fork模式：
+  1. 获取当前session_id
+  2. 通过ForkManager创建ForkContext
+  3. 传递fork_context和is_fork_child=True给AgentExecutor
+
+### ForkManager API
+
+```python
+class ForkManager:
+    def create_fork_context(parent_session_id, max_tokens=32000) -> ForkContext | None
+    def build_fork_messages(fork_context, task) -> list[dict]
+    def is_in_fork_child(messages) -> bool
+    def get_fork_stats(fork_context) -> dict
+
+@dataclass
+class ForkContext:
+    parent_session_id: str
+    inherited_messages: list[dict]
+    placeholder_index: int
+    is_fork_child: bool = True
+    max_inherited_tokens: int = 32000
+```
 
 ## Implementation Plan
 
-### Phase 1: 基础Fork
-1. 实现 `build_forked_messages()` 函数
-2. 实现 placeholder 机制
-3. 实现 `is_in_fork_child()` 递归保护
-4. 修改 `AgentExecutor.run()` 支持fork模式
+### Phase 1: 基础Fork ✅ 完成
+1. ForkManager.create_fork_context() — sessions/fork.py
+2. ForkContext — sessions/fork.py
+3. FORK_PLACEHOLDER 和 FORK_CHILD_BOILERPLATE — sessions/fork.py
+4. ForkManager.is_in_fork_child() 递归保护 — sessions/fork.py
+5. AgentExecutor.run() fork参数支持 — tools/agent_executor.py
+6. Agent tool fork_from_current参数 — tools/builtin.py
+7. Gateway初始化ForkManager — gateway.py
 
-### Phase 2: Fork指令模板
-1. 设计fork child指令模板（约束行为）
-2. 实现directive注入
-3. 测试fork child输出格式
+### Phase 2: Fork指令模板 ✅ 完成
+1. FORK_CHILD_BOILERPLATE指令模板 — sessions/fork.py
+2. 递归保护（工具移除 + 指令 + 检测）— tools/agent_executor.py, sessions/fork.py
 
-### Phase 3: Worktree隔离（可选）
+### Phase 3: Worktree隔离（可选）❌ 未实现
 1. 实现worktree创建/清理
 2. 实现路径翻译
 3. 集成到fork流程
 
 ## Success Criteria
 
-- [ ] Fork child能访问父对话历史
-- [ ] 多个fork children使用相同placeholder
-- [ ] Fork child不会再次fork
-- [ ] Fork child输出符合规范格式
-- [ ] Prompt cache命中率提升（可测量）
+- [x] Fork child能访问父对话历史
+- [x] Fork child使用FORK_PLACEHOLDER占位符
+- [x] Fork child不会再次fork（三层防护）
+- [x] Fork child输出符合规范格式（BOILERPLATE约束）
+- [ ] Prompt cache命中率提升（可测量 — 需生产环境验证）
+- [ ] Worktree隔离（Phase 3，可选）

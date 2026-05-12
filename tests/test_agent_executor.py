@@ -189,6 +189,165 @@ class TestGlobalExecutor:
         assert get_agent_executor() is None
 
 
+class TestAgentExecutorFork:
+    """Test AgentExecutor fork functionality."""
+
+    @pytest.fixture
+    def mock_client(self):
+        """Mock OpenAI client."""
+        from unittest.mock import Mock
+
+        client = Mock()
+        mock_response = Mock()
+        mock_response.model_dump.return_value = {
+            "choices": [{
+                "message": {"content": "Fork child result", "role": "assistant"},
+                "finish_reason": "stop"
+            }]
+        }
+        client.chat = Mock()
+        client.chat.completions = Mock()
+        client.chat.completions.create = Mock(return_value=mock_response)
+        return client
+
+    @pytest.fixture
+    def registry(self):
+        return UnifiedToolRegistry(get_default_registry())
+
+    @pytest.fixture
+    def session_manager(self):
+        return SessionManager()
+
+    @pytest.fixture
+    def executor(self, mock_client, registry, session_manager):
+        return AgentExecutor(
+            llm_client=mock_client,
+            registry=registry,
+            session_manager=session_manager,
+            model="test-model",
+            base_url="http://test",
+        )
+
+    @pytest.fixture
+    def sample_fork_context(self):
+        """Create a ForkContext with inherited messages."""
+        from sessions.fork import ForkContext, FORK_CHILD_BOILERPLATE, FORK_PLACEHOLDER
+        inherited = [
+            {"role": "system", "content": FORK_CHILD_BOILERPLATE},
+            {"role": "system", "content": "Parent system prompt"},
+            {"role": "user", "content": "What is AgentCraft?"},
+            {"role": "assistant", "content": "AgentCraft is a framework..."},
+            {"role": "user", "content": FORK_PLACEHOLDER},
+        ]
+        return ForkContext(
+            parent_session_id="parent-123",
+            inherited_messages=inherited,
+            placeholder_index=4,
+            is_fork_child=True,
+        )
+
+    @pytest.mark.asyncio
+    async def test_fork_context_messages_used(self, executor, mock_client, sample_fork_context):
+        """When fork_context is provided, inherited messages are used."""
+        result = await executor.run(
+            "summarize the discussion",
+            agent_type="general-purpose",
+            fork_context=sample_fork_context,
+            is_fork_child=True,
+        )
+        assert "Fork child result" in result
+        # Verify LLM was called
+        assert mock_client.chat.completions.create.called
+
+    @pytest.mark.asyncio
+    async def test_fork_child_tool_stripping_logic(self, executor):
+        """Unit test: is_fork_child removes Agent tool from tool list."""
+        test_tools = [
+            {"function": {"name": "Read"}},
+            {"function": {"name": "Agent"}},
+            {"function": {"name": "Write"}},
+        ]
+        from unittest.mock import AsyncMock
+        original_run_loop = executor._run_loop
+        mock_run_loop = AsyncMock(return_value="done")
+        executor._run_loop = mock_run_loop
+
+        with patch.object(executor._registry, 'list_tools', return_value=test_tools):
+            await executor.run(
+                "test", agent_type="general-purpose",
+                is_fork_child=True,
+            )
+
+        executor._run_loop = original_run_loop
+        tools_passed = mock_run_loop.call_args[0][1]
+        tool_names = [t["function"]["name"] for t in tools_passed]
+        assert "Agent" not in tool_names, f"Agent tool should be removed: {tool_names}"
+        assert "Read" in tool_names
+        assert "Write" in tool_names
+
+    @pytest.mark.asyncio
+    async def test_non_fork_child_keeps_agent_tool(self, executor):
+        """Unit test: non-fork execution keeps Agent tool."""
+        test_tools = [
+            {"function": {"name": "Read"}},
+            {"function": {"name": "Agent"}},
+        ]
+        from unittest.mock import AsyncMock
+        original_run_loop = executor._run_loop
+        mock_run_loop = AsyncMock(return_value="done")
+        executor._run_loop = mock_run_loop
+
+        with patch.object(executor._registry, 'list_tools', return_value=test_tools):
+            await executor.run(
+                "test", agent_type="general-purpose",
+                is_fork_child=False,
+            )
+
+        executor._run_loop = original_run_loop
+        tools_passed = mock_run_loop.call_args[0][1]
+        tool_names = [t["function"]["name"] for t in tools_passed]
+        assert "Agent" in tool_names
+
+    @pytest.mark.asyncio
+    async def test_non_fork_execution_completes(self, executor, mock_client):
+        """Non-fork execution completes normally."""
+        result = await executor.run("do something", agent_type="general-purpose")
+        assert "Fork child result" in result  # default mock response
+        assert mock_client.chat.completions.create.called
+
+    @pytest.mark.asyncio
+    async def test_placeholder_replaced_with_task(self, executor, mock_client, sample_fork_context):
+        """Fork placeholder is replaced with actual task."""
+        from sessions.fork import FORK_PLACEHOLDER
+
+        await executor.run(
+            "my specific task",
+            agent_type="general-purpose",
+            fork_context=sample_fork_context,
+            is_fork_child=True,
+        )
+        call_kw = mock_client.chat.completions.create.call_args
+        if call_kw:
+            messages = call_kw[1].get("messages", [])
+            user_contents = [m["content"] for m in messages if m["role"] == "user"]
+            # Should have the actual task, not the placeholder
+            assert "my specific task" in user_contents
+            assert FORK_PLACEHOLDER not in user_contents
+
+    @pytest.mark.asyncio
+    async def test_fork_without_context_uses_fresh_messages(self, executor, mock_client):
+        """Without fork_context + is_fork_child, uses fresh context build."""
+        await executor.run("standalone task", agent_type="explore")
+        call_kw = mock_client.chat.completions.create.call_args
+        if call_kw:
+            messages = call_kw[1].get("messages", [])
+            # First message should be system prompt for explore agent
+            assert messages[0]["role"] == "system"
+            assert "explore" in messages[0]["content"]
+            assert messages[1]["role"] == "user"
+            assert messages[1]["content"] == "standalone task"
+
+
 class TestAgentToolIntegration:
     """Integration tests for Agent tool via registry."""
 

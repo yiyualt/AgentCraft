@@ -297,6 +297,27 @@
             border-radius: 4px;
         }
 
+        .fork-item {
+            padding: 4px 0;
+            font-size: 0.78em;
+            border-left: 2px solid #444;
+            margin: 4px 0 4px 4px;
+            padding-left: 8px;
+        }
+        .fork-item.running { border-left-color: #ffa500; }
+        .fork-item.complete { border-left-color: #00ff88; }
+        .fork-item.error { border-left-color: #ff4444; }
+        .fork-item .fork-task {
+            color: #aaa;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .fork-item .fork-status {
+            font-size: 0.85em;
+            color: #666;
+        }
+
         .empty-state {
             text-align: center;
             color: #666;
@@ -326,6 +347,9 @@
         <div id="sidebar" class="sidebar">
             <h3>Session</h3>
             <p id="session-info" class="session-info">No session</p>
+            <hr>
+            <h3>Fork Tree</h3>
+            <div id="fork-tree" style="max-height: 200px; overflow-y: auto; font-size: 0.85em;"></div>
             <hr>
             <h3>History</h3>
             <div id="history"></div>
@@ -412,6 +436,11 @@
             eventSource.addEventListener('canvas_interact', (event) => {
                 const data = JSON.parse(event.data);
                 handleInteractiveComponent(data);
+            });
+
+            eventSource.addEventListener('fork_event', (event) => {
+                const data = JSON.parse(event.data);
+                handleForkEvent(data);
             });
 
             eventSource.addEventListener('heartbeat', () => {
@@ -529,6 +558,67 @@
             const preview = data.content?.substring(0, 40) || data.component_type;
             item.textContent = `${data.mode || data.type}: ${preview}`;
             history.appendChild(item);
+        }
+
+        // ===== Handle Fork Event =====
+        const forkEvents = [];  // Track fork events for tree display
+
+        function handleForkEvent(data) {
+            console.log('Fork event:', data);
+            const { event_type, task, child_session_id, result, error } = data;
+
+            const forkTree = document.getElementById('fork-tree');
+            const eventId = `fork-${data.id}`;
+
+            if (event_type === 'fork_start') {
+                // Add new fork item
+                forkEvents.push({ id: eventId, task, status: 'running' });
+                const div = document.createElement('div');
+                div.className = 'fork-item running';
+                div.id = eventId;
+                div.innerHTML = `
+                    <div class="fork-task" title="${escapeHtml(task || '')}">🔀 ${escapeHtml(task || 'Unknown task')}</div>
+                    <div class="fork-status">⏳ Running...</div>
+                `;
+                forkTree.appendChild(div);
+            } else if (event_type === 'fork_complete') {
+                // Update fork item to complete
+                const existing = forkEvents.find(f => f.task === task && f.status === 'running');
+                if (existing) {
+                    existing.status = 'complete';
+                    const el = document.getElementById(existing.id);
+                    if (el) {
+                        el.className = 'fork-item complete';
+                        el.querySelector('.fork-status').textContent = '✅ Completed';
+                        if (result) {
+                            el.title = `Result: ${escapeHtml(result.substring(0, 200))}`;
+                        }
+                    }
+                }
+            } else if (event_type === 'fork_error') {
+                // Update fork item to error
+                const existing = forkEvents.find(f => f.task === task && f.status === 'running');
+                if (existing) {
+                    existing.status = 'error';
+                    const el = document.getElementById(existing.id);
+                    if (el) {
+                        el.className = 'fork-item error';
+                        el.querySelector('.fork-status').textContent = '❌ Error';
+                        if (error) {
+                            el.title = `Error: ${escapeHtml(error.substring(0, 200))}`;
+                        }
+                    }
+                }
+            }
+
+            // Auto-scroll fork tree
+            forkTree.scrollTop = forkTree.scrollHeight;
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
         }
 
         // ===== Handle Interactive Component =====

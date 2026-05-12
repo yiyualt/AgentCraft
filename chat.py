@@ -85,7 +85,7 @@ def repl(
         logger.info(f"Active system_prompt: {active_sp}")
 
     print(f"Model: {model}")
-    print("Commands: /exit, /quit, /clear, /help, /sessions, /new <name>, /system, /skills\n")
+    print("Commands: /exit, /quit, /clear, /help, /sessions, /new <name>, /system, /skills, /goal, /permission\n")
     logger.info(f"REPL started, model={model}, session_id={session_id}")
 
     while True:
@@ -203,8 +203,10 @@ def repl(
                 logger.info(f"Switched to new session: {name}, id={session_id}")
                 continue
             else:
-                print(f"Unknown command: {cmd}")
-                continue
+                # Unknown commands: forward to gateway for server-side processing
+                # (/goal, /permission, etc. are handled by gateway's _process_slash_command)
+                logger.info(f"Forwarding unknown command to gateway: {text}")
+                # Fall through to normal message sending below
 
         messages.append({"role": "user", "content": text})
         logger.info(f"User input: '{text}', messages count (local): {len(messages)}")

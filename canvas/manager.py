@@ -131,6 +131,48 @@ class CanvasManager:
             logger.warning(f"[Canvas] Queue full for {session_id}, dropping component")
             return False
 
+    async def push_fork_event(
+        self,
+        session_id: str,
+        event_type: str,
+        child_session_id: str | None = None,
+        task: str | None = None,
+        result: str | None = None,
+        error: str | None = None,
+    ) -> bool:
+        """Push fork lifecycle event to SSE queue.
+
+        Args:
+            session_id: Parent session ID
+            event_type: 'fork_start', 'fork_complete', 'fork_error'
+            child_session_id: ID of the fork child
+            task: Task description for the fork child
+            result: Result from fork execution
+            error: Error message if fork failed
+        """
+        queue = self._queues.get(session_id)
+        if queue is None:
+            return False
+
+        update = {
+            "type": "fork_event",
+            "id": str(uuid.uuid4())[:8],
+            "event_type": event_type,
+            "child_session_id": child_session_id,
+            "task": task,
+            "result": result,
+            "error": error,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        try:
+            await queue.put(update)
+            logger.info(f"[Canvas] Pushed fork event to {session_id}: type={event_type}")
+            return True
+        except asyncio.QueueFull:
+            logger.warning(f"[Canvas] Queue full for {session_id}, dropping fork event")
+            return False
+
     def has_active_session(self, session_id: str) -> bool:
         """Check if session has active SSE connection.
 

@@ -66,10 +66,12 @@ class ForkManager:
         self,
         session_manager: SessionManager,
         token_calculator: TokenCalculator | None = None,
+        canvas_manager: Any | None = None,
     ):
         self._session_manager = session_manager
         self._token_calculator = token_calculator or TokenCalculator()
         self._sliding_window = SlidingWindowStrategy()
+        self._canvas_manager = canvas_manager
 
     def create_fork_context(
         self,
@@ -126,9 +128,10 @@ class ForkManager:
         # Build inherited messages: [fork_system, ...parent_messages, placeholder]
         inherited_messages = [fork_system_msg]
 
-        # Optionally include parent's system prompt
-        if include_system_prompt and parent_messages and parent_messages[0]["role"] == "system":
-            inherited_messages.append(parent_messages[0])
+        # Filter parent messages based on include_system_prompt
+        if parent_messages and parent_messages[0]["role"] == "system":
+            if include_system_prompt:
+                inherited_messages.append(parent_messages[0])
             inherited_messages.extend(parent_messages[1:])
         else:
             inherited_messages.extend(parent_messages)
@@ -264,6 +267,10 @@ class ForkManager:
                 if isinstance(content, str) and content == FORK_PLACEHOLDER:
                     return True
         return False
+
+    def get_canvas_manager(self) -> Any | None:
+        """Get the canvas manager for pushing visual events."""
+        return self._canvas_manager
 
     def get_fork_stats(self, fork_context: ForkContext) -> dict[str, Any]:
         """Get statistics about a fork context."""
