@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Research: Agent Skills & Capabilities - Office AI Agent Lab</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="nav-logo">Office AI Agent Lab</a>
+            <div class="nav-menu">
+                <a href="index.html" class="nav-link">Home</a>
+                <a href="team.html" class="nav-link">Team</a>
+                <a href="publications.html" class="nav-link">Publications</a>
+                <a href="projects.html" class="nav-link">Projects</a>
+                <a href="source.html" class="nav-link">Source</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="container">
+            <h1 class="page-title">Deep Research: Agent Skills & Capabilities</h1>
+            <p class="research-meta">Last Updated: May 2025 | Focus: Modular Agent Capabilities & Skill Architecture</p>
+
+            <!-- Overview -->
+            <section class="research-section">
+                <h2 class="section-title">1. Overview</h2>
+                <p class="research-text">
+                    Agent Skills represent the modular building blocks that enable LLM-based agents to perform specific tasks. Unlike monolithic AI systems, skill-based architectures decompose agent capabilities into discrete, reusable, and composable units—from basic tool use to complex multi-step reasoning patterns.
+                </p>
+                <p class="research-text">
+                    The emergence of standardized skill protocols (MCP, A2A) and skill library frameworks (LangGraph, CrewAI, OpenAI Agents SDK) marks a fundamental shift: agents are no longer single-purpose programs but <strong>configurable systems with dynamically loadable capabilities</strong>.
+                </p>
+                <div class="key-stat">
+                    <span class="stat-highlight">Key Trend:</span>
+                    Microsoft's Semantic Kernel positions skills as "plugins" that maximize existing code investment. Anthropic's MCP protocol enables "build once, integrate everywhere" for agent tools. This commoditization of agent skills accelerates adoption across enterprises.
+                </div>
+            </section>
+
+            <!-- Skill Architecture -->
+            <section class="research-section">
+                <h2 class="section-title">2. Skill Architecture Framework</h2>
+
+                <h3 class="subsection-title">2.1 Skill Hierarchy</h3>
+                <p class="research-text">
+                    Modern agent architectures employ a hierarchical skill model:
+                </p>
+                <div class="has-scale">
+                    <div class="has-item">
+                        <span class="has-level">L1</span>
+                        <span class="has-desc"><strong>Primitive Skills:</strong> Atomic actions—API calls, file operations, database queries. Single input/output, no internal state.</span>
+                    </div>
+                    <div class="has-item">
+                        <span class="has-level">L2</span>
+                        <span class="has-desc"><strong>Composite Skills:</strong> Sequences of primitive skills. Example: "fetch data → transform → store". Orchestrated workflows.</span>
+                    </div>
+                    <div class="has-item">
+                        <span class="has-level">L3</span>
+                        <span class="has-desc highlight"><strong>Meta-Skills:</strong> Skills that reason about other skills—selection, composition, adaptation. Include planning, self-evaluation, learning-to-learn.</span>
+                    </div>
+                    <div class="has-item">
+                        <span class="has-level">L4</span>
+                        <span class="has-desc"><strong>Adaptive Skills:</strong> Skills that modify themselves based on feedback. Continuous improvement through interaction.</span>
+                    </div>
+                </div>
+
+                <h3 class="subsection-title">2.2 Skill Composition Patterns</h3>
+                <p class="research-text">
+                    Research identifies four primary composition approaches:
+                </p>
+                <div class="pattern-grid">
+                    <div class="pattern-card">
+                        <h4>Sequential Composition</h4>
+                        <p>Skills chained in fixed order. Each skill's output feeds the next. Common in pipeline workflows (LangGraph state machines).</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Parallel Composition</h4>
+                        <p>Multiple skills execute simultaneously. Results aggregated by meta-skill. Enables multi-source information gathering.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Conditional Composition</h4>
+                        <p>Dynamic skill selection based on context. Decision trees, guardrails, confidence thresholds determine path.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Hierarchical Composition</h4>
+                        <p>Meta-skills orchestrate sub-skills. Planner decomposes tasks; executor invokes primitives. Anthropics Research system uses this pattern.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Key Frameworks -->
+            <section class="research-section">
+                <h2 class="section-title">3. Key Frameworks & Skill Libraries</h2>
+
+                <div class="framework-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Framework</th>
+                                <th>Skill Model</th>
+                                <th>Key Features</th>
+                                <th>Skill Definition</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>OpenAI Agents SDK</strong></td>
+                                <td>Tools + Handoffs</td>
+                                <td>Function tools, MCP integration, agent-to-agent delegation, guardrails</td>
+                                <td>@function_tool decorator</td>
+                            </tr>
+                            <tr>
+                                <td><strong>LangGraph</strong></td>
+                                <td>Nodes (Skills)</td>
+                                <td>State machines, cycles, conditional edges, durable execution</td>
+                                <td>Node functions + StateGraph</td>
+                            </tr>
+                            <tr>
+                                <td><strong>CrewAI</strong></td>
+                                <td>Agent Tools</td>
+                                <td>Role-based agents, sequential/hierarchical processes, memory, knowledge</td>
+                                <td>Agent with tools parameter</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Semantic Kernel</strong></td>
+                                <td>Plugins (Skills)</td>
+                                <td>OpenAPI specs, enterprise connectors, telemetry, hooks/filters</td>
+                                <td>Kernel.add_plugin()</td>
+                            </tr>
+                            <tr>
+                                <td><strong>AutoGen</strong></td>
+                                <td>Conversation Skills</td>
+                                <td>Agent roles, human-in-loop, code execution, group chat</td>
+                                <td>ConversableAgent with tools</td>
+                            </tr>
+                            <tr>
+                                <td><strong>MCP Protocol</strong></td>
+                                <td>Tools/Resources</td>
+                                <td>Cross-platform standard, Claude/ChatGPT/Cursor support</td>
+                                <td>MCP server definition</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3 class="subsection-title">3.1 MCP: The "USB-C" for Agent Skills</h3>
+                <p class="research-text">
+                    Anthropic's Model Context Protocol (MCP) provides a standardized interface connecting AI applications to external systems—data sources, tools, workflows. Like USB-C for hardware, MCP enables "build once, integrate everywhere" for agent capabilities.
+                </p>
+                <ul class="research-list">
+                    <li><strong>Clients:</strong> Claude, ChatGPT, VS Code Copilot, Cursor, Claude Code—all support MCP servers</li>
+                    <li><strong>Capabilities:</strong> Access Google Calendar, Notion, databases, APIs, file systems through unified protocol</li>
+                    <li><strong>Significance:</strong> Reduces development complexity; enables ecosystem of shared skills</li>
+                </ul>
+
+                <h3 class="subsection-title">3.2 Framework Selection Guide</h3>
+                <ul class="research-list">
+                    <li><strong>Production systems:</strong> OpenAI Agents SDK + MCP for robust observability and fleet management</li>
+                    <li><strong>Complex workflows:</strong> LangGraph for explicit state machine control and debugging</li>
+                    <li><strong>Enterprise automation:</strong> Semantic Kernel for OpenAPI integration and compliance hooks</li>
+                    <li><strong>Multi-agent research:</strong> AutoGen for conversational collaboration patterns</li>
+                    <li><strong>Role-based teams:</strong> CrewAI for defined roles, tasks, and hierarchical processes</li>
+                </ul>
+            </section>
+
+            <!-- Tool Learning -->
+            <section class="research-section">
+                <h2 class="section-title">4. Skill Acquisition: Tool Learning Paradigm</h2>
+
+                <h3 class="subsection-title">4.1 Toolformer Approach</h3>
+                <p class="research-text">
+                    Meta's Toolformer demonstrates self-supervised skill acquisition: LLMs learn to decide which APIs to call, when, with what arguments, and how to incorporate results. Key insight: "LLMs struggle with basic functionality like arithmetic or factual lookup, where simpler models excel."
+                </p>
+                <ul class="research-list">
+                    <li><strong>Method:</strong> Self-supervised learning with API call annotations</li>
+                    <li><strong>Tools:</strong> Calculator, Q&A system, search engines, calendar, translator</li>
+                    <li><strong>Result:</strong> Zero-shot performance competitive with much larger models</li>
+                </ul>
+
+                <h3 class="subsection-title">4.2 Gorilla: API Calling Specialist</h3>
+                <p class="research-text">
+                    Berkeley's Gorilla LLM specializes in API invocation and tool use. OpenFunctions-v2 supports parallel function calling, multi-language APIs (Python, Java, JavaScript, REST), and function relevance detection.
+                </p>
+                <ul class="research-list">
+                    <li><strong>Berkeley Function-Calling Leaderboard (BFCL):</strong> 2K question-function-answer pairs benchmark</li>
+                    <li><strong>GoEX Execution Engine:</strong> Runtime for LLM-generated actions with post-facto validation, undo, damage confinement</li>
+                    <li><strong>RAFT:</strong> Retriever-Aware FineTuning for domain-specific skill retrieval</li>
+                </ul>
+
+                <h3 class="subsection-title">4.3 ReAct: Reasoning + Acting</h3>
+                <p class="research-text">
+                    ReAct paradigm interleaves reasoning traces (thoughts) with actions (tool calls). Each cycle: Thought → Action → Observation → Thought. This grounds reasoning in external reality, preventing hallucination.
+                </p>
+                <div class="key-finding">
+                    <strong>Pattern:</strong> Thought: "I need X" → Action: search[X] → Observation: [result] → Thought: "Now I know Y" → Action: ...
+                </div>
+            </section>
+
+            <!-- Skill Discovery -->
+            <section class="research-section">
+                <h2 class="section-title">5. Skill Discovery & Self-Improvement</h2>
+
+                <h3 class="subsection-title">5.1 Automated Skill Discovery</h3>
+                <p class="research-text">
+                    Research explores how agents can autonomously identify and acquire new skills:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Self-Discover:</strong> LLMs self-compose reasoning structures, identifying useful skill patterns</li>
+                    <li><strong>Exploratory Learning:</strong> Agents explore task spaces, noting repeatable action sequences as candidate skills</li>
+                    <li><strong>Feedback Integration:</strong> Human corrections refine skill definitions; successful patterns reinforced</li>
+                </ul>
+
+                <h3 class="subsection-title">5.2 Skill Transfer & Generalization</h3>
+                <p class="research-text">
+                    Compositional generalization enables handling novel task combinations:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Cross-domain transfer:</strong> Skills learned in one context applied elsewhere</li>
+                    <li><strong>Skill refinement:</strong> Iterative improvement through deployment feedback</li>
+                    <li><strong>Meta-learning:</strong> Agents learning how to learn new skills efficiently</li>
+                </ul>
+            </section>
+
+            <!-- Skill Categories -->
+            <section class="research-section">
+                <h2 class="section-title">6. Skill Category Taxonomy</h2>
+
+                <div class="scenario-grid">
+                    <div class="scenario-card">
+                        <div class="scenario-icon">🔧</div>
+                        <h4>Tool Use Skills</h4>
+                        <p>API calling, database queries, file operations, web scraping. Foundation for agent action.</p>
+                        <div class="scenario-examples">
+                            <span>Calculator</span>
+                            <span>Search engine</span>
+                            <span>Code execution</span>
+                        </div>
+                    </div>
+                    <div class="scenario-card">
+                        <div class="scenario-icon">🧠</div>
+                        <h4>Reasoning Skills</h4>
+                        <p>Chain-of-thought, tree-of-thought, planning, decomposition. Meta-skills for complex problems.</p>
+                        <div class="scenario-examples">
+                            <span>CoT reasoning</span>
+                            <span>Task planning</span>
+                            <span>Self-evaluation</span>
+                        </div>
+                    </div>
+                    <div class="scenario-card">
+                        <div class="scenario-icon">💾</div>
+                        <h4>Memory Skills</h4>
+                        <p>Short-term context, long-term retrieval, knowledge management. Persistent capability across sessions.</p>
+                        <div class="scenario-examples">
+                            <span>Session memory</span>
+                            <span>RAG retrieval</span>
+                            <span>Knowledge graphs</span>
+                        </div>
+                    </div>
+                    <div class="scenario-card">
+                        <div class="scenario-icon">🤝</div>
+                        <h4>Collaboration Skills</h4>
+                        <p>Task delegation, voting protocols, debate mechanisms, handoffs. Multi-agent coordination.</p>
+                        <div class="scenario-examples">
+                            <span>Agent handoffs</span>
+                            <span>Consensus voting</span>
+                            <span>Peer review</span>
+                        </div>
+                    </div>
+                    <div class="scenario-card">
+                        <div class="scenario-icon">📊</div>
+                        <h4>Data Processing Skills</h4>
+                        <p>Extraction, transformation, analysis, visualization. Office workflow core capabilities.</p>
+                        <div class="scenario-examples">
+                            <span>Document parsing</span>
+                            <span>Data analysis</span>
+                            <span>Report generation</span>
+                        </div>
+                    </div>
+                    <div class="scenario-card">
+                        <div class="scenario-icon">🎨</div>
+                        <h4>Creation Skills</h4>
+                        <p>Content generation, code writing, design assistance. Creative output capabilities.</p>
+                        <div class="scenario-examples">
+                            <span>Code generation</span>
+                            <span>Draft writing</span>
+                            <span>UI design</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Benchmarks -->
+            <section class="research-section">
+                <h2 class="section-title">7. Skill Evaluation Benchmarks</h2>
+
+                <h3 class="subsection-title">7.1 AgentBench</h3>
+                <p class="research-text">
+                    First comprehensive benchmark for LLM-as-Agent, evaluating across 8 environments (ICLR'24):
+                </p>
+                <ul class="research-list">
+                    <li><strong>OS Interaction:</strong> Command-line tasks, file manipulation</li>
+                    <li><strong>Database:</strong> SQL queries, data retrieval</li>
+                    <li><strong>Knowledge Graph:</strong> Entity queries, relationship traversal</li>
+                    <li><strong>Web Shopping/Browsing:</strong> E-commerce tasks, navigation</li>
+                    <li><strong>House-Holding:</strong> Physical task simulation (ALFWorld)</li>
+                </ul>
+
+                <h3 class="subsection-title">7.2 Berkeley Function-Calling Leaderboard</h3>
+                <p class="research-text">
+                    BFCL evaluates tool-use skills specifically:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Scale:</strong> 2K question-function-answer pairs</li>
+                    <li><strong>Languages:</strong> Python, Java, JavaScript, REST</li>
+                    <li><strong>Scenarios:</strong> Single function, parallel calls, multi-function selection</li>
+                    <li><strong>Key metric:</strong> Function relevance detection (rejecting irrelevant tools)</li>
+                </ul>
+
+                <h3 class="subsection-title">7.3 Evaluation Challenges</h3>
+                <ul class="research-list">
+                    <li><strong>Non-deterministic paths:</strong> Agents take different valid routes to goals</li>
+                    <li><strong>Multi-turn complexity:</strong> Skills compose across extended interactions</li>
+                    <li><strong>Ground truth scarcity:</strong> Complex workflows lack clear success criteria</li>
+                    <li><strong>LLM-as-judge limitations:</strong> Edge cases missed; human evaluation remains essential</li>
+                </ul>
+            </section>
+
+            <!-- Office Applications -->
+            <section class="research-section">
+                <h2 class="section-title">8. Office Agent Skill Applications</h2>
+
+                <div class="application-grid">
+                    <div class="app-card">
+                        <h4>Email Skill Suite</h4>
+                        <p>Read, categorize, prioritize, draft, route emails. Skills: spam detection, action extraction, response generation, meeting scheduling.</p>
+                        <span class="app-tag">Communication workflow</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Document Skill Suite</h4>
+                        <p>Parse, summarize, extract, compare, generate documents. Skills: contract review, report compilation, template matching, compliance check.</p>
+                        <span class="app-tag">Information processing</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Calendar Skill Suite</h4>
+                        <p>Schedule, optimize, remind, coordinate calendars. Skills: conflict resolution, timezone handling, multi-party coordination, smart reminders.</p>
+                        <span class="app-tag">Time management</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Data Skill Suite</h4>
+                        <p>Query, analyze, visualize, report data. Skills: SQL generation, statistical analysis, dashboard creation, insight extraction.</p>
+                        <span class="app-tag">Analytics workflow</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Research Skill Suite</h4>
+                        <p>Search, aggregate, synthesize, cite information. Skills: web search, source verification, knowledge integration, bibliography generation.</p>
+                        <span class="app-tag">Knowledge work</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Code Skill Suite</h4>
+                        <p>Generate, review, debug, refactor code. Skills: syntax check, security scan, optimization, documentation.</p>
+                        <span class="app-tag">Development workflow</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Challenges -->
+            <section class="research-section">
+                <h2 class="section-title">9. Challenges & Open Problems</h2>
+
+                <ul class="research-list">
+                    <li><strong>Skill Interoperability:</strong> Cross-framework skill sharing remains fragmented; MCP addresses but hasn't solved</li>
+                    <li><strong>Skill Verification:</strong> How to validate skill correctness across edge cases without exhaustive testing</li>
+                    <li><strong>Dynamic Loading:</strong> Runtime skill acquisition requires security frameworks to prevent malicious injection</li>
+                    <li><strong>Skill Conflicts:</strong> Multiple skills with overlapping capabilities; arbitration mechanisms needed</li>
+                    <li><strong>Context Limits:</strong> Skill definitions consume context; large skill libraries hit token budgets</li>
+                    <li><strong>Skill Debugging:</strong> When composite skills fail, pinpointing failure point is non-trivial</li>
+                    <li><strong>Versioning:</strong> Skill updates without breaking existing agent configurations</li>
+                    <li><strong>Skill Marketplace:</strong> Sharing, monetizing, curating skills lacks standardized infrastructure</li>
+                </ul>
+            </section>
+
+            <!-- Future Directions -->
+            <section class="research-section">
+                <h2 class="section-title">10. Future Directions</h2>
+
+                <ul class="research-list">
+                    <li><strong>Standardized Skill Protocols:</strong> MCP and A2A (Agent-to-Agent) emerging for cross-platform interoperability</li>
+                    <li><strong>Skill Marketplaces:</strong> Shareable, versioned, curated skill libraries—commoditizing agent capabilities</li>
+                    <li><strong>Dynamic Skill Acquisition:</strong> Agents learning new skills on-demand through exploration and feedback</li>
+                    <li><strong>Specialized Skill Models:</strong> Fine-tuning smaller models for specific skill types (researcher, coder, analyst)</li>
+                    <li><strong>Skill Compression:</strong> Efficient skill representation within limited context windows</li>
+                    <li><strong>Neuro-symbolic Skills:</strong> Combining LLM flexibility with deterministic logic for reliability</li>
+                    <li><strong>Skill Verification Frameworks:</strong> Automated testing, certification, safety validation</li>
+                    <li><strong>Office Skill Standards:</strong> Industry-specific skill specifications for enterprise deployment</li>
+                </ul>
+            </section>
+
+            <!-- Key Papers -->
+            <section class="research-section">
+                <h2 class="section-title">11. Key Papers & Resources (2024-2025)</h2>
+
+                <div class="paper-list">
+                    <div class="paper-item">
+                        <span class="paper-venue">Meta AI 2023</span>
+                        <p class="paper-title">Toolformer: Language Models Can Teach Themselves to Use Tools</p>
+                        <p class="paper-authors">Schick et al.</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">Berkeley 2024</span>
+                        <p class="paper-title">Gorilla: Large Language Model Connected with Massive APIs</p>
+                        <p class="paper-authors">Patil et al.</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">Princeton/Google 2022</span>
+                        <p class="paper-title">ReAct: Synergizing Reasoning and Acting in Language Models</p>
+                        <p class="paper-authors">Yao et al.</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">ICLR 2024</span>
+                        <p class="paper-title">AgentBench: Evaluating LLMs as Agents</p>
+                        <p class="paper-authors">Liu et al. (THUDM)</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">Anthropic 2025</span>
+                        <p class="paper-title">Model Context Protocol: Open Standard for AI-Data Connections</p>
+                        <p class="paper-authors">Anthropic Engineering</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">Microsoft 2024</span>
+                        <p class="paper-title">Semantic Kernel: Enterprise AI Orchestration</p>
+                        <p class="paper-authors">Microsoft Research</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- References -->
+            <section class="research-section">
+                <h2 class="section-title">12. References</h2>
+                <ul class="ref-list">
+                    <li><a href="https://modelcontextprotocol.io/introduction">MCP: Model Context Protocol Introduction</a></li>
+                    <li><a href="https://openai.github.io/openai-agents-python/">OpenAI Agents SDK Documentation</a></li>
+                    <li><a href="https://docs.langchain.com/langgraph">LangGraph: Stateful Agent Orchestration</a></li>
+                    <li><a href="https://docs.crewai.com/">CrewAI: Multi-Agent Framework</a></li>
+                    <li><a href="https://learn.microsoft.com/en-us/semantic-kernel/">Semantic Kernel: Microsoft AI SDK</a></li>
+                    <li><a href="https://gorilla.cs.berkeley.edu/">Gorilla LLM: API Calling Specialist</a></li>
+                    <li><a href="https://arxiv.org/abs/2302.04761">Toolformer Paper (arxiv)</a></li>
+                    <li><a href="https://github.com/THUDM/AgentBench">AgentBench: LLM-as-Agent Benchmark</a></li>
+                </ul>
+            </section>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Office AI Agent Lab</p>
+        </div>
+    </footer>
+</body>
+</html>

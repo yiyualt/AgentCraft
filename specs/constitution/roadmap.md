@@ -43,7 +43,17 @@
 - [ ] Agent-driven Web UI (完整交互)
 - [x] Lab Website ✅ 首页、团队、论文等页面完成
 
-## Phase 6: Agent 构建 App
+## Phase 7: Agent增强 (规划中)
+
+- [ ] Fork机制 - context继承 + cache共享
+- [ ] Auto-compaction - 防止context爆炸
+- [ ] Token Budget追踪
+- [ ] 多层错误恢复
+- [ ] Permission系统
+- [ ] Hooks系统
+- [ ] Goal Command - 可衡量目标追踪（Stop hook机制）
+
+## Phase 8: Agent构建 App
 
 - [ ] 用 AgentCraft 自身去生成一个实际应用
 - [ ] 验证整个闭环

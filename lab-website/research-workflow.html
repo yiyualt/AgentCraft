@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Deep Research: Office Workflow Automation - Office AI Agent Lab</title>
+    <title>Deep Research: Agent Procedural Memory & Long-Horizon Execution - Office AI Agent Lab</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -23,381 +23,478 @@
 
     <main class="main-content">
         <div class="container">
-            <h1 class="page-title">Deep Research: Office Workflow Automation</h1>
-            <p class="research-meta">Last Updated: May 2025 | Focus: AI-Driven Office Process Automation</p>
+            <h1 class="page-title">Deep Research: Agent Procedural Memory & Long-Horizon Execution</h1>
+            <p class="research-meta">Last Updated: May 2025 | Focus: Memory Architecture, State Persistence, Task Continuity</p>
 
             <!-- Overview -->
             <section class="research-section">
                 <h2 class="section-title">1. Overview</h2>
                 <p class="research-text">
-                    Office workflow automation represents the convergence of traditional Business Process Automation (BPA), Robotic Process Automation (RPA), and modern AI Agent technologies. With LLM-powered agents capable of understanding context, reasoning, and making decisions, office automation has evolved from simple rule-based scripting to intelligent, adaptive systems.
+                    Procedural Memory refers to an agent's ability to store, retrieve, and reuse "how-to" knowledge—learned procedures for accomplishing tasks. Unlike episodic memory (what happened) or semantic memory (what facts are true), procedural memory captures <strong>executable knowledge</strong>: the sequence of actions, decision points, and recovery strategies needed to complete complex, multi-step tasks.
                 </p>
                 <p class="research-text">
-                    Stanford SALT Lab's research reveals that <strong>80% of U.S. workers</strong> may see LLMs affect at least 10% of their tasks, with AI tools already in active use for at least 25% of tasks in 36% of occupations (2025). This signals a fundamental shift in how office work will be performed.
+                    LLMs excel at reasoning but struggle with <strong>long-horizon execution</strong>: tasks requiring sustained state management, checkpoint recovery, and memory persistence beyond context window limits. A single office workflow may span hours, involve dozens of intermediate steps, and require resumption after interruption—scenarios where naive LLM agents fail.
                 </p>
                 <div class="key-stat">
-                    <span class="stat-highlight">Key Finding:</span>
-                    For <strong>46.1%</strong> of occupational tasks, workers express positive attitude toward AI agent automation, even after considering concerns like job loss. The primary motivation: "freeing up time for high-value work" (69.4%).
+                    <span class="stat-highlight">Core Problem:</span>
+                    LLM context windows (~200K tokens) cannot hold full execution history for long-running tasks. Procedural memory architectures (MemGPT, LEGOMem, Generative Agents) provide mechanisms to <strong>store experiences externally</strong>, <strong>retrieve relevant procedures</strong>, and <strong>resume execution from checkpoints</strong>—enabling agents that "learn how to work" over time.
                 </div>
             </section>
 
-            <!-- Evolution of Automation -->
+            <!-- Memory Types -->
             <section class="research-section">
-                <h2 class="section-title">2. Evolution: From RPA to Agentic Workflows</h2>
+                <h2 class="section-title">2. Memory Type Taxonomy for Agents</h2>
 
-                <div class="timeline">
-                    <div class="timeline-item">
-                        <h4>RPA Era (2010s)</h4>
-                        <p>Rule-based automation of repetitive tasks. Software robots mimicking human UI interactions. Limited to structured, predictable processes.</p>
-                        <span class="timeline-tag">Structured | Rules-based</span>
-                    </div>
-                    <div class="timeline-item">
-                        <h4>Intelligent Process Automation (IPA)</h4>
-                        <p>RPA + AI components (OCR, NLP, ML). Handling semi-structured data and simple decisions.</p>
-                        <span class="timeline-tag">Semi-structured | ML-enhanced</span>
-                    </div>
-                    <div class="timeline-item">
-                        <h4>Single AI Agent Era (2023-2024)</h4>
-                        <p>One LLM with tools attempting full autonomy. "Runaway agents" promised to handle complex multi-step tasks. Industry benchmarks showed <strong>14-30% reliability</strong> at best.</p>
-                        <span class="timeline-tag">Autonomous | Unpredictable</span>
-                    </div>
-                    <div class="timeline-item">
-                        <h4>Agentic Workflows (2025+)</h4>
-                        <p>Structured systems of specialized agents working together within clear boundaries. Conditional logic, human-in-the-loop checkpoints, and governance by design.</p>
-                        <span class="timeline-tag">Orchestrated | Governed</span>
-                    </div>
-                </div>
-
-                <h3 class="subsection-title">2.1 Why Single Agents Failed</h3>
+                <h3 class="subsection-title">2.1 Cognitive Memory Architecture</h3>
                 <p class="research-text">
-                    Kore.ai's analysis reveals the gap between promise and reality:
+                    Human cognitive science distinguishes three memory systems, adapted for agent architectures:
                 </p>
-                <ul class="research-list">
-                    <li>Claude's Computer Use: <strong>14%</strong> of human task performance</li>
-                    <li>OpenAI's Operator: <strong>30-50%</strong> success on web-based tasks</li>
-                    <li>Most open-source frameworks: <strong>20-30%</strong> reliability</li>
-                </ul>
-                <p class="research-text">
-                    The problem wasn't intelligence—it was <em>lack of structure</em>. Unbounded freedom proved costly and unpredictable. Agentic workflows solve this by introducing connected, purpose-built agents operating through conditional logic.
-                </p>
-            </section>
-
-            <!-- Core Office Scenarios -->
-            <section class="research-section">
-                <h2 class="section-title">3. Core Office Automation Scenarios</h2>
-
                 <div class="scenario-grid">
                     <div class="scenario-card">
-                        <div class="scenario-icon">📧</div>
-                        <h4>Email Management</h4>
-                        <p>Reading, categorizing, prioritizing emails. Drafting responses. Extracting action items. Routing to appropriate recipients.</p>
-                        <div class="scenario-examples">
-                            <span>Auto-reply drafting</span>
-                            <span>Spam detection</span>
-                            <span>Meeting extraction</span>
-                        </div>
-                    </div>
-                    <div class="scenario-card">
                         <div class="scenario-icon">📅</div>
-                        <h4>Calendar & Scheduling</h4>
-                        <p>Meeting scheduling across time zones. Conflict resolution. Reminder management. Calendar optimization.</p>
+                        <h4>Episodic Memory</h4>
+                        <p>Records specific events: "On May 10, I drafted email X for user Y." Temporal context preserved. Useful for experience replay, debugging execution traces.</p>
                         <div class="scenario-examples">
-                            <span>Cross-timezone coordination</span>
-                            <span>Multi-executive scheduling</span>
-                            <span>Smart reminders</span>
+                            <span>Event logs</span>
+                            <span>Execution trace</span>
+                            <span>Session history</span>
                         </div>
                     </div>
                     <div class="scenario-card">
-                        <div class="scenario-icon">📄</div>
-                        <h4>Document Processing</h4>
-                        <p>Document understanding, summarization, extraction. Version control. Template generation. Compliance checking.</p>
+                        <div class="scenario-icon">📚</div>
+                        <h4>Semantic Memory</h4>
+                        <p>Stores facts independent of when learned: "Company policy requires manager approval for expenses >$500." Knowledge base, RAG corpus. No temporal context.</p>
                         <div class="scenario-examples">
-                            <span>Contract review</span>
-                            <span>Report generation</span>
-                            <span>Data extraction</span>
+                            <span>Knowledge base</span>
+                            <span>RAG documents</span>
+                            <span>Policy rules</span>
                         </div>
                     </div>
                     <div class="scenario-card">
-                        <div class="scenario-icon">📊</div>
-                        <h4>Data Entry & Reporting</h4>
-                        <p>Form filling, spreadsheet updates. Data validation. Report compilation. Dashboard generation.</p>
+                        <div class="scenario-icon">⚙️</div>
+                        <h4>Procedural Memory</h4>
+                        <p>Encodes how to perform tasks: "To schedule meeting: check calendar → find slots → send invites → confirm." Skill sequences, workflow patterns, execution recipes.</p>
                         <div class="scenario-examples">
-                            <span>CRM updates</span>
-                            <span>Expense reports</span>
-                            <span>Analytics dashboards</span>
-                        </div>
-                    </div>
-                    <div class="scenario-card">
-                        <div class="scenario-icon">👥</div>
-                        <h4>Communication & Coordination</h4>
-                        <p>Team notifications. Status updates. Meeting notes. Cross-team coordination.</p>
-                        <div class="scenario-examples">
-                            <span>Slack/Teams integration</span>
-                            <span>Meeting summaries</span>
-                            <span>Project tracking</span>
-                        </div>
-                    </div>
-                    <div class="scenario-card">
-                        <div class="scenario-icon">🔍</div>
-                        <h4>Research & Information</h4>
-                        <p>Web searches, competitor analysis. Market research. Information synthesis.</p>
-                        <div class="scenario-examples">
-                            <span>Competitor monitoring</span>
-                            <span>Industry reports</span>
-                            <span>Knowledge retrieval</span>
+                            <span>Task recipes</span>
+                            <span>Workflow patterns</span>
+                            <span>Skill sequences</span>
                         </div>
                     </div>
                 </div>
-            </section>
 
-            <!-- Human-Agent Collaboration -->
-            <section class="research-section">
-                <h2 class="section-title">4. Human-Agent Collaboration Model</h2>
-
-                <h3 class="subsection-title">4.1 Human Agency Scale (HAS)</h3>
-                <p class="research-text">
-                    Stanford SALT Lab introduces the Human Agency Scale (H1-H5) to quantify the degree of human involvement:
-                </p>
-
+                <h3 class="subsection-title">2.2 Memory Hierarchy by Duration</h3>
                 <div class="has-scale">
                     <div class="has-item">
-                        <span class="has-level">H1</span>
-                        <span class="has-desc">Full Automation: AI handles task end-to-end</span>
+                        <span class="has-level">L1</span>
+                        <span class="has-desc"><strong>Working Memory:</strong> Current execution context. Limited to context window. Active task state, immediate observations. Transient.</span>
                     </div>
                     <div class="has-item">
-                        <span class="has-level">H2</span>
-                        <span class="has-desc">AI-Led: AI主导, human reviews outcomes</span>
+                        <span class="has-level">L2</span>
+                        <span class="has-desc"><strong>Session Memory:</strong> Short-term storage for current conversation/task. Preserved across turns within session. Clear on new session or persisted.</span>
                     </div>
                     <div class="has-item">
-                        <span class="has-level">H3</span>
-                        <span class="has-desc highlight">Equal Partnership: Human and AI collaborate equally</span>
+                        <span class="has-level">L3</span>
+                        <span class="has-desc highlight"><strong>Archival Memory:</strong> Long-term storage beyond context limits. Vector databases, knowledge graphs. Retrieved via semantic search when needed.</span>
                     </div>
                     <div class="has-item">
-                        <span class="has-level">H4</span>
-                        <span class="has-desc">Human-Led: Human主导, AI assists</span>
-                    </div>
-                    <div class="has-item">
-                        <span class="has-level">H5</span>
-                        <span class="has-desc">Human Essential: AI provides information only</span>
+                        <span class="has-level">L4</span>
+                        <span class="has-desc"><strong>Procedural Memory:</strong> Learned task patterns stored independently. Retrieved by task type, not content similarity. Enables task replay.</span>
                     </div>
                 </div>
 
-                <div class="key-finding">
-                    <strong>Key Finding:</strong> H3 (Equal Partnership) emerges as the dominant worker-desired level in <strong>47 out of 104</strong> occupations. Workers prefer higher human agency than experts deem technologically necessary on 47.5% of tasks.
-                </div>
-
-                <h3 class="subsection-title">4.2 Worker Concerns</h3>
-                <p class="research-text">
-                    Understanding resistance is critical for successful deployment:
-                </p>
-                <ul class="research-list">
-                    <li><strong>Lack of trust (45%):</strong> Workers don't believe AI can perform tasks reliably</li>
-                    <li><strong>Job replacement fear (23%):</strong> Concern about losing employment</li>
-                    <li><strong>Absence of human touch (16.3%):</strong> Tasks requiring interpersonal connection</li>
-                </ul>
-            </section>
-
-            <!-- Task Classification -->
-            <section class="research-section">
-                <h2 class="section-title">5. Task Classification Framework</h2>
-
-                <p class="research-text">
-                    Stanford's desire-capability landscape classifies tasks into four zones:
-                </p>
-
-                <div class="zone-grid">
-                    <div class="zone-card green">
-                        <h4>🟢 Automation "Green Light" Zone</h4>
-                        <p>High desire + High capability. Prime candidates for deployment. Examples: data entry, routine reporting, calendar scheduling.</p>
-                    </div>
-                    <div class="zone-card red">
-                        <h4>🔴 Automation "Red Light" Zone</h4>
-                        <p>High capability + Low desire. Caution needed—may face worker resistance. Examples: creative tasks, client relationships.</p>
-                    </div>
-                    <div class="zone-card blue">
-                        <h4>🔵 R&D Opportunity Zone</h4>
-                        <p>High desire + Low capability. Promising research directions. Examples: complex reasoning, nuanced communication.</p>
-                    </div>
-                    <div class="zone-card gray">
-                        <h4>⚫ Low Priority Zone</h4>
-                        <p>Low desire + Low capability. Not suitable for automation investment.</p>
-                    </div>
-                </div>
-
-                <h3 class="subsection-title">5.1 Investment Misalignment</h3>
-                <p class="research-text">
-                    Analysis of Y Combinator companies reveals a critical mismatch: <strong>41% of investments</strong> are in Low Priority and Red Light zones, while many Green Light and Opportunity zone tasks remain under-addressed.
-                </p>
-            </section>
-
-            <!-- Key Technologies -->
-            <section class="research-section">
-                <h2 class="section-title">6. Key Technologies & Tools</h2>
-
-                <div class="tech-table">
+                <h3 class="subsection-title">2.3 Procedural vs Other Memory Types</h3>
+                <div class="framework-table">
                     <table>
                         <thead>
                             <tr>
-                                <th>Category</th>
-                                <th>Tools/Platforms</th>
+                                <th>Aspect</th>
+                                <th>Episodic</th>
+                                <th>Semantic</th>
+                                <th>Procedural</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Content</strong></td>
+                                <td>Events with timestamps</td>
+                                <td>Facts, concepts</td>
+                                <td>Action sequences, procedures</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Retrieval</strong></td>
+                                <td>By time, context</td>
+                                <td>By semantic similarity</td>
+                                <td>By task type, goal</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Update</strong></td>
+                                <td>Append new events</td>
+                                <td>Update facts, merge</td>
+                                <td>Refine procedures, add variants</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Application</strong></td>
+                                <td>Experience replay, debugging</td>
+                                <td>Knowledge grounding</td>
+                                <td>Task execution, skill transfer</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Procedural Memory Frameworks -->
+            <section class="research-section">
+                <h2 class="section-title">3. Procedural Memory Frameworks</h2>
+
+                <h3 class="subsection-title">3.1 LEGOMem: Modular Procedural Memory</h3>
+                <p class="research-text">
+                    LEGOMem (arxiv 2510.04851) proposes modular procedural memory for long-horizon task planning. Three components:
+                </p>
+                <div class="pattern-grid">
+                    <div class="pattern-card">
+                        <h4>Procedural Memory Module</h4>
+                        <p>Stores and retrieves task-relevant experiences. Organizes procedures by task type, enabling reuse across similar goals. Modular design allows independent updates.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Task Decomposition Module</h4>
+                        <p>Breaks complex tasks into subtasks using stored procedures. Hierarchical decomposition: high-level goal → subgoals → action sequences. Generalizes to novel tasks.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Execution Monitoring Module</h4>
+                        <p>Tracks progress, detects failures, triggers recovery. Compares expected vs actual state. Enables procedural refinement from execution feedback.</p>
+                    </div>
+                </div>
+                <p class="research-text">
+                    Evaluated on VirtualHome and Office benchmarks. Key finding: <strong>modular procedural memory significantly improves task success rate and generalization</strong> compared to monolithic memory approaches.
+                </p>
+
+                <h3 class="subsection-title">3.2 Generative Agents (Stanford)</h3>
+                <p class="research-text">
+                    Park et al. (2023) architecture extends LLMs with three memory operations:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Memory Stream:</strong> Complete record of agent experiences in natural language. Chronological log of observations, actions, interactions.</li>
+                    <li><strong>Reflection:</strong> Synthesize memories into higher-level insights. "What did I learn from today's tasks?" Extracts patterns from episodic data.</li>
+                    <li><strong>Retrieval:</strong> Dynamically fetch relevant memories for current context. Importance-weighted, recency-weighted, relevance-weighted scoring.</li>
+                </ul>
+                <div class="key-finding">
+                    <strong>Emergent Behavior:</strong> Agents autonomously planned a Valentine's Day party—spreading invitations, coordinating timing, forming opinions about others—all from memory-driven planning without explicit instructions.
+                </div>
+
+                <h3 class="subsection-title">3.3 MemGPT / Letta: Virtual Context Management</h3>
+                <p class="research-text">
+                    MemGPT (now Letta) manages memory hierarchy to extend effective context beyond LLM window limits:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Core Context:</strong> Main context window. Active conversation, current task state. Limited capacity.</li>
+                    <li><strong>Archival Memory:</strong> External storage (vector DB). Agent autonomously swaps content between core and archival. Self-directed memory management.</li>
+                    <li><strong>Recall Memory:</strong> Retrieval queue. Fetches relevant archived content into context when needed.</li>
+                </ul>
+                <p class="research-text">
+                    Key innovation: <strong>agent controls its own memory</strong>—decides what to remember, what to archive, what to recall. Enables long-running sessions without manual memory curation.
+                </p>
+            </section>
+
+            <!-- Long-Horizon Execution -->
+            <section class="research-section">
+                <h2 class="section-title">4. Long-Horizon Execution Architecture</h2>
+
+                <h3 class="subsection-title">4.1 The Execution Continuity Problem</h3>
+                <p class="research-text">
+                    Long-horizon tasks (multi-hour workflows, complex office procedures) face three continuity challenges:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Context overflow:</strong> Execution history exceeds context window. Earlier steps "forgotten" as new actions accumulate.</li>
+                    <li><strong>Intervention recovery:</strong> User pauses agent, restarts later. How to resume from mid-execution state?</li>
+                    <li><strong>Failure recovery:</strong> Action fails at step N. Need to retry or pivot without restarting from step 1.</li>
+                </ul>
+
+                <h3 class="subsection-title">4.2 State Persistence & Checkpointing</h3>
+                <p class="research-text">
+                    LangGraph provides durable execution through checkpointing:
+                </p>
+                <div class="framework-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Checkpointer</th>
+                                <th>Storage</th>
                                 <th>Use Case</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr>
-                                <td><strong>Workflow Builders</strong></td>
-                                <td>n8n, Zapier, Make.com</td>
-                                <td>No-code workflow orchestration</td>
+                                <td><strong>MemorySaver</strong></td>
+                                <td>In-memory</td>
+                                <td>Testing, short sessions</td>
                             </tr>
                             <tr>
-                                <td><strong>Agent Frameworks</strong></td>
-                                <td>LangChain, CrewAI, AutoGen</td>
-                                <td>Building intelligent agents</td>
+                                <td><strong>SqliteSaver</strong></td>
+                                <td>SQLite database</td>
+                                <td>Local persistence, development</td>
                             </tr>
                             <tr>
-                                <td><strong>RPA Platforms</strong></td>
-                                <td>UiPath, Automation Anywhere</td>
-                                <td>UI-level automation</td>
+                                <td><strong>PostgresSaver</strong></td>
+                                <td>PostgreSQL</td>
+                                <td>Production, multi-thread</td>
                             </tr>
                             <tr>
-                                <td><strong>Office APIs</strong></td>
-                                <td>Microsoft Graph, Google Workspace</td>
-                                <td>Email, calendar, documents</td>
-                            </tr>
-                            <tr>
-                                <td><strong>Communication</strong></td>
-                                <td>Slack API, Teams, Discord</td>
-                                <td>Team coordination</td>
-                            </tr>
-                            <tr>
-                                <td><strong>Document AI</strong></td>
-                                <td>Document Understanding, OCR</td>
-                                <td>Text extraction, analysis</td>
+                                <td><strong>RedisSaver</strong></td>
+                                <td>Redis</td>
+                                <td>Distributed, high-throughput</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-
-                <h3 class="subsection-title">6.1 Microsoft Build 2025 Vision</h3>
                 <p class="research-text">
-                    Microsoft announced "The Age of AI Agents" with advancements in reasoning and memory. Key initiatives include the <strong>Open Agentic Web</strong>—building interoperable agent ecosystems with standardized protocols (MCP, A2A).
+                    Each execution step saves state. Enables: <strong>resume from checkpoint</strong>, <strong>time-travel debugging</strong>, <strong>branch alternate paths</strong>, <strong>human approval pauses</strong>.
                 </p>
-            </section>
 
-            <!-- Best Practices -->
-            <section class="research-section">
-                <h2 class="section-title">7. Implementation Best Practices</h2>
-
-                <ul class="best-practice-list">
-                    <li>
-                        <strong>Start with Green Light tasks.</strong> Focus on tasks where workers want automation and technology is ready.
-                    </li>
-                    <li>
-                        <strong>Design for H3 (Equal Partnership).</strong> Most workers prefer collaborative AI, not full replacement.
-                    </li>
-                    <li>
-                        <strong>Use agentic workflows, not single agents.</strong> Structured orchestration delivers reliability.
-                    </li>
-                    <li>
-                        <strong>Implement human-in-the-loop checkpoints.</strong> Critical decisions need human oversight.
-                    </li>
-                    <li>
-                        <strong>Build execution traces and rollback points.</strong> Enable debugging and error recovery.
-                    </li>
-                    <li>
-                        <strong>Measure ROI: 30-200% first year possible.</strong> But only with right platform choice.
-                    </li>
-                    <li>
-                        <strong>Address worker concerns upfront.</strong> Transparency reduces resistance.
-                    </li>
-                    <li>
-                        <strong>Parallelize specialized agents.</strong> Microsoft AsyncThink reduced latency 28%.
-                    </li>
+                <h3 class="subsection-title">4.3 Execution Trace as Procedural Memory</h3>
+                <p class="research-text">
+                    Successful execution traces become procedural memory. Future similar tasks retrieve stored trace, adapt to new context, execute efficiently:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Trace recording:</strong> Log each action, state change, decision point</li>
+                    <li><strong>Trace abstraction:</strong> Extract reusable procedure from specific execution (remove task-specific details)</li>
+                    <li><strong>Trace retrieval:</strong> Match current goal to stored procedures, fetch relevant template</li>
+                    <li><strong>Trace adaptation:</strong> Parameterize procedure for new task specifics</li>
                 </ul>
+
+                <h3 class="subsection-title">4.4 Failure Recovery Mechanisms</h3>
+                <div class="pattern-grid">
+                    <div class="pattern-card">
+                        <h4>Retry with Variation</h4>
+                        <p>Same goal, different approach. Modify parameters, switch tools, adjust strategy. Learn from failure—procedure refined for future.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Checkpoint Rollback</h4>
+                        <p>Restore state from last successful checkpoint. Re-execute from safe point. Avoids cascading failure propagation.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Subtask Decomposition</h4>
+                        <p>Break failing task into smaller steps. Execute each independently, combine results. Reduces failure blast radius.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Human Escalation</h4>
+                        <p>When recovery exhausted, pause for user intervention. Present failure context, request guidance. User input feeds into procedure update.</p>
+                    </div>
+                </div>
             </section>
 
-            <!-- Future Skills -->
+            <!-- Memory Management -->
             <section class="research-section">
-                <h2 class="section-title">8. Future of Human Skills</h2>
+                <h2 class="section-title">5. Memory Management Mechanisms</h2>
 
+                <h3 class="subsection-title">5.1 Memory Consolidation</h3>
                 <p class="research-text">
-                    Stanford's analysis reveals a potential shift in valued human competencies:
+                    Transferring experiences from short-term to long-term storage. Inspired by human sleep-based consolidation:
                 </p>
+                <ul class="research-list">
+                    <li><strong>Importance scoring:</strong> Weight memories by task success, user feedback, frequency of retrieval</li>
+                    <li><strong>Summarization:</strong> Compress verbose episodic records into compact semantic/procedural representations</li>
+                    <li><strong>Pattern extraction:</strong> Identify recurring sequences across episodes → procedural memory candidates</li>
+                    <li><strong>Batch processing:</strong> Consolidation runs periodically, not per-action (analogous to sleep cycles)</li>
+                </ul>
 
-                <div class="skills-shift">
-                    <div class="skill-item declining">
-                        <h4>📉 Shrinking Demand</h4>
-                        <ul>
-                            <li>Information processing</li>
-                            <li>Data analysis</li>
-                            <li>Knowledge updating</li>
-                        </ul>
+                <h3 class="subsection-title">5.2 Forgetting Mechanisms</h3>
+                <p class="research-text">
+                    Controlled forgetting enables efficient memory usage:
+                </p>
+                <div class="pattern-grid">
+                    <div class="pattern-card">
+                        <h4>Decay-Based</h4>
+                        <p>Memory importance decreases over time. Rarely accessed memories fade. Access restores importance. Mimics human forgetting curves.</p>
                     </div>
-                    <div class="skill-item growing">
-                        <h4>📈 Growing Emphasis</h4>
-                        <ul>
-                            <li>Interpersonal skills</li>
-                            <li>Coordination abilities</li>
-                            <li>Organizational skills</li>
-                            <li>Decision-making</li>
-                            <li>Quality judgment</li>
-                        </ul>
+                    <div class="pattern-card">
+                        <h4>Interference-Based</h4>
+                        <p>New memories overwrite conflicting old ones. Updated procedures replace deprecated versions. Keeps memory current.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Priority-Based</h4>
+                        <p>Explicit importance ranking. Low-priority memories purged when storage limits hit. User can mark memories as important.</p>
+                    </div>
+                    <div class="pattern-card">
+                        <h4>Task-Specific</h4>
+                        <p>Memories tied to specific task types. Obsolete tasks trigger memory purge. Prevents irrelevant procedure retrieval.</p>
                     </div>
                 </div>
 
+                <h3 class="subsection-title">5.3 Memory Retrieval Strategies</h3>
+                <ul class="research-list">
+                    <li><strong>Recency-weighted:</strong> Recent memories prioritized. Current context more relevant than distant history.</li>
+                    <li><strong>Importance-weighted:</strong> High-scoring memories fetched first. Successes, user-approved actions weighted higher.</li>
+                    <li><strong>Relevance-weighted:</strong> Semantic similarity to current goal. Embeddings match task description to stored procedures.</li>
+                    <li><strong>Hybrid scoring:</strong> Combine recency + importance + relevance. Generative Agents uses three-factor scoring.</li>
+                </ul>
+            </section>
+
+            <!-- Procedural Learning -->
+            <section class="research-section">
+                <h2 class="section-title">6. Procedural Knowledge Acquisition</h2>
+
+                <h3 class="subsection-title">6.1 Learning from Execution</h3>
                 <p class="research-text">
-                    This shift suggests that human value in office work will increasingly derive from <em>judgment, coordination, and interpersonal connection</em>—areas where AI agents currently struggle.
+                    Agents acquire procedural knowledge through execution experience:
                 </p>
+                <ul class="research-list">
+                    <li><strong>Success encoding:</strong> Completed task sequences stored as procedure templates</li>
+                    <li><strong>Failure refinement:</strong> Failed executions annotated with recovery strategies—procedures include fallback paths</li>
+                    <li><strong>User correction:</strong> Explicit corrections shape procedure: "Don't send before approval" → procedure modified</li>
+                    <li><strong>Reflection:</strong> Agent synthesizes patterns across multiple executions: "This step often fails, add checkpoint"</li>
+                </ul>
+
+                <h3 class="subsection-title">6.2 Procedure Generalization</h3>
+                <p class="research-text">
+                    Learned procedures generalize to new contexts:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Parameterization:</strong> Extract variable parts from procedure: "Draft email to [recipient] about [topic]"</li>
+                    <li><strong>Abstraction:</strong> Remove task-specific details, keep structure: "Check calendar → propose slots → confirm"</li>
+                    <li><strong>Composition:</strong> Combine procedures: Email procedure + Calendar procedure = Meeting scheduling</li>
+                    <li><strong>Transfer:</strong> Apply procedure to similar domain: Meeting scheduling → Event planning</li>
+                </ul>
+
+                <h3 class="subsection-title">6.3 Procedure Verification</h3>
+                <p class="research-text">
+                    Learned procedures must be validated before storage:
+                </p>
+                <ul class="research-list">
+                    <li><strong>Execution testing:</strong> Replay procedure on similar tasks, verify success rate</li>
+                    <li><strong>User approval:</strong> Critical procedures require human confirmation before permanent storage</li>
+                    <li><strong>Conflict detection:</strong> Check if new procedure conflicts with existing stored knowledge</li>
+                    <li><strong>Versioning:</strong> Store procedure variants, not overwrite. Allow rollback to previous versions.</li>
+                </ul>
+            </section>
+
+            <!-- Office Applications -->
+            <section class="research-section">
+                <h2 class="section-title">7. Office Agent Procedural Memory Applications</h2>
+
+                <div class="application-grid">
+                    <div class="app-card">
+                        <h4>Recurring Meeting Scheduling</h4>
+                        <p>Procedure: check participants' calendars → identify common slots → propose options → confirm → send invites. Learned from first execution, reused for weekly meetings.</p>
+                        <span class="app-tag">Pattern reuse</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Expense Report Processing</h4>
+                        <p>Procedure: collect receipts → categorize → check policy → flag exceptions → submit → await approval. Recovery: policy violation → request justification → resubmit.</p>
+                        <span class="app-tag">Failure recovery embedded</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Document Review Workflow</h4>
+                        <p>Procedure: receive document → check formatting → extract key sections → compare to template → flag deviations → generate review summary. Checkpoint after each section.</p>
+                        <span class="app-tag">Checkpoint per section</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Project Status Reporting</h4>
+                        <p>Procedure: query task tracker → extract overdue items → check blockers → compile status → draft report → route to stakeholders. Weekly execution builds refined procedure.</p>
+                        <span class="app-tag">Iterative refinement</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Client Inquiry Response</h4>
+                        <p>Procedure: classify inquiry type → retrieve relevant knowledge → draft response → check tone guidelines → send or escalate. High-stakes queries trigger human checkpoint.</p>
+                        <span class="app-tag">Conditional checkpoint</span>
+                    </div>
+                    <div class="app-card">
+                        <h4>Onboarding Document Generation</h4>
+                        <p>Procedure: collect employee info → select template → customize sections → add policies → review with HR → deliver to employee. Complex, multi-day execution with persistence.</p>
+                        <span class="app-tag">Long-horizon with persistence</span>
+                    </div>
+                </div>
+
+                <h3 class="subsection-title">7.1 Office Procedural Memory Benefits</h3>
+                <ul class="research-list">
+                    <li><strong>Efficiency:</strong> Learned procedures execute faster than reasoning from scratch each time</li>
+                    <li><strong>Consistency:</strong> Same task produces similar outcomes; reduces variability</li>
+                    <li><strong>Recovery:</strong> Failure paths embedded in procedure; graceful degradation</li>
+                    <li><strong>Transfer:</strong> New employees benefit from team's accumulated procedural knowledge</li>
+                </ul>
+            </section>
+
+            <!-- Challenges -->
+            <section class="research-section">
+                <h2 class="section-title">8. Challenges & Open Problems</h2>
+
+                <ul class="research-list">
+                    <li><strong>Procedure quality:</strong> How to ensure stored procedures are correct, not just memorized mistakes</li>
+                    <li><strong>Generalization boundary:</strong> When does a procedure fail to generalize? Detecting task similarity</li>
+                    <li><strong>Memory growth:</strong> Unbounded procedure storage; when to prune, merge, or forget</li>
+                    <li><strong>Procedure conflict:</strong> Multiple procedures for same task type; which to retrieve?</li>
+                    <li><strong>Context drift:</strong> Procedure learned in context A may fail in context B; detecting drift</li>
+                    <li><strong>Checkpoint overhead:</strong> State persistence cost; balancing durability vs latency</li>
+                    <li><strong>Cross-session transfer:</strong> Procedure learned in one session usable in another; memory portability</li>
+                    <li><strong>User procedure modification:</strong> How users edit stored procedures; interface for procedure management</li>
+                </ul>
+            </section>
+
+            <!-- Future Directions -->
+            <section class="research-section">
+                <h2 class="section-title">9. Future Directions</h2>
+
+                <ul class="research-list">
+                    <li><strong>Hierarchical procedures:</strong> Procedures calling sub-procedures; modular composition</li>
+                    <li><strong>Procedure sharing:</strong> Team-level procedural memory; collective knowledge beyond single agent</li>
+                    <li><strong>Procedural verification:</strong> Formal methods to validate procedure correctness before storage</li>
+                    <li><strong>Context-aware retrieval:</strong> Procedure selection considers not just task type but user, deadline, constraints</li>
+                    <li><strong>Procedure evolution:</strong> Procedures update as policies change, tools evolve, preferences shift</li>
+                    <li><strong>Explicit procedure interface:</strong> Users view, edit, approve procedures; not opaque memory</li>
+                    <li><strong>Procedure benchmarking:</strong> Standard evaluation for procedural memory systems (LEGOMem Office benchmark)</li>
+                    <li><strong>Neuro-symbolic procedures:</strong> Combine learned sequences with explicit constraints for reliability</li>
+                </ul>
             </section>
 
             <!-- Key Papers -->
             <section class="research-section">
-                <h2 class="section-title">9. Key References (2024-2025)</h2>
+                <h2 class="section-title">10. Key Papers (2023-2025)</h2>
 
                 <div class="paper-list">
                     <div class="paper-item">
-                        <span class="paper-venue">Stanford SALT Lab 2025</span>
-                        <p class="paper-title">Future of Work with AI Agents: Worker-Centric Auditing Framework</p>
-                        <p class="paper-authors">WORKBank Project</p>
-                    </div>
-                    <div class="paper-item">
-                        <span class="paper-venue">Kore.ai 2025</span>
-                        <p class="paper-title">The Decline of AI Agents and Rise of Agentic Workflows</p>
-                        <p class="paper-authors">Industry Analysis</p>
-                    </div>
-                    <div class="paper-item">
-                        <span class="paper-venue">Microsoft 2025</span>
-                        <p class="paper-title">Microsoft Build 2025: The Age of AI Agents</p>
-                        <p class="paper-authors">Official Announcement</p>
-                    </div>
-                    <div class="paper-item">
-                        <span class="paper-venue">Microsoft Research</span>
-                        <p class="paper-title">AsyncThink: Distributed Agent Reasoning</p>
-                        <p class="paper-authors">arxiv 2510.26658</p>
-                    </div>
-                    <div class="paper-item">
                         <span class="paper-venue">NeurIPS 2025</span>
-                        <p class="paper-title">LEGOMem: Modular Procedural Memory for Office Agents</p>
+                        <p class="paper-title">LEGOMem: Modular Procedural Memory for Long-Horizon Task Planning</p>
                         <p class="paper-authors">arxiv 2510.04851</p>
                     </div>
                     <div class="paper-item">
-                        <span class="paper-venue">Deloitte 2025</span>
-                        <p class="paper-title">AI Agents in Collaborative Automation</p>
-                        <p class="paper-authors">Enterprise Analysis</p>
+                        <span class="paper-venue">arxiv 2023</span>
+                        <p class="paper-title">Generative Agents: Interactive Simulacra of Human Behavior</p>
+                        <p class="paper-authors">Park et al. (Stanford)</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">arxiv 2023</span>
+                        <p class="paper-title">MemGPT: Towards LLMs as Operating Systems</p>
+                        <p class="paper-authors">Packer et al. (Letta)</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">LangChain 2024</span>
+                        <p class="paper-title">LangGraph: Durable Execution with State Persistence</p>
+                        <p class="paper-authors">LangChain Engineering</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">arxiv 2023</span>
+                        <p class="paper-title">Reflexion: Language Agents with Verbal Reinforcement Learning</p>
+                        <p class="paper-authors">Shinn et al.</p>
+                    </div>
+                    <div class="paper-item">
+                        <span class="paper-venue">ICLR 2024</span>
+                        <p class="paper-title">AgentBench: Evaluating LLMs as Agents on Long-Horizon Tasks</p>
+                        <p class="paper-authors">Liu et al. (THUDM)</p>
                     </div>
                 </div>
             </section>
 
             <!-- References -->
             <section class="research-section">
-                <h2 class="section-title">10. References</h2>
+                <h2 class="section-title">11. References</h2>
                 <ul class="ref-list">
-                    <li><a href="https://futureofwork.saltlab.stanford.edu/">Stanford SALT Lab: Future of Work with AI Agents</a></li>
-                    <li><a href="https://www.kore.ai/ai-insights/the-decline-of-ai-agents-and-rise-of-agentic-workflows">Kore.ai: Agentic Workflows Analysis</a></li>
-                    <li><a href="https://blogs.microsoft.com/blog/2025/05/19/microsoft-build-2025-the-age-of-ai-agents-and-building-the-open-agentic-web/">Microsoft Build 2025: Age of AI Agents</a></li>
-                    <li><a href="https://www.kognitos.com/blog/intelligent-automation-vs-rpa-agentic-process-automation/">Intelligent Automation vs RPA vs Agentic PA</a></li>
-                    <li><a href="https://www.ibm.com/think/topics/business-process-automation">IBM: Business Process Automation</a></li>
-                    <li><a href="https://www.v7labs.com/blog/ai-agents-examples">V7 Labs: 21 Real-World AI Agent Examples</a></li>
+                    <li><a href="https://arxiv.org/abs/2505.14328">LEGOMem: Modular Procedural Memory</a></li>
+                    <li><a href="https://arxiv.org/abs/2304.03442">Generative Agents: Interactive Simulacra</a></li>
+                    <li><a href="https://arxiv.org/abs/2310.08560">MemGPT: LLMs as Operating Systems</a></li>
+                    <li><a href="https://docs.langchain.com/langgraph">LangGraph: Durable Execution</a></li>
+                    <li><a href="https://docs.letta.com/">Letta: Memory-First Agent Architecture</a></li>
+                    <li><a href="https://arxiv.org/abs/2303.11366">Reflexion: Verbal Reinforcement Learning</a></li>
+                    <li><a href="https://github.com/THUDM/AgentBench">AgentBench: LLM-as-Agent Benchmark</a></li>
                 </ul>
             </section>
         </div>
