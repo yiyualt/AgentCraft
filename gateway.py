@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import StreamingResponse
 from mlflow.entities import SpanType
 from openai import OpenAI
 
@@ -24,6 +25,7 @@ from tools.agent_executor import AgentExecutor, set_agent_executor  # Agent exec
 from tools.skill_tools import *  # noqa: F401,F403 — register Skill tool
 from tools.mcp import MCPToolManager, MCPConfig
 from tools.sandbox import SandboxExecutor, SandboxConfig
+from streaming_executor import StreamingToolExecutor, is_concurrency_safe
 from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, PermissionMode, HookEvent, HookMatcher
 from skills import SkillLoader, default_skill_dirs
 from channels import ChannelRouter
@@ -435,6 +437,7 @@ async def chat_completions(request: Request):
     payload = await request.json()
     model = payload.get("model", "deepseek-chat")
     session_id = request.headers.get("X-Session-Id")
+    stream = payload.get("stream", False)
 
     if _llm_semaphore.locked():
         raise HTTPException(
@@ -447,7 +450,157 @@ async def chat_completions(request: Request):
             },
         )
 
-    return await _handle_non_streaming(request, client, payload, model, session_id)
+    if stream:
+        # SSE streaming response with tool progress
+        return StreamingResponse(
+            _handle_streaming(request, client, payload, model, session_id),
+            media_type="text/event-stream",
+        )
+    else:
+        return await _handle_non_streaming(request, client, payload, model, session_id)
+
+
+async def _handle_streaming(
+    request: Request,
+    llm_client: OpenAI,
+    payload: dict[str, Any],
+    model: str,
+    session_id: str | None = None,
+):
+    """SSE streaming response with tool execution progress."""
+    import asyncio
+    from streaming_executor import ToolProgressEvent
+
+    # Initialize (similar to non-streaming setup)
+    registry = _unified_registry or UnifiedToolRegistry(get_default_registry())
+    user_tools = payload.get("tools")
+    tools = user_tools if user_tools is not None else registry.list_tools()
+
+    # Build messages (simplified)
+    new_messages = list(payload.get("messages", []))
+    if session_id:
+        session = _session_manager.get_session(session_id)
+        if session:
+            max_tokens = session.context_window or 64000
+            history = _session_manager.get_messages_with_limit(session_id, max_tokens)
+            messages = history + new_messages
+            # Build system prompt
+            system_parts = []
+            if session.system_prompt:
+                system_parts.append(session.system_prompt)
+            skill_listing = _skill_loader.build_skill_listing()
+            if skill_listing:
+                system_parts.append(skill_listing)
+            if system_parts and not any(m["role"] == "system" for m in messages):
+                messages.insert(0, {"role": "system", "content": "\n\n".join(system_parts)})
+        else:
+            messages = new_messages
+    else:
+        messages = new_messages
+
+    messages = _clean_orphan_tool_messages(messages)
+    kwargs = {k: v for k, v in payload.items() if k not in ("messages", "tools", "stream")}
+
+    # Yield initial event
+    yield f"event: stream_request_start\ndata: {{\"model\": \"{model}\"}}\n\n"
+
+    # Execute with StreamingToolExecutor
+    executor = StreamingToolExecutor(
+        registry=registry,
+        max_concurrency=10,
+        session_id=session_id,
+        sandbox_executor=_sandbox_executor if SANDBOX_ENABLED else None,
+        canvas_manager=_canvas_manager,
+    )
+
+    # Save incoming messages to session
+    if session_id:
+        for msg in new_messages:
+            _session_manager.add_message(
+                session_id=session_id,
+                role=msg.get("role", "user"),
+                content=msg.get("content", ""),
+            )
+
+    # Tool loop
+    n_turns = 0
+    while True:
+        call_kwargs: dict[str, Any] = {"model": model, "messages": messages, **kwargs}
+        if tools:
+            call_kwargs["tools"] = tools
+
+        # LLM call (non-streaming for simplicity - streaming LLM would be next phase)
+        try:
+            async with _llm_semaphore:
+                response = await asyncio.to_thread(
+                    llm_client.chat.completions.create, **call_kwargs
+                )
+            result = response.model_dump()
+        except Exception as e:
+            yield f"event: error\ndata: {{\"error\": \"{str(e)}\"}}\n\n"
+            break
+
+        choice = result["choices"][0]
+        message = choice["message"]
+        messages.append(message)
+
+        # Yield content
+        content = message.get("content", "")
+        if content:
+            yield f"event: content\ndata: {{\"text\": \"{content[:500]}\"}}\n\n"
+
+        tool_calls = message.get("tool_calls")
+        if not tool_calls:
+            yield f"event: done\ndata: {{\"finish_reason\": \"stop\"}}\n\n"
+            break
+
+        n_turns += 1
+        if n_turns > 50:
+            yield f"event: error\ndata: {{\"error\": \"Tool limit exceeded\"}}\n\n"
+            break
+
+        # Execute tools with progress events
+        await executor.start_unsafe_executor()
+
+        for tc in tool_calls:
+            fn_name = tc["function"]["name"]
+            try:
+                fn_args = json.loads(tc["function"]["arguments"])
+            except json.JSONDecodeError:
+                fn_args = {}
+
+            # Yield tool start event
+            yield f"event: tool_start\ndata: {{\"id\": \"{tc['id']}\", \"name\": \"{fn_name}\"}}\n\n"
+            await executor.on_tool_use_block(tc["id"], fn_name, fn_args)
+
+        # Wait for results
+        results = await executor.get_results()
+
+        # Yield tool results
+        for tc in tool_calls:
+            tc_id = tc["id"]
+            tool_result = results.get(tc_id)
+            if tool_result:
+                if tool_result.error:
+                    yield f"event: tool_error\ndata: {{\"id\": \"{tc_id}\", \"error\": \"{tool_result.error}\"}}\n\n"
+                else:
+                    result_preview = tool_result.content[:200] if len(tool_result.content) > 200 else tool_result.content
+                    yield f"event: tool_result\ndata: {{\"id\": \"{tc_id}\", \"result\": \"{result_preview}\"}}\n\n"
+                messages.append(tool_result.to_tool_message())
+
+        # Yield turn complete
+        yield f"event: turn_complete\ndata: {{\"turn\": {n_turns}, \"tools\": {len(tool_calls)}}}\n\n"
+
+    # Save final messages
+    if session_id:
+        for msg in messages[len(new_messages):]:
+            _session_manager.add_message(
+                session_id=session_id,
+                role=msg["role"],
+                content=msg.get("content", ""),
+                tool_calls=json.dumps(msg.get("tool_calls")) if msg.get("tool_calls") else None,
+                tool_call_id=msg.get("tool_call_id"),
+            )
 
 
 # ===== Slash command processing =====
@@ -900,7 +1053,7 @@ async def _handle_non_streaming(
                     "tool_results": [],
                 })
 
-                # ===== TOOL EXECUTION (独立 span) =====
+                # ===== TOOL EXECUTION (Parallel execution with StreamingToolExecutor) =====
                 with mlflow.start_span(
                     name=f"Tool Execution (turn {n_turns})",
                     span_type=SpanType.CHAIN,
@@ -918,51 +1071,53 @@ async def _handle_non_streaming(
                         "tool_calls": tool_calls_summary,
                     })
 
+                    # Create StreamingToolExecutor for parallel execution
+                    executor = StreamingToolExecutor(
+                        registry=registry,
+                        max_concurrency=10,
+                        session_id=session_id,
+                        sandbox_executor=_sandbox_executor if SANDBOX_ENABLED else None,
+                        canvas_manager=_canvas_manager,
+                    )
+
+                    # Start unsafe tool executor
+                    await executor.start_unsafe_executor()
+
+                    # Queue all tool calls (safe ones start immediately)
                     for tc in tool_calls:
                         fn_name = tc["function"]["name"]
                         try:
                             fn_args = json.loads(tc["function"]["arguments"])
                         except json.JSONDecodeError:
                             fn_args = {}
-                        logger.info(f"[TOOL EXEC] {fn_name}({json.dumps(fn_args, ensure_ascii=False)})")
-                        logger.debug(f"[TOOL ARGS FULL]: {json.dumps(fn_args, ensure_ascii=False, indent=2)}")
 
-                        # Set session_id context for canvas tools
-                        if _canvas_manager:
-                            from canvas import set_current_session_id
-                            set_current_session_id(session_id)
+                        logger.info(f"[TOOL QUEUE] {fn_name} (safe={is_concurrency_safe(fn_name)})")
+                        await executor.on_tool_use_block(tc["id"], fn_name, fn_args)
 
-                        # Execute in sandbox or directly
-                        if SANDBOX_ENABLED and _sandbox_executor:
-                            # Sandbox execution: get tool source code first
-                            tool_code = registry.get_source_code(fn_name)
-                            if tool_code is None:
-                                # MCP tools cannot be sandboxed, fall back to direct dispatch
-                                logger.warning(f"[SANDBOX] {fn_name} has no source code (MCP tool?), falling back to direct dispatch")
-                                tool_result = await registry.dispatch(fn_name, fn_args)
-                            else:
-                                logger.info(f"[SANDBOX] executing {fn_name} in isolated container (code_len={len(tool_code)})")
-                                result = await _sandbox_executor.run_tool(fn_name, fn_args, tool_code)
-                                tool_result = result.output if result.success else f"Error: {result.error}"
-                                if not result.success:
-                                    logger.warning(f"[SANDBOX ERROR] {fn_name}: {result.error}")
+                    # Wait for all tools to complete
+                    results = await executor.get_results()
+
+                    # Process results and append to messages
+                    skill_injections: list[str] = []
+                    for tc in tool_calls:
+                        tc_id = tc["id"]
+                        fn_name = tc["function"]["name"]
+                        tool_result = results.get(tc_id)
+
+                        if tool_result is None:
+                            tool_result_str = f"Error: Tool {fn_name} not executed"
+                        elif tool_result.error:
+                            tool_result_str = tool_result.error
                         else:
-                            # Direct execution via registry
-                            tool_result = await registry.dispatch(fn_name, fn_args)
+                            tool_result_str = tool_result.content
 
-                        # Clear session_id context after execution
-                        if _canvas_manager:
-                            from canvas import set_current_session_id
-                            set_current_session_id(None)
-
-                        logger.info(f"[TOOL RESULT] {fn_name}: length={len(str(tool_result))}")
-                        logger.debug(f"[TOOL RESULT FULL]: {tool_result}")
+                        logger.info(f"[TOOL RESULT] {fn_name}: length={len(tool_result_str)}")
+                        logger.debug(f"[TOOL RESULT FULL]: {tool_result_str}")
 
                         # Handle Skill tool specially - inject skill instructions
-                        skill_injection = None
-                        if fn_name == "Skill":
+                        if fn_name == "Skill" and not tool_result.error:
                             try:
-                                skill_data = json.loads(tool_result)
+                                skill_data = json.loads(tool_result_str)
                                 if skill_data.get("success") and skill_data.get("skill_instructions"):
                                     skill_name = skill_data.get("skill_name")
                                     skill_desc = skill_data.get("skill_description")
@@ -978,37 +1133,47 @@ async def _handle_non_streaming(
                                             skill_content += f"- {t}\n"
 
                                     skill_content += "</skill>"
-                                    skill_injection = skill_content
+                                    skill_injections.append(skill_content)
                                     logger.info(f"[SKILL LOADED] {skill_name}, instructions_length={len(skill_instructions)}")
 
                                     # Change tool_result to a simpler success message
-                                    tool_result = f"Successfully loaded skill '{skill_name}'"
+                                    tool_result_str = f"Successfully loaded skill '{skill_name}'"
                             except json.JSONDecodeError:
                                 pass
+
+                        # Log tool execution details
+                        try:
+                            fn_args = json.loads(tc["function"]["arguments"])
+                        except json.JSONDecodeError:
+                            fn_args = {}
 
                         turn_log[-1]["tool_results"].append({
                             "name": fn_name,
                             "arguments": fn_args,
-                            "result": tool_result,
+                            "result": tool_result_str,
+                            "duration_ms": tool_result.duration_ms if tool_result else 0,
                         })
                         messages.append({
                             "role": "tool",
-                            "tool_call_id": tc["id"],
-                            "content": tool_result,
+                            "tool_call_id": tc_id,
+                            "content": tool_result_str,
                         })
 
-                        # If Skill tool was invoked, inject skill instructions as assistant message
-                        if skill_injection:
-                            messages.append({
-                                "role": "assistant",
-                                "content": skill_injection,
-                            })
-                            logger.info(f"[SKILL INJECTION] added assistant message with skill instructions")
+                    # Inject all skill instructions as assistant messages
+                    for skill_content in skill_injections:
+                        messages.append({
+                            "role": "assistant",
+                            "content": skill_content,
+                        })
+                        logger.info(f"[SKILL INJECTION] added assistant message with skill instructions")
 
                     tool_span.set_outputs({
                         "executed_count": len(tool_calls),
                         "tool_names": [tc["function"]["name"] for tc in tool_calls],
                         "full_results": [tr["result"] for tr in turn_log[-1]["tool_results"]],
+                        "parallel_execution": True,
+                        "safe_tools": [tc["function"]["name"] for tc in tool_calls if is_concurrency_safe(tc["function"]["name"])],
+                        "unsafe_tools": [tc["function"]["name"] for tc in tool_calls if not is_concurrency_safe(tc["function"]["name"])],
                     })
 
             latency = time.time() - start_time

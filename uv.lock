@@ -1459,7 +1459,7 @@ wheels = [
 [[package]]
 name = "ollama-mlflow-demo"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "ddgs" },
     { name = "docker" },
@@ -1469,6 +1469,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "python-pptx" },
     { name = "pyyaml" },
+    { name = "rich" },
     { name = "tiktoken" },
 ]
 
@@ -1500,6 +1501,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "python-pptx", specifier = ">=1.0.2" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "rich", specifier = ">=13.0.0" },
     { name = "tiktoken", specifier = ">=0.7.0" },
 ]
 provides-extras = ["dev"]
