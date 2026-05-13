@@ -16,8 +16,9 @@ logger = logging.getLogger("gateway")
 
 # Constants
 COMPLETION_THRESHOLD = 0.9      # 90% of budget - start evaluating
-DIMINISHING_THRESHOLD = 500     # Tokens - marginal return threshold
-MAX_CONTINUATIONS = 5           # Max continuations before evaluation
+DIMINISHING_THRESHOLD = 200     # Tokens - marginal return threshold (lowered to be less aggressive)
+MAX_CONTINUATIONS = 10          # Max continuations before evaluation (increased for longer tasks)
+MIN_TOKENS_FOR_DIMINISHING = 3000  # Minimum tokens before checking diminishing returns
 DEFAULT_BUDGET = 50000          # Default token budget
 
 
@@ -77,7 +78,9 @@ def check_token_budget(
     delta = current_tokens - tracker.last_global_turn_tokens
 
     # Check for diminishing returns
+    # Only check after minimum tokens used - early turns naturally have smaller deltas
     is_diminishing = (
+        current_tokens >= MIN_TOKENS_FOR_DIMINISHING and
         tracker.continuation_count >= MAX_CONTINUATIONS and
         delta < DIMINISHING_THRESHOLD and
         tracker.last_delta_tokens < DIMINISHING_THRESHOLD

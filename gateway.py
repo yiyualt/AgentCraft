@@ -885,7 +885,7 @@ async def _handle_non_streaming(
                 n_turns += 1
                 logger.info(f"[TOOL CALL] turn={n_turns}, tools={[tc['function']['name'] for tc in tool_calls]}")
 
-                if n_turns > 10:
+                if n_turns > 50:
                     logger.warning("[TOOL LIMIT] exceeded 10 turns, forcing break")
                     for tc in tool_calls:
                         messages.append({
