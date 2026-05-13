@@ -37,8 +37,10 @@ from tools.builtin import *  # noqa: F401,F403 — register built-in tools
 from tools.pptx_tools import *  # noqa: F401,F403 — register PPTX tools
 from tools.agent_executor import AgentExecutor, set_agent_executor
 from tools.skill_tools import *  # noqa: F401,F403 — register Skill tool
+from tools.memory_tools import *  # noqa: F401,F403 — register memory tools
 from streaming_executor import StreamingToolExecutor, is_concurrency_safe, ToolResult
 from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, PermissionMode
+from sessions.memory_persistence import MemoryStore, MemoryType
 from skills import SkillLoader, default_skill_dirs
 
 # ===== Config =====
@@ -217,6 +219,15 @@ def build_system_prompt(session: CLISession, skill_name: str | None = None) -> s
     # Add goal if set
     if session.goal:
         parts.append(f"\n<goal>\nGoal: {session.goal}\nComplete this goal before ending the session.\n</goal>")
+
+    # Add memory context (MEMORY.md)
+    try:
+        store = get_memory_store()
+        memory_content = store.get_index_content()
+        if memory_content:
+            parts.append(f"\n<memory>\n{memory_content}\n</memory>")
+    except Exception:
+        pass  # Memory loading is optional
 
     return "\n\n".join(parts) if parts else ""
 
@@ -439,6 +450,9 @@ def handle_slash_command(cmd: str, session: CLISession) -> str | None:
   /goal <text>  Set goal condition
   /permission <mode> Set permission mode (default|bypass|auto|plan)
   /session      Show session info
+  /remember <text> Save to memory for future sessions
+  /forget <name> Delete a saved memory
+  /recall [name] List memories or show specific memory
 """
 
     if command == "/clear":
@@ -475,6 +489,41 @@ def handle_slash_command(cmd: str, session: CLISession) -> str | None:
   Goal: {session.goal or 'none'}
   Permission: {session.permission_mode.value}
 """
+
+    # Memory commands
+    if command == "/remember":
+        if not args:
+            return "[red]Usage: /remember <content>[/red]"
+        store = get_memory_store()
+        entry = MemoryEntry(
+            name=args[:30].replace(" ", "-").lower(),
+            description=args[:100],
+            type=MemoryType.FEEDBACK,
+            content=args + "\n\n**Why:** User preference\n**How to apply:** Apply when relevant",
+        )
+        store.save(entry)
+        return f"[green]Saved memory: {entry.name}[/green]"
+
+    if command == "/forget":
+        if not args:
+            return "[red]Usage: /forget <name>[/red]"
+        store = get_memory_store()
+        if store.delete(args):
+            return f"[yellow]Forgot memory: {args}[/yellow]"
+        return f"[red]Memory not found: {args}[/red]"
+
+    if command == "/recall":
+        store = get_memory_store()
+        if args:
+            entry = store.load(args)
+            if entry:
+                return f"[bold]{entry.name}[/bold]\n\n{entry.content}"
+            return f"[red]Memory not found: {args}[/red]"
+        else:
+            index = store.get_index_content()
+            if index:
+                return index
+            return "[yellow]No memories saved. Use /remember to save.[/yellow]"
 
     return f"[red]Unknown command: {command}[/red]"
 

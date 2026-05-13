@@ -47,5 +47,17 @@ from sessions.permission import (
     PermissionResult,
     PermissionRule,
     PermissionChecker,
+    PermissionPattern,
+    PermissionAuditLog,
+    PermissionAuditor,
+    YoloClassifier,
+    RuleSource,
+    MultiSourceRuleManager,
     DEFAULT_RULES,
+)
+from sessions.memory_persistence import (
+    MemoryType,
+    MemoryEntry,
+    MemoryStore,
+    MemoryExtractor,
 )

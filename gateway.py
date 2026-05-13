@@ -26,7 +26,7 @@ from tools.skill_tools import *  # noqa: F401,F403 — register Skill tool
 from tools.mcp import MCPToolManager, MCPConfig
 from tools.sandbox import SandboxExecutor, SandboxConfig
 from streaming_executor import StreamingToolExecutor, is_concurrency_safe
-from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, PermissionMode, HookEvent, HookMatcher
+from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, PermissionMode, PermissionRuleKind, HookEvent, HookMatcher, MultiSourceRuleManager, PermissionAuditor, PermissionRule, PermissionResult, RuleSource, MemoryStore, MemoryType, MemoryEntry
 from skills import SkillLoader, default_skill_dirs
 from channels import ChannelRouter
 from channels.telegram import TelegramChannel
@@ -174,6 +174,13 @@ _compaction_manager: CompactionManager | None = None
 # ===== Budget =====
 _budget_manager: BudgetManager | None = None
 
+# ===== Enhanced Permission =====
+_permission_rule_manager: MultiSourceRuleManager | None = None
+_permission_auditor: PermissionAuditor | None = None
+
+# ===== Memory =====
+_memory_store: MemoryStore | None = None
+
 # ===== Error Recovery =====
 _recovery_executor: ResilientExecutor | None = None
 
@@ -253,6 +260,14 @@ async def lifespan(_app: FastAPI):
     _app.state.budget_manager = _budget_manager
     logger.info("[Budget] BudgetManager initialized")
 
+    # Enhanced Permission initialization
+    global _permission_rule_manager, _permission_auditor
+    _permission_rule_manager = MultiSourceRuleManager()
+    _permission_auditor = PermissionAuditor()
+    _app.state.permission_rule_manager = _permission_rule_manager
+    _app.state.permission_auditor = _permission_auditor
+    logger.info("[Permission] MultiSourceRuleManager and PermissionAuditor initialized")
+
     # Error Recovery initialization
     global _recovery_executor
     _recovery_executor = ResilientExecutor()
@@ -280,6 +295,12 @@ async def lifespan(_app: FastAPI):
     )
     agent_executor.set_fork_manager(fork_manager)
     logger.info("[Fork] ForkManager initialized")
+
+    # Memory initialization
+    global _memory_store
+    _memory_store = MemoryStore(os.getcwd())
+    _app.state.memory_store = _memory_store
+    logger.info("[Memory] MemoryStore initialized")
 
     # Initialize channels
     _telegram_channel = TelegramChannel(_session_manager)
@@ -427,6 +448,146 @@ async def add_session_message(session_id: str, request: Request) -> dict[str, An
 @app.get("/v1/skills")
 def list_skills() -> list[dict[str, Any]]:
     return [s.to_dict() for s in _skill_loader.list_skills()]
+
+
+@app.get("/permission/rules")
+def get_permission_rules() -> dict[str, Any]:
+    """Get current permission rules."""
+    if _permission_rule_manager is None:
+        return {"error": "Permission rule manager not initialized"}
+
+    rules = _permission_rule_manager.get_effective_rules()
+    return {
+        "rules": [r.to_dict() for r in rules],
+        "source_stats": _permission_rule_manager.get_source_stats(),
+    }
+
+
+@app.post("/permission/rules")
+async def add_permission_rule(request: Request) -> dict[str, Any]:
+    """Add a permission rule."""
+    if _permission_rule_manager is None:
+        raise HTTPException(status_code=500, detail="Permission manager not initialized")
+
+    body = await request.json()
+    pattern = body.get("pattern")
+    action = body.get("action")  # "allow", "deny", "ask"
+    reason = body.get("reason")
+
+    if not pattern or not action:
+        raise HTTPException(status_code=400, detail="Missing pattern or action")
+
+    kind_map = {
+        "allow": PermissionRuleKind.ALWAYS_ALLOW,
+        "deny": PermissionRuleKind.ALWAYS_DENY,
+        "ask": PermissionRuleKind.ALWAYS_ASK,
+    }
+
+    kind = kind_map.get(action.lower())
+    if kind is None:
+        raise HTTPException(status_code=400, detail=f"Invalid action: {action}")
+
+    rule = PermissionRule(
+        kind=kind,
+        pattern=pattern,
+        source=RuleSource.COMMAND,
+        reason=reason,
+    )
+    _permission_rule_manager.add_rule(rule)
+
+    logger.info(f"[Permission] Added rule: {pattern} → {action}")
+    return {"success": True, "pattern": pattern, "action": action}
+
+
+@app.get("/permission/logs")
+def get_permission_logs(session_id: str | None = None) -> list[dict[str, Any]]:
+    """Get permission audit logs."""
+    if _permission_auditor is None:
+        return [{"error": "Permission auditor not initialized"}]
+
+    return _permission_auditor.get_logs(session_id)
+
+
+# ===== Memory API =====
+
+from pydantic import BaseModel
+
+
+class MemorySaveRequest(BaseModel):
+    """Request body for memory save."""
+    content: str
+    name: str | None = None
+    memory_type: str | None = None
+
+
+@app.post("/memory/save")
+def save_memory(request: MemorySaveRequest) -> dict[str, str]:
+    """Save a memory entry."""
+    if _memory_store is None:
+        raise HTTPException(status_code=500, detail="Memory store not initialized")
+
+    # Infer or parse type
+    m_type = MemoryType(request.memory_type or "project")
+
+    # Generate name if not provided
+    name = request.name or request.content[:30].replace(" ", "-").lower()
+
+    # Create entry
+    entry = MemoryEntry(
+        name=name,
+        description=request.content[:100],
+        type=m_type,
+        content=request.content,
+    )
+
+    _memory_store.save(entry)
+    return {"status": "saved", "name": name, "type": m_type.value}
+
+
+@app.get("/memory/list")
+def list_memories() -> dict[str, Any]:
+    """List all memories (return MEMORY.md content)."""
+    if _memory_store is None:
+        raise HTTPException(status_code=500, detail="Memory store not initialized")
+
+    index = _memory_store.get_index_content()
+    entries = _memory_store.list()
+    return {
+        "index": index,
+        "count": len(entries),
+        "memories": [{"name": e.name, "type": e.type.value, "description": e.description} for e in entries],
+    }
+
+
+@app.get("/memory/{name}")
+def get_memory(name: str) -> dict[str, Any]:
+    """Get a specific memory."""
+    if _memory_store is None:
+        raise HTTPException(status_code=500, detail="Memory store not initialized")
+
+    entry = _memory_store.load(name)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"Memory not found: {name}")
+
+    return {
+        "name": entry.name,
+        "type": entry.type.value,
+        "description": entry.description,
+        "content": entry.content,
+        "created_at": entry.created_at.isoformat(),
+    }
+
+
+@app.delete("/memory/{name}")
+def delete_memory(name: str) -> dict[str, str]:
+    """Delete a memory."""
+    if _memory_store is None:
+        raise HTTPException(status_code=500, detail="Memory store not initialized")
+
+    if _memory_store.delete(name):
+        return {"status": "deleted", "name": name}
+    else:
+        raise HTTPException(status_code=404, detail=f"Memory not found: {name}")
 
 
 @app.post("/v1/chat/completions")

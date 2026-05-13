@@ -8,13 +8,17 @@
 
 | Goal | Status | Description |
 |------|--------|-------------|
-| Pattern Matching | ❌ | 支持`Bash(git *)`、`Read(/tmp/*)`等pattern |
-| 多源规则 | ❌ | 支持8种规则来源（cliArg, session, settings等） |
-| Auto分类器 | ❌ | Auto模式下智能判断allow/deny |
-| MCP权限 | ❌ | MCP工具按server级别权限控制 |
-| 权限审计 | ❌ | 记录所有权限决策日志 |
+| Pattern Matching | ✅ | 支持`Bash(git *)`、`Read(/tmp/*)`等pattern |
+| 多源规则 | ✅ | RuleSource enum + MultiSourceRuleManager |
+| Auto分类器 | ✅ | YoloClassifier 智能判断 allow/deny/ask |
+| MCP权限 | ❌ | MCP工具按server级别权限控制（未实现） |
+| 权限审计 | ✅ | PermissionAuditor + /permission/logs API |
 
-## Current State
+## Implementation
+
+**修改文件**：
+- `sessions/permission.py` — 增强版 PermissionChecker + Pattern Matching + YoloClassifier + Auditor
+- `gateway.py` — 初始化 + /permission/rules + /permission/logs API 端点
 
 当前权限系统（sessions/permission.py）：
 
