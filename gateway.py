@@ -19,11 +19,12 @@ from openai import OpenAI
 from tools import get_default_registry, UnifiedToolRegistry
 from tools.builtin import *  # noqa: F401,F403 — register built-in tools
 from tools.canvas_tools import set_canvas_manager  # Canvas tools
+from tools.pptx_tools import *  # noqa: F401,F403 — register PPTX tools
 from tools.agent_executor import AgentExecutor, set_agent_executor  # Agent executor
 from tools.skill_tools import *  # noqa: F401,F403 — register Skill tool
 from tools.mcp import MCPToolManager, MCPConfig
 from tools.sandbox import SandboxExecutor, SandboxConfig
-from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, PermissionMode
+from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, PermissionMode, HookEvent, HookMatcher
 from skills import SkillLoader, default_skill_dirs
 from channels import ChannelRouter
 from channels.telegram import TelegramChannel
@@ -493,6 +494,64 @@ def _process_slash_command(content: str) -> str | None:
             return f"Unknown mode: {args}. Available: {list(mode_map.keys())}"
         executor.set_permission_mode(mode)
         return f"Permission mode set to: **{mode.value}**"
+
+    if command == "/hook":
+        executor = get_agent_executor()
+        if not executor:
+            return "[Error] Agent executor not initialized"
+        hook_exec = executor.get_hook_executor()
+        sub_parts = args.split(" ", 1) if args else [""]
+        sub_cmd = sub_parts[0].lower()
+        sub_args = sub_parts[1] if len(sub_parts) > 1 else ""
+
+        if sub_cmd == "demo":
+            # Register demo hooks that log to gateway.log
+            hooks = [
+                HookMatcher(event=HookEvent.PRE_TOOL_USE, matcher="Bash",
+                            command="echo \"[HOOK DEMO] PreToolUse: Bash called at $(date)\" >> logs/gateway.log"),
+                HookMatcher(event=HookEvent.POST_TOOL_USE, matcher="Write",
+                            command="echo \"[HOOK DEMO] PostToolUse: Write completed at $(date)\" >> logs/gateway.log"),
+                HookMatcher(event=HookEvent.SUBAGENT_START,
+                            command="echo \"[HOOK DEMO] Subagent started at $(date)\" >> logs/gateway.log"),
+            ]
+            for h in hooks:
+                hook_exec.register(h)
+            return "Demo hooks registered:\n- PreToolUse(Bash) → log\n- PostToolUse(Write) → log\n- SubagentStart → log\n\nTry running a Bash command or writing a file to see hooks fire."
+
+        if sub_cmd == "list":
+            if not hook_exec._hooks:
+                return "No hooks registered."
+            lines = ["Registered hooks:"]
+            for i, h in enumerate(hook_exec._hooks):
+                matcher = f" ({h.matcher})" if h.matcher else ""
+                blocking = " [BLOCKING]" if h.blocking else ""
+                lines.append(f"  {i}. {h.event.value}{matcher}: {h.command[:60]}{blocking}")
+            return "\n".join(lines)
+
+        if sub_cmd == "clear":
+            count = len(hook_exec._hooks)
+            hook_exec.clear()
+            return f"Cleared {count} hook(s)."
+
+        if sub_cmd == "add":
+            # /hook add <event> <command>
+            # /hook add <event> <matcher> <command>
+            add_parts = sub_args.split(" ", 2)
+            if len(add_parts) < 2:
+                return "Usage: /hook add <event> <command>\nEvents: " + ", ".join(e.value for e in HookEvent)
+            event_name = add_parts[0]
+            try:
+                event = HookEvent(event_name)
+            except ValueError:
+                return f"Unknown event: {event_name}\nAvailable: " + ", ".join(e.value for e in HookEvent)
+            if len(add_parts) == 2:
+                hook = HookMatcher(event=event, command=add_parts[1])
+            else:
+                hook = HookMatcher(event=event, matcher=add_parts[1], command=add_parts[2])
+            hook_exec.register(hook)
+            return f"Hook registered: {event.value} → {hook.command[:60]}"
+
+        return "Usage:\n  /hook demo — register demo hooks\n  /hook list — list hooks\n  /hook clear — remove all\n  /hook add <event> <command>\n  /hook add <event> <matcher> <command>\nEvents: " + ", ".join(e.value for e in HookEvent)
 
     logger.info(f"[Command] Unknown slash command: {command}")
     return None
