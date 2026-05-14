@@ -85,16 +85,16 @@
 
 ## 9. ACP Control Plane
 
-- [ ] 9.1 Create `acp/` module directory structure
-- [ ] 9.2 Implement `AgentControlPlane` class with spawn_child()
-- [ ] 9.3 Implement `ChildAgent` class with execution and result reporting
-- [ ] 9.4 Implement `parent_stream()` for result aggregation
-- [ ] 9.5 Implement parent-child communication (send_to_child, broadcast)
-- [ ] 9.6 Implement context inheritance with token limit
-- [ ] 9.7 Implement child agent limit (max 10) and timeout handling
-- [ ] 9.8 Disable Agent tool in child agents (recursion protection)
-- [ ] 9.9 Integrate ACP with gateway.py for multi-agent tasks
-- [ ] 9.10 Document ACP usage and best practices
+- [x] 9.1 Create `acp/` module directory structure
+- [x] 9.2 Implement `AgentControlPlane` class with spawn_child()
+- [x] 9.3 Implement `ChildAgent` class with execution and result reporting
+- [x] 9.4 Implement `parent_stream()` for result aggregation
+- [x] 9.5 Implement parent-child communication (send_to_child, broadcast)
+- [x] 9.6 Implement context inheritance with token limit
+- [x] 9.7 Implement child agent limit (max 10) and timeout handling
+- [x] 9.8 Disable Agent tool in child agents (recursion protection)
+- [x] 9.9 Integrate ACP with gateway.py for multi-agent tasks
+- [x] 9.10 Document ACP usage and best practices
 
 ## 10. Model Catalog
 

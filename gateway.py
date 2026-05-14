@@ -35,6 +35,7 @@ from channels.web import WebChannel
 from channels.wecom import WeComChannel
 from canvas import CanvasManager, CanvasChannel
 from core import PromptBuilder, MemoryLoader
+from acp import AgentControlPlane, AcpConfig
 
 # ===== Config =====
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5050")
@@ -186,6 +187,9 @@ _memory_store: VectorMemoryStore | None = None
 _memory_loader: MemoryLoader | None = None
 _prompt_builder: PromptBuilder | None = None
 
+# ===== ACP (Agent Control Plane) =====
+_acp: AgentControlPlane | None = None
+
 # ===== Error Recovery =====
 _recovery_executor: ResilientExecutor | None = None
 
@@ -301,6 +305,25 @@ async def lifespan(_app: FastAPI):
     )
     agent_executor.set_fork_manager(fork_manager)
     logger.info("[Fork] ForkManager initialized")
+
+    # ACP (Agent Control Plane) initialization for multi-agent tasks
+    global _acp
+    acp_config = AcpConfig(
+        max_children=10,
+        default_timeout=180,
+        context_inheritance_limit=32000,
+        recursion_protection=True,
+    )
+    _acp = AgentControlPlane(
+        llm_client=client,
+        registry=_unified_registry,
+        session_manager=_session_manager,
+        fork_manager=fork_manager,
+        config=acp_config,
+        model="deepseek-chat",
+    )
+    _app.state.acp = _acp
+    logger.info("[ACP] AgentControlPlane initialized: max_children=10, timeout=180s")
 
     # Memory initialization (VectorMemoryStore)
     global _memory_store
@@ -628,6 +651,94 @@ def delete_memory(name: str) -> dict[str, str]:
         return {"status": "deleted", "name": name}
     else:
         raise HTTPException(status_code=404, detail=f"Memory not found: {name}")
+
+
+# ===== ACP API =====
+
+class AcpSpawnRequest:
+    """Request body for spawning a child agent."""
+    task: str
+    agent_type: str = "general-purpose"
+    timeout: int = 180
+
+
+@app.post("/acp/spawn")
+async def acp_spawn(request: Request) -> dict[str, Any]:
+    """Spawn a child agent to execute a task."""
+    if _acp is None:
+        raise HTTPException(status_code=500, detail="ACP not initialized")
+
+    data = await request.json()
+    task = data.get("task", "")
+    agent_type = data.get("agent_type", "general-purpose")
+    timeout = data.get("timeout", 180)
+
+    if not task:
+        raise HTTPException(status_code=400, detail="Task is required")
+
+    try:
+        handle = _acp.spawn_child(
+            task=task,
+            agent_type=agent_type,
+            timeout=timeout,
+        )
+        return {
+            "child_id": handle.child_id,
+            "task": handle.task,
+            "agent_type": handle.agent_type,
+            "state": handle.state.value,
+            "started_at": handle.started_at,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/acp/status")
+def acp_status() -> dict[str, Any]:
+    """Get ACP status snapshot."""
+    if _acp is None:
+        raise HTTPException(status_code=500, detail="ACP not initialized")
+
+    return _acp.get_status()
+
+
+@app.get("/acp/children")
+def acp_list_children() -> dict[str, Any]:
+    """List all child agents."""
+    if _acp is None:
+        raise HTTPException(status_code=500, detail="ACP not initialized")
+
+    status = _acp.get_status()
+    return {"children": status.get("children", {})}
+
+
+@app.post("/acp/wait")
+async def acp_wait_all(request: Request) -> dict[str, str]:
+    """Wait for all child agents to complete and return results."""
+    if _acp is None:
+        raise HTTPException(status_code=500, detail="ACP not initialized")
+
+    data = await request.json()
+    timeout = data.get("timeout", None)
+
+    results = await _acp.wait_all(timeout=timeout)
+    return results
+
+
+@app.post("/acp/broadcast")
+async def acp_broadcast(request: Request) -> dict[str, Any]:
+    """Broadcast a message to all active child agents."""
+    if _acp is None:
+        raise HTTPException(status_code=500, detail="ACP not initialized")
+
+    data = await request.json()
+    message = data.get("message", "")
+
+    if not message:
+        raise HTTPException(status_code=400, detail="Message is required")
+
+    count = _acp.broadcast(message)
+    return {"broadcast_to": count, "message": message}
 
 
 @app.post("/v1/chat/completions")
