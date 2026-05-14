@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import os
 import sys
 import time
@@ -19,6 +20,10 @@ from typing import Any
 
 from dotenv import load_dotenv
 load_dotenv()
+
+# Logger setup
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -63,6 +68,14 @@ _session_manager = SessionManager()
 _skill_loader = SkillLoader(default_skill_dirs())
 _skill_loader.load()
 _registry = UnifiedToolRegistry(get_default_registry())
+
+# Initialize Agent executor
+_agent_executor = AgentExecutor(
+    llm_client=client,
+    registry=_registry,
+    session_manager=_session_manager,
+)
+set_agent_executor(_agent_executor)
 
 
 def parse_args() -> argparse.Namespace:
@@ -245,16 +258,22 @@ def build_system_prompt(session: CLISession, messages: list[dict] | None = None,
                 relevant_memories = store.search_hybrid(user_task, limit=5)
 
                 if relevant_memories:
-                    # 加载 top 3 的完整内容（不管 similarity 值）
-                    # MockEmbeddingModel similarity 低，但排序正确
-                    memory_lines = ["\n<relevant_memories>\n\n"]
+                    # 使用强调格式，让LLM重视这些记忆
+                    memory_lines = [
+                        "\n<relevant_memories>\n",
+                        "STOP. READ THESE MEMORIES FIRST BEFORE PROCEEDING.\n",
+                        "These are NOT suggestions - they are REQUIREMENTS based on past experience.\n\n",
+                    ]
                     for entry in relevant_memories[:3]:  # 只取 top 3
                         memory_lines.append(f"## {entry.name}\n\n")
                         memory_lines.append(f"{entry.content}\n\n")
+                    memory_lines.append("You MUST follow these rules. Do NOT ignore them.\n")
                     memory_lines.append("</relevant_memories>\n")
 
                     parts.append("".join(memory_lines))
-                    logger.info(f"[MEMORY] Loaded {min(3, len(relevant_memories))} relevant memories for task")
+                    # 显示检索到的记忆名称
+                    names = [e.name for e in relevant_memories[:3]]
+                    logger.info(f"[MEMORY] Loaded memories: {names} for task '{user_task[:30]}...'")
 
         # 如果没有相关记忆或没有任务，加载 index 作为备选
         if not parts or not any("<relevant_memories>" in p for p in parts):
