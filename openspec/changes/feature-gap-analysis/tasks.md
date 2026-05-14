@@ -1,23 +1,23 @@
 ## 1. Multi-Provider Support
 
-- [ ] 1.1 Create `providers/` module directory structure
-- [ ] 1.2 Implement `Provider` base class with complete() and stream() methods
-- [ ] 1.3 Implement `DeepSeekProvider` class (migrate from current direct calls)
-- [ ] 1.4 Implement `AnthropicProvider` class
-- [ ] 1.5 Implement `OpenAIProvider` class
-- [ ] 1.6 Create `ProviderRegistry` to manage provider instances
-- [ ] 1.7 Refactor `gateway.py` to use ProviderRegistry instead of direct DeepSeek calls
-- [ ] 1.8 Implement provider fallback logic (try next on failure)
+- [x] 1.1 Create `providers/` module directory structure
+- [x] 1.2 Implement `Provider` base class with complete() and stream() methods
+- [x] 1.3 Implement `DeepSeekProvider` class (migrate from current direct calls)
+- [x] 1.4 Implement `AnthropicProvider` class
+- [x] 1.5 Implement `OpenAIProvider` class
+- [x] 1.6 Create `ProviderRegistry` to manage provider instances
+- [x] 1.7 Refactor `gateway.py` to use ProviderRegistry instead of direct DeepSeek calls
+- [x] 1.8 Implement provider fallback logic (try next on failure)
 
 ## 2. Auth Profiles
 
-- [ ] 2.1 Define YAML config schema for multiple API keys per provider
-- [ ] 2.2 Implement `AuthProfileStore` to load and manage API keys
-- [ ] 2.3 Implement key rotation logic (switch to next on failure)
-- [ ] 2.4 Implement failure count tracking per key
-- [ ] 2.5 Implement cooldown mechanism for exhausted keys
-- [ ] 2.6 Add provider priority ordering support in config
-- [ ] 2.7 Create default config file template at `.agentcraft/providers.yaml`
+- [x] 2.1 Define YAML config schema for multiple API keys per provider
+- [x] 2.2 Implement `AuthProfileStore` to load and manage API keys
+- [x] 2.3 Implement key rotation logic (switch to next on failure)
+- [x] 2.4 Implement failure count tracking per key
+- [x] 2.5 Implement cooldown mechanism for exhausted keys
+- [x] 2.6 Add provider priority ordering support in config
+- [x] 2.7 Create default config file template at `.agentcraft/providers.yaml`
 
 ## 3. Vector Memory
 
@@ -44,44 +44,44 @@
 
 ## 5. Multi-Channel
 
-- [ ] 5.1 Create `channels/` module directory structure
-- [ ] 5.2 Implement `Channel` base class with receive() and send() methods
-- [ ] 5.3 Refactor CLI to use `CLIChannel` class
-- [ ] 5.4 Refactor Canvas/Web to use `CanvasChannel` class
-- [ ] 5.5 Implement `TelegramChannel` class with bot token support
-- [ ] 5.6 Implement `ChannelRouter` to dispatch messages to appropriate channel
-- [ ] 5.7 Implement message normalization (channel_id, user_id, content, metadata)
-- [ ] 5.8 Add Telegram bot token configuration to `.agentcraft/channels.yaml`
+- [x] 5.1 Create `channels/` module directory structure
+- [x] 5.2 Implement `Channel` base class with receive() and send() methods
+- [x] 5.3 Refactor CLI to use `CLIChannel` class
+- [x] 5.4 Refactor Canvas/Web to use `CanvasChannel` class
+- [x] 5.5 Implement `TelegramChannel` class with bot token support
+- [x] 5.6 Implement `ChannelRouter` to dispatch messages to appropriate channel
+- [x] 5.7 Implement message normalization (channel_id, user_id, content, metadata)
+- [x] 5.8 Add Telegram bot token configuration to `.agentcraft/channels.yaml`
 
 ## 6. Gateway Protocol
 
-- [ ] 6.1 Add `X-Gateway-Version` header to all API responses
-- [ ] 6.2 Implement client version validation middleware
-- [ ] 6.3 Define version compatibility rules (major must match, minor compatible)
-- [ ] 6.4 Implement version negotiation for backward compatible changes
-- [ ] 6.5 Create version changelog documentation
-- [ ] 6.6 Add migration guide for breaking changes
+- [x] 6.1 Add `X-Gateway-Version` header to all API responses
+- [x] 6.2 Implement client version validation middleware
+- [x] 6.3 Define version compatibility rules (major must match, minor compatible)
+- [x] 6.4 Implement version negotiation for backward compatible changes
+- [x] 6.5 Create version changelog documentation
+- [x] 6.6 Add migration guide for breaking changes
 
 ## 7. Plugin System
 
-- [ ] 7.1 Create `plugins/` module directory structure
-- [ ] 7.2 Implement `Plugin` base class with name, version, on_load(), on_unload()
-- [ ] 7.3 Implement `PluginContext` providing registries and config
-- [ ] 7.4 Implement `PluginLoader` with load_from_dir() and load_from_package()
-- [ ] 7.5 Implement Python entry point discovery mechanism
-- [ ] 7.6 Implement plugin isolation (catch exceptions, log errors)
-- [ ] 7.7 Create `plugins/` directory for local plugins
-- [ ] 7.8 Document Plugin SDK API
+- [x] 7.1 Create `plugins/` module directory structure
+- [x] 7.2 Implement `Plugin` base class with name, version, on_load(), on_unload()
+- [x] 7.3 Implement `PluginContext` providing registries and config
+- [x] 7.4 Implement `PluginLoader` with load_from_dir() and load_from_package()
+- [x] 7.5 Implement Python entry point discovery mechanism
+- [x] 7.6 Implement plugin isolation (catch exceptions, log errors)
+- [x] 7.7 Create `plugins/` directory for local plugins
+- [x] 7.8 Document Plugin SDK API
 
 ## 8. Extension Lifecycle
 
-- [ ] 8.1 Define plugin package pyproject.toml schema
-- [ ] 8.2 Implement entry point registration `[project.entry-points."agentcraft.plugins"]`
-- [ ] 8.3 Add AgentCraft version compatibility check for plugins
-- [ ] 8.4 Implement plugin auto-discovery at startup
-- [ ] 8.5 Create sample plugin package `agentcraft-plugin-telegram`
-- [ ] 8.6 Document plugin installation guide (pip install)
-- [ ] 8.7 Add plugin-specific config support `[plugins.<name>]`
+- [x] 8.1 Define plugin package pyproject.toml schema
+- [x] 8.2 Implement entry point registration `[project.entry-points."agentcraft.plugins"]`
+- [x] 8.3 Add AgentCraft version compatibility check for plugins
+- [x] 8.4 Implement plugin auto-discovery at startup
+- [x] 8.5 Create sample plugin package `agentcraft-plugin-telegram`
+- [x] 8.6 Document plugin installation guide (pip install)
+- [x] 8.7 Add plugin-specific config support `[plugins.<name>]`
 
 ## 9. ACP Control Plane
 
@@ -98,23 +98,46 @@
 
 ## 10. Model Catalog
 
-- [ ] 10.1 Define YAML config schema for model definitions
-- [ ] 10.2 Implement `ModelCatalog` class to manage models
-- [ ] 10.3 Implement context window detection from API response
-- [ ] 10.4 Implement context window caching in `~/.agentcraft/model-cache.json`
-- [ ] 10.5 Implement model selection by name/alias/auto
-- [ ] 10.6 Implement model capability tracking (vision, streaming, tools)
-- [ ] 10.7 Implement model fallback within provider
-- [ ] 10.8 Create default models config template
+- [x] 10.1 Define YAML config schema for model definitions
+- [x] 10.2 Implement `ModelCatalog` class to manage models
+- [x] 10.3 Implement context window detection from API response
+- [x] 10.4 Implement context window caching in `~/.agentcraft/model-cache.json`
+- [x] 10.5 Implement model selection by name/alias/auto
+- [x] 10.6 Implement model capability tracking (vision, streaming, tools)
+- [x] 10.7 Implement model fallback within provider
+- [x] 10.8 Create default models config template
 
 ## 11. Integration Testing
 
-- [ ] 11.1 Test provider fallback chain (DeepSeek → Anthropic → OpenAI)
-- [ ] 11.2 Test auth profile rotation (key1 fails → key2 → key3)
-- [ ] 11.3 Test vector memory search (semantic query)
-- [ ] 11.4 Test sandbox isolation (Bash in Docker container)
-- [ ] 11.5 Test Telegram channel message receive and send
-- [ ] 11.6 Test Gateway version compatibility (client version mismatch)
-- [ ] 11.7 Test plugin loading from directory and pip package
-- [ ] 11.8 Test ACP spawn child and parent stream
-- [ ] 11.9 Test model catalog context window detection
+- [x] 11.1 Test provider fallback chain (DeepSeek → Anthropic → OpenAI)
+- [x] 11.2 Test auth profile rotation (key1 fails → key2 → key3)
+- [x] 11.3 Test vector memory search (semantic query)
+- [x] 11.4 Test sandbox isolation (Bash in Docker container)
+- [x] 11.5 Test Telegram channel message receive and send
+- [x] 11.6 Test Gateway version compatibility (client version mismatch)
+- [x] 11.7 Test plugin loading from directory and pip package
+- [x] 11.8 Test ACP spawn child and parent stream
+- [x] 11.9 Test model catalog context window detection
+
+## 12. Automation & Scheduling
+
+- [x] 12.1 Create `automation/` module directory structure
+- [x] 12.2 Implement `CronSchedule` types (at/every/cron)
+- [x] 12.3 Implement `CronJob` and `CronJobState` dataclasses
+- [x] 12.4 Implement `CronStore` for SQLite persistence
+- [x] 12.5 Implement `CronScheduler` using APScheduler
+- [x] 12.6 Implement cron expression parsing (via APScheduler CronTrigger)
+- [x] 12.7 Implement job execution in isolated agent environment
+- [x] 12.8 Implement delivery mechanism (none/announce/webhook)
+- [x] 12.9 Implement failure notification and alerting
+- [x] 12.10 Implement heartbeat and health check
+- [x] 12.11 Add `/cron` slash commands to CLI (list/show/create/delete)
+- [x] 12.12 Integrate with Gateway API endpoints
+- [x] 12.13 Create automation config file template at `.agentcraft/automation.yaml`
+
+## 13. Webhook Integration
+
+- [x] 13.1 Implement `WebhookTrigger` for external event invocation
+- [x] 13.2 Implement webhook signature validation
+- [x] 13.3 Add webhook endpoint `/webhook/trigger`
+- [x] 13.4 Document webhook payload schema

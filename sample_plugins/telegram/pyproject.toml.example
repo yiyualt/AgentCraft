@@ -1,0 +1,27 @@
+# Sample Plugin Package pyproject.toml
+# This is a template for creating pip-installable plugins
+
+[project]
+name = "agentcraft-plugin-telegram"
+version = "1.0.0"
+description = "Telegram bot channel for AgentCraft"
+authors = [{name = "AgentCraft Team", email = "team@agentcraft.dev"}]
+dependencies = [
+    "agentcraft>=1.0.0",
+    "httpx>=0.25.0",
+]
+
+[project.entry-points."agentcraft.plugins"]
+telegram = "telegram_plugin:TelegramPlugin"
+
+# Optional additional entry points
+# [project.entry-points."agentcraft.channels"]
+# telegram = "telegram_plugin.channel:TelegramChannel"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["telegram_plugin*"]

@@ -192,6 +192,46 @@ models:
 
 **理由**: 配置驱动 + 运行时检测补充。
 
+### D11: Automation & Scheduling (新增)
+
+**决定**: 基于 APScheduler + SQLite 持久化的调度系统
+
+```python
+# 调度类型
+class CronSchedule:
+    kind: Literal["at", "every", "cron"]
+    at: str | None          # "2024-01-01T10:00:00"
+    every_ms: int | None    # 3600000 = every hour
+    expr: str | None        # "0 9 * * *" (cron expression)
+    tz: str | None          # "Asia/Shanghai"
+
+# 任务存储
+class CronJob:
+    id: str
+    schedule: CronSchedule
+    task: str              # Agent 任务描述
+    agent_type: str        # explore/general-purpose/plan
+    session_target: str    # main/isolated/new
+    delivery: CronDelivery # 结果交付方式
+    state: CronJobState    # running/error/ok/skipped
+
+class CronStore:
+    # SQLite 持久化
+    # ~/.agentcraft/cron/jobs.json
+    # ~/.agentcraft/cron/jobs-state.json
+```
+
+**理由**: APScheduler 是 Python 标准调度库，支持 cron/at/interval 三种调度方式。SQLite 持久化保证任务不丢失。
+
+**交付方式**:
+- `none`: 不通知，只执行
+- `announce`: 发送到 Channel (Telegram/CLI)
+- `webhook`: POST 到外部 URL
+
+**备选方案**:
+- 纯 cron expression - ✓ 更标准，但缺少 interval/at 支持
+- Celery beat - ❌ 需要额外消息队列基础设施
+
 ## Risks / Trade-offs
 
 | Risk | Mitigation |

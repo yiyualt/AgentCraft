@@ -25,6 +25,10 @@ from tools.agent_executor import AgentExecutor, set_agent_executor  # Agent exec
 from tools.skill_tools import *  # noqa: F401,F403 — register Skill tool
 from tools.mcp import MCPToolManager, MCPConfig
 from tools.sandbox import SandboxExecutor, SandboxConfig
+from automation import CronStore, CronScheduler
+from automation.webhook import WebhookStore, WebhookExecutor, init_webhooks
+from providers import ProviderRegistry, register_default_providers
+from gateway import GATEWAY_VERSION, get_version_headers, validate_client_version, get_changelog
 from streaming_executor import StreamingToolExecutor, is_concurrency_safe
 from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, PermissionMode, PermissionRuleKind, HookEvent, HookMatcher, MultiSourceRuleManager, PermissionAuditor, PermissionRule, PermissionResult, RuleSource
 from sessions.vector_memory import VectorMemoryStore
@@ -199,6 +203,13 @@ _telegram_channel: TelegramChannel | None = None
 _web_channel: WebChannel | None = None
 _wecom_channel: WeComChannel | None = None
 
+# ===== Provider Registry =====
+_provider_registry: ProviderRegistry | None = None
+
+# ===== Webhook =====
+_webhook_store: WebhookStore | None = None
+_webhook_executor: WebhookExecutor | None = None
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -362,6 +373,22 @@ async def lifespan(_app: FastAPI):
     _app.include_router(_canvas_channel.get_router())
     logger.info("[Canvas] CanvasChannel registered at /canvas")
 
+    # Provider Registry initialization (multi-provider support with fallback)
+    global _provider_registry
+    _provider_registry = register_default_providers()
+    _app.state.provider_registry = _provider_registry
+    if _provider_registry:
+        status = _provider_registry.get_status_summary()
+        logger.info(f"[ProviderRegistry] Initialized: {status}")
+
+    # Webhook initialization (external event triggers)
+    global _webhook_store, _webhook_executor
+    _webhook_store = WebhookStore()
+    _webhook_executor = WebhookExecutor(_webhook_store, lambda: agent_executor)
+    _app.state.webhook_store = _webhook_store
+    _app.state.webhook_executor = _webhook_executor
+    logger.info("[Webhook] WebhookExecutor initialized")
+
     await _channel_router.start_all()
 
     # 显示二维码供用户扫码
@@ -379,6 +406,37 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Ollama MLflow Gateway", lifespan=lifespan)
+
+
+# ===== Version Middleware =====
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class VersionMiddleware(BaseHTTPMiddleware):
+    """Add version headers to all responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        # Check client version header
+        client_version = request.headers.get("X-Client-Version")
+        is_valid, message = validate_client_version(client_version)
+
+        if not is_valid:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=400,
+                content={"error": message, "gateway_version": GATEWAY_VERSION},
+                headers=get_version_headers(),
+            )
+
+        # Process request
+        response = await call_next(request)
+
+        # Add version headers to response
+        for key, value in get_version_headers().items():
+            response.headers[key] = value
+
+        return response
+
+app.add_middleware(VersionMiddleware)
 
 
 async def _check_rate_limit(request: Request) -> None:
@@ -413,7 +471,26 @@ def health() -> dict[str, str]:
         "mlflow_tracking_uri": MLFLOW_TRACKING_URI,
         "llm_base_url": LLM_BASE_URL,
         "sandbox_enabled": str(SANDBOX_ENABLED),
+        "gateway_version": GATEWAY_VERSION,
     }
+
+
+@app.get("/version")
+def get_version() -> dict[str, Any]:
+    """Get gateway version info."""
+    return get_changelog()
+
+
+@app.get("/version/changelog")
+def get_version_changelog() -> dict[str, Any]:
+    """Get full version changelog."""
+    return get_changelog()
+
+
+@app.get("/version/migrate")
+def get_version_migration(from_version: str = "0.8.0", to_version: str = GATEWAY_VERSION) -> dict[str, Any]:
+    """Get migration guide between versions."""
+    return get_migration_guide(from_version, to_version)
 
 
 @app.get("/v1/models")
@@ -741,6 +818,298 @@ async def acp_broadcast(request: Request) -> dict[str, Any]:
     return {"broadcast_to": count, "message": message}
 
 
+# ===== Cron API =====
+
+_cron_store: CronStore | None = None
+_cron_scheduler: CronScheduler | None = None
+
+
+@app.on_event("startup")
+async def init_cron():
+    """Initialize cron scheduler."""
+    global _cron_store, _cron_scheduler
+
+    from automation import CronStore, CronScheduler
+    from automation.scheduler import set_scheduler
+
+    _cron_store = CronStore()
+    _cron_scheduler = CronScheduler(
+        store=_cron_store,
+        agent_executor_factory=lambda: _agent_executor,
+    )
+    _cron_scheduler.start()
+    set_scheduler(_cron_scheduler)
+    _app.state.cron_scheduler = _cron_scheduler
+    logger.info("[Cron] Scheduler initialized")
+
+
+@app.on_event("shutdown")
+async def shutdown_cron():
+    """Shutdown cron scheduler."""
+    if _cron_scheduler:
+        _cron_scheduler.stop()
+        logger.info("[Cron] Scheduler stopped")
+
+
+@app.get("/cron/status")
+def cron_status() -> dict[str, Any]:
+    """Get cron scheduler status."""
+    if _cron_scheduler is None:
+        raise HTTPException(status_code=500, detail="Cron scheduler not initialized")
+    return _cron_scheduler.get_status()
+
+
+@app.get("/cron/jobs")
+def cron_list_jobs() -> list[dict[str, Any]]:
+    """List all cron jobs."""
+    if _cron_scheduler is None:
+        raise HTTPException(status_code=500, detail="Cron scheduler not initialized")
+
+    jobs = _cron_scheduler.list_jobs()
+    return [
+        {
+            "id": job.id,
+            "name": job.name,
+            "enabled": job.enabled,
+            "schedule": {
+                "kind": job.schedule.kind,
+                "expr": getattr(job.schedule, "expr", None),
+            },
+            "task": job.task[:100],
+            "status": job.state.status.value,
+            "run_count": job.state.run_count,
+            "error_count": job.state.error_count,
+            "next_run": job.state.next_run_at,
+            "last_run": job.state.last_run_at,
+        }
+        for job in jobs
+    ]
+
+
+@app.get("/cron/jobs/{job_id}")
+def cron_get_job(job_id: str) -> dict[str, Any]:
+    """Get cron job details."""
+    if _cron_scheduler is None:
+        raise HTTPException(status_code=500, detail="Cron scheduler not initialized")
+
+    job = _cron_scheduler.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+
+    runs = _cron_store.get_runs(job_id, limit=10)
+
+    return {
+        "id": job.id,
+        "name": job.name,
+        "enabled": job.enabled,
+        "schedule": {
+            "kind": job.schedule.kind,
+            "expr": getattr(job.schedule, "expr", None),
+            "tz": getattr(job.schedule, "tz", None),
+        },
+        "task": job.task,
+        "agent_type": job.agent_type,
+        "timeout": job.timeout,
+        "state": {
+            "status": job.state.status.value,
+            "run_count": job.state.run_count,
+            "error_count": job.state.error_count,
+            "last_result": job.state.last_result,
+            "last_error": job.state.last_error,
+        },
+        "runs": runs,
+    }
+
+
+@app.post("/cron/jobs")
+async def cron_create_job(request: Request) -> dict[str, Any]:
+    """Create a new cron job."""
+    if _cron_scheduler is None:
+        raise HTTPException(status_code=500, detail="Cron scheduler not initialized")
+
+    from automation.types import CronJob, CronExpressionSchedule, CronDelivery, DeliveryMode
+    import uuid
+
+    data = await request.json()
+
+    # Required fields
+    name = data.get("name")
+    expr = data.get("expr")  # Cron expression
+    task = data.get("task")
+
+    if not name or not expr or not task:
+        raise HTTPException(status_code=400, detail="name, expr, and task are required")
+
+    job_id = f"cron-{uuid.uuid4().hex[:8]}"
+
+    job = CronJob(
+        id=job_id,
+        name=name,
+        schedule=CronExpressionSchedule(kind="cron", expr=expr, tz=data.get("tz")),
+        task=task,
+        agent_type=data.get("agent_type", "general-purpose"),
+        timeout=data.get("timeout", 180),
+        delivery=CronDelivery(
+            mode=DeliveryMode(data.get("delivery_mode", "none")),
+            channel=data.get("delivery_channel"),
+            to=data.get("delivery_to"),
+        ),
+    )
+
+    created = _cron_scheduler.add_job(job)
+
+    return {
+        "id": created.id,
+        "name": created.name,
+        "enabled": created.enabled,
+        "schedule": {"kind": "cron", "expr": expr},
+        "task": created.task,
+        "status": "created",
+    }
+
+
+@app.delete("/cron/jobs/{job_id}")
+def cron_delete_job(job_id: str) -> dict[str, Any]:
+    """Delete a cron job."""
+    if _cron_scheduler is None:
+        raise HTTPException(status_code=500, detail="Cron scheduler not initialized")
+
+    if _cron_scheduler.delete_job(job_id):
+        return {"deleted": job_id}
+    raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+
+
+@app.patch("/cron/jobs/{job_id}/enable")
+def cron_enable_job(job_id: str) -> dict[str, Any]:
+    """Enable a cron job."""
+    if _cron_scheduler is None:
+        raise HTTPException(status_code=500, detail="Cron scheduler not initialized")
+
+    if _cron_scheduler.enable_job(job_id):
+        return {"enabled": job_id}
+    raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+
+
+@app.patch("/cron/jobs/{job_id}/disable")
+def cron_disable_job(job_id: str) -> dict[str, Any]:
+    """Disable a cron job."""
+    if _cron_scheduler is None:
+        raise HTTPException(status_code=500, detail="Cron scheduler not initialized")
+
+    if _cron_scheduler.disable_job(job_id):
+        return {"disabled": job_id}
+    raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+
+
+# ===== Webhook API =====
+
+_webhook_store: Any | None = None
+_webhook_executor: Any | None = None
+
+
+@app.on_event("startup")
+async def init_webhook_system():
+    """Initialize webhook system."""
+    global _webhook_store, _webhook_executor
+
+    from automation.webhook import WebhookStore, WebhookExecutor, init_webhooks
+
+    init_webhooks(lambda: _agent_executor)
+    _webhook_store = WebhookStore()
+    _webhook_executor = WebhookExecutor(_webhook_store, lambda: _agent_executor)
+    _app.state.webhook_executor = _webhook_executor
+    logger.info("[Webhook] System initialized")
+
+
+@app.post("/webhook/{webhook_name}")
+async def webhook_trigger(webhook_name: str, request: Request) -> dict[str, Any]:
+    """Handle webhook trigger and execute agent task.
+
+    Headers:
+        X-Webhook-Signature: HMAC-SHA256 signature (if secret configured)
+
+    Payload:
+        task: Task description for agent (optional, auto-generated if missing)
+        message: Alternative task field
+        ... other custom fields
+
+    Returns:
+        Execution result or error
+    """
+    if _webhook_executor is None:
+        raise HTTPException(status_code=500, detail="Webhook system not initialized")
+
+    # Get raw body for signature validation
+    raw_body = await request.body()
+
+    # Parse JSON payload
+    try:
+        payload = await request.json()
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    # Get headers
+    headers = dict(request.headers)
+
+    # Execute
+    result = await _webhook_executor.handle_webhook(
+        webhook_name=webhook_name,
+        payload=payload,
+        headers=headers,
+        raw_body=raw_body,
+    )
+
+    if "error" in result:
+        if result.get("status") == "not_found":
+            raise HTTPException(status_code=404, detail=result["error"])
+        elif result.get("status") == "disabled":
+            raise HTTPException(status_code=403, detail=result["error"])
+        elif result.get("status") == "signature_error":
+            raise HTTPException(status_code=401, detail=result["error"])
+        elif result.get("status") == "invalid_payload":
+            raise HTTPException(status_code=400, detail=result["error"])
+
+    return result
+
+
+@app.get("/webhooks")
+def list_webhooks() -> list[dict[str, Any]]:
+    """List all registered webhooks."""
+    if _webhook_store is None:
+        raise HTTPException(status_code=500, detail="Webhook system not initialized")
+
+    webhooks = _webhook_store.list_webhooks()
+    return [
+        {
+            "name": w.name,
+            "url": w.url,
+            "enabled": w.enabled,
+            "agent_type": w.agent_type,
+            "has_secret": w.secret is not None,
+        }
+        for w in webhooks
+    ]
+
+
+@app.get("/webhooks/events")
+def get_webhook_events(limit: int = 50) -> list[dict[str, Any]]:
+    """Get recent webhook events."""
+    if _webhook_executor is None:
+        raise HTTPException(status_code=500, detail="Webhook system not initialized")
+
+    events = _webhook_executor.get_recent_events(limit)
+    return [
+        {
+            "webhook_name": e.webhook_name,
+            "trigger_id": e.trigger_id,
+            "received_at": e.received_at,
+            "signature_valid": e.signature_valid,
+            "payload": e.payload,
+        }
+        for e in events
+    ]
+
+
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     # Rate limit check (quick, no LLM)
@@ -844,10 +1213,21 @@ async def _handle_streaming(
         # LLM call (non-streaming for simplicity - streaming LLM would be next phase)
         try:
             async with _llm_semaphore:
-                response = await asyncio.to_thread(
-                    llm_client.chat.completions.create, **call_kwargs
-                )
-            result = response.model_dump()
+                # Use ProviderRegistry if available (with fallback)
+                if _provider_registry and _provider_registry.get_fallback_chain():
+                    response = await _provider_registry.complete_with_fallback(
+                        messages=messages,
+                        model=model,
+                        tools=tools if tools else None,
+                        **kwargs
+                    )
+                    result = response
+                else:
+                    # Fallback to direct client
+                    response = await asyncio.to_thread(
+                        llm_client.chat.completions.create, **call_kwargs
+                    )
+                    result = response.model_dump()
         except Exception as e:
             yield f"event: error\ndata: {{\"error\": \"{str(e)}\"}}\n\n"
             break
@@ -1274,10 +1654,20 @@ async def _handle_non_streaming(
                     for attempt in range(3):
                         try:
                             async with _llm_semaphore:
-                                response = await asyncio.to_thread(
-                                    llm_client.chat.completions.create, **call_kwargs
-                                )
-                            result = response.model_dump()
+                                # Use ProviderRegistry if available (with fallback)
+                                if _provider_registry and _provider_registry.get_fallback_chain():
+                                    result = await _provider_registry.complete_with_fallback(
+                                        messages=messages,
+                                        model=model,
+                                        tools=tools if tools else None,
+                                        **kwargs
+                                    )
+                                else:
+                                    # Fallback to direct client
+                                    response = await asyncio.to_thread(
+                                        llm_client.chat.completions.create, **call_kwargs
+                                    )
+                                    result = response.model_dump()
                             break  # Success — exit retry loop
                         except Exception as e:
                             llm_error = e

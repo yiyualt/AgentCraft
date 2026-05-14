@@ -1,0 +1,30 @@
+# Plugins Configuration Template
+# Copy to ~/.agentcraft/config.yaml and customize
+
+plugins:
+  # Telegram plugin configuration
+  telegram:
+    enabled: false
+    bot_token: ""  # Or set via TELEGRAM_BOT_TOKEN env var
+    polling_interval: 1
+    timeout: 30
+
+  # Sample plugin configuration
+  # my-plugin:
+  #   enabled: true
+  #   api_key: "your-key"
+  #   custom_setting: "value"
+
+# Plugin directories to scan
+plugin_dirs:
+  - "plugins/"
+  - "~/.agentcraft/plugins/"
+
+# Enable entry point discovery (pip installed plugins)
+entry_points_enabled: true
+
+# Plugin loading order (by name)
+# order:
+#   - core-tools
+#   - telegram
+#   - slack

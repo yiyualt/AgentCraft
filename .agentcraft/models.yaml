@@ -1,0 +1,48 @@
+# Model Configuration Template
+# Copy to ~/.agentcraft/models.yaml and customize
+
+# Model definitions with capabilities and pricing
+# Can override defaults or add custom models
+
+models:
+  # Example: Override default model's context window
+  # deepseek-chat:
+  #   context_window: 64000  # Override from 128000
+
+  # Example: Add custom model
+  # custom-model:
+  #   provider_type: openai
+  #   aliases: ["custom"]
+  #   context_window: 32000
+  #   max_output_tokens: 2048
+  #   capabilities: ["streaming", "tools"]
+  #   pricing_input: 1.0
+  #   pricing_output: 2.0
+
+# Model selection preferences
+selection:
+  # Preferred model for general tasks
+  default_model: "deepseek-chat"
+
+  # Preferred model for code tasks
+  code_model: "deepseek-coder"
+
+  # Preferred model for reasoning tasks
+  reasoning_model: "deepseek-reasoner"
+
+  # Preferred model for vision tasks
+  vision_model: "claude-sonnet-4-6"
+
+# Fallback configuration
+fallback:
+  # Enable cross-provider fallback
+  cross_provider: true
+
+  # Fallback order by provider priority
+  provider_order:
+    - deepseek
+    - anthropic
+    - openai
+
+  # Max fallback attempts
+  max_attempts: 3

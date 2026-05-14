@@ -15,6 +15,7 @@ import logging
 import os
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +51,9 @@ from skills import SkillLoader, default_skill_dirs
 from core import PromptBuilder, MemoryLoader
 from acp import AgentControlPlane, AcpConfig
 from tools.sandbox import SandboxExecutor, SandboxConfig
+from automation import CronStore, CronScheduler
+from automation.types import CronJob, CronExpressionSchedule, CronDelivery, DeliveryMode, SessionTarget
+from automation.scheduler import set_scheduler
 
 # ===== Config =====
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
@@ -100,6 +104,15 @@ _agent_executor = AgentExecutor(
     session_manager=_session_manager,
 )
 set_agent_executor(_agent_executor)
+
+# Initialize CronScheduler
+_cron_store = CronStore()
+_cron_scheduler = CronScheduler(
+    store=_cron_store,
+    agent_executor_factory=lambda: _agent_executor,
+)
+set_scheduler(_cron_scheduler)
+logger.info("[Cron] Scheduler initialized")
 
 
 def parse_args() -> argparse.Namespace:
@@ -450,6 +463,10 @@ async def run_interactive(
     session: CLISession,
 ) -> None:
     """Interactive REPL mode."""
+    # Start cron scheduler
+    _cron_scheduler.start()
+    logger.info("[Cron] Scheduler started")
+
     console.print(Panel.fit(
         "[bold]AgentCraft CLI[/bold]\n"
         f"Model: {model}\n"
@@ -490,7 +507,152 @@ async def run_interactive(
         except EOFError:
             console.print("\n[green]Goodbye![/green]")
             session.save()
+            _cron_scheduler.stop()
+            logger.info("[Cron] Scheduler stopped")
             break
+
+
+# ===== Cron Command Helpers =====
+
+def _cron_list() -> str:
+    """List all cron jobs."""
+    jobs = _cron_scheduler.list_jobs()
+    if not jobs:
+        return "[yellow]No scheduled jobs[/yellow]"
+
+    lines = ["[bold]Scheduled Jobs:[/bold]\n\n"]
+    for job in jobs:
+        status_color = "green" if job.state.status.value == "ok" else "yellow" if job.state.status.value == "running" else "red"
+        enabled_mark = "✓" if job.enabled else "✗"
+        lines.append(f"  [{status_color}]{enabled_mark} {job.id}[/{status_color}]: {job.name}\n")
+        lines.append(f"    Schedule: {job.schedule.kind} ({job.schedule.expr if hasattr(job.schedule, 'expr') else '-'})\n")
+        lines.append(f"    Status: {job.state.status.value}, Runs: {job.state.run_count}\n")
+        if job.state.next_run_at:
+            lines.append(f"    Next run: {datetime.fromtimestamp(job.state.next_run_at).strftime('%Y-%m-%d %H:%M')}\n")
+        lines.append("\n")
+    return "".join(lines)
+
+
+def _cron_show(job_id: str) -> str:
+    """Show job details."""
+    if not job_id:
+        return "[red]Usage: /cron show <job_id>[/red]"
+
+    job = _cron_scheduler.get_job(job_id)
+    if not job:
+        return f"[red]Job not found: {job_id}[/red]"
+
+    lines = [f"[bold]Job: {job.name}[/bold]\n\n"]
+    lines.append(f"  ID: {job.id}\n")
+    lines.append(f"  Enabled: {job.enabled}\n")
+    lines.append(f"  Schedule: {job.schedule.kind}\n")
+    if hasattr(job.schedule, 'expr'):
+        lines.append(f"    Expression: {job.schedule.expr}\n")
+    if hasattr(job.schedule, 'tz'):
+        lines.append(f"    Timezone: {job.schedule.tz}\n")
+    lines.append(f"  Task: {job.task[:100]}...\n")
+    lines.append(f"  Agent Type: {job.agent_type}\n")
+    lines.append(f"  Timeout: {job.timeout}s\n")
+    lines.append(f"\n  [bold]State:[/bold]\n")
+    lines.append(f"    Status: {job.state.status.value}\n")
+    lines.append(f"    Runs: {job.state.run_count}, Errors: {job.state.error_count}\n")
+    if job.state.last_run_at:
+        lines.append(f"    Last run: {datetime.fromtimestamp(job.state.last_run_at).strftime('%Y-%m-%d %H:%M:%S')}\n")
+    if job.state.last_result:
+        lines.append(f"    Last result: {job.state.last_result[:100]}...\n")
+    if job.state.last_error:
+        lines.append(f"    Last error: {job.state.last_error[:100]}\n")
+
+    # Run history
+    runs = _cron_store.get_runs(job_id, limit=5)
+    if runs:
+        lines.append(f"\n  [bold]Recent Runs:[/bold]\n")
+        for run in runs:
+            run_time = datetime.fromtimestamp(run["run_at"]).strftime('%Y-%m-%d %H:%M')
+            status_color = "green" if run["status"] == "ok" else "red"
+            lines.append(f"    [{status_color}]{run_time}[/{status_color}]: {run['status']} ({run.get('duration_ms', 0)}ms)\n")
+
+    return "".join(lines)
+
+
+def _cron_add(args: str) -> str:
+    """Add new cron job.
+
+    Usage: /cron add <name> <cron_expr> <task>
+    Example: /cron add hello-world "*/1 * * * *" "echo hello world"
+    Or: /cron add hello-world */1 * * * * echo hello world  (auto-parse 5 fields)
+    """
+    if not args:
+        return "[red]Usage: /cron add <name> <cron_expr> <task>[/red]\n  Example: /cron add hello-world \"*/1 * * * *\" \"echo hello world\""
+
+    # Parse with potential quotes or 5-field cron expression
+    import re
+
+    # Try quoted format first: name "expr" "task"
+    quoted_match = re.match(r'(\S+)\s+"([^"]+)"\s+"([^"]+)"', args)
+    if quoted_match:
+        name = quoted_match.group(1)
+        expr = quoted_match.group(2)
+        task = quoted_match.group(3)
+    else:
+        # Try split approach: name followed by 5 cron fields then task
+        parts = args.split()
+        if len(parts) >= 7:  # name + 5 cron fields + task
+            name = parts[0]
+            expr = " ".join(parts[1:6])  # 5 cron fields
+            task = " ".join(parts[6:])
+        elif len(parts) >= 3:
+            # Fallback: name expr task (expr might be quoted or single field)
+            name = parts[0]
+            expr = parts[1] if len(parts) == 3 else " ".join(parts[1:6])
+            task = parts[-1] if len(parts) == 3 else " ".join(parts[6:])
+        else:
+            return "[red]Usage: /cron add <name> <cron_expr> <task>[/red]"
+
+    import uuid
+    job_id = f"cron-{uuid.uuid4().hex[:8]}"
+
+    from automation.types import CronExpressionSchedule
+    job = CronJob(
+        id=job_id,
+        name=name,
+        schedule=CronExpressionSchedule(expr=expr),
+        task=task,
+        delivery=CronDelivery(mode=DeliveryMode.NONE),
+    )
+
+    _cron_scheduler.add_job(job)
+    return f"[green]✓ Created job: {job_id}[/green]\n  Name: {name}\n  Schedule: {expr}\n  Task: {task[:50]}..."
+
+
+def _cron_delete(job_id: str) -> str:
+    """Delete cron job."""
+    if not job_id:
+        return "[red]Usage: /cron del <job_id>[/red]"
+
+    if _cron_scheduler.delete_job(job_id):
+        return f"[yellow]Deleted job: {job_id}[/yellow]"
+    return f"[red]Job not found: {job_id}[/red]"
+
+
+def _cron_enable(job_id: str) -> str:
+    """Enable cron job."""
+    if not job_id:
+        return "[red]Usage: /cron enable <job_id>[/red]"
+
+    if _cron_scheduler.enable_job(job_id):
+        return f"[green]Enabled job: {job_id}[/green]"
+    return f"[red]Job not found: {job_id}[/red]"
+
+
+def _cron_disable(job_id: str) -> str:
+    """Disable cron job."""
+    if not job_id:
+        return "[red]Usage: /cron disable <job_id>[/red]"
+
+    if _cron_scheduler.disable_job(job_id):
+        return f"[yellow]Disabled job: {job_id}[/yellow]"
+    return f"[red]Job not found: {job_id}[/red]"
 
 
 async def handle_slash_command(cmd: str, session: CLISession) -> str | None:
@@ -521,6 +683,15 @@ async def handle_slash_command(cmd: str, session: CLISession) -> str | None:
   /spawn <task> [type] Spawn child agent (types: explore, general-purpose, plan)
   /children     List child agents
   /wait [timeout] Wait for all children to complete
+
+[bold]Cron (Scheduled Tasks):[/bold]
+  /cron         Show cron status and jobs
+  /cron list    List all scheduled jobs
+  /cron show <id> Show job details
+  /cron add <name> <expr> <task> Add new job
+  /cron del <id> Delete job
+  /cron enable <id> Enable job
+  /cron disable <id> Disable job
 """
 
     # ACP commands
@@ -580,6 +751,30 @@ async def handle_slash_command(cmd: str, session: CLISession) -> str | None:
             return "".join(lines)
         except asyncio.TimeoutError:
             return "[red]Timeout waiting for children[/red]"
+
+    # Cron commands
+    if command == "/cron":
+        # Parse sub-command
+        if not args or args == "list":
+            return _cron_list()
+        parts = args.split(" ", 1)
+        subcmd = parts[0]
+        subargs = parts[1] if len(parts) > 1 else ""
+
+        if subcmd == "list":
+            return _cron_list()
+        elif subcmd == "show":
+            return _cron_show(subargs)
+        elif subcmd == "add":
+            return _cron_add(subargs)
+        elif subcmd == "del":
+            return _cron_delete(subargs)
+        elif subcmd == "enable":
+            return _cron_enable(subargs)
+        elif subcmd == "disable":
+            return _cron_disable(subargs)
+        else:
+            return f"[red]Unknown cron command: {subcmd}[/red]"
 
     if command == "/clear":
         session.clear()

@@ -11,6 +11,7 @@ version = "0.1.0"
 description = "AgentCraft - AI Agent with LLM and tools"
 requires-python = ">=3.13"
 dependencies = [
+    "apscheduler>=3.10.0",  # Cron scheduling
     "ddgs>=9.14.2",
     "docker>=7.0.0",
     "duckduckgo-search>=8.1.1",
