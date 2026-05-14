@@ -32,6 +32,7 @@ from skills import SkillLoader, default_skill_dirs
 from channels import ChannelRouter
 from channels.telegram import TelegramChannel
 from channels.web import WebChannel
+from channels.wecom import WeComChannel
 from canvas import CanvasManager, CanvasChannel
 from core import PromptBuilder, MemoryLoader
 
@@ -192,12 +193,13 @@ _recovery_executor: ResilientExecutor | None = None
 _channel_router = ChannelRouter()
 _telegram_channel: TelegramChannel | None = None
 _web_channel: WebChannel | None = None
+_wecom_channel: WeComChannel | None = None
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Initialize MCP servers and channels on startup, shut down on exit."""
-    global _mcp_manager, _unified_registry, _telegram_channel, _web_channel, _sandbox_executor, _canvas_manager, _canvas_channel
+    global _mcp_manager, _unified_registry, _telegram_channel, _web_channel, _wecom_channel, _sandbox_executor, _canvas_manager, _canvas_channel
 
     _app.state.session_manager = _session_manager
     _skill_loader.load()
@@ -325,6 +327,12 @@ async def lifespan(_app: FastAPI):
     _channel_router.register(_web_channel)
     _app.include_router(_web_channel.get_router())
 
+    # 企业微信 channel
+    global _wecom_channel
+    _wecom_channel = WeComChannel(_session_manager)
+    _channel_router.register(_wecom_channel)
+    logger.info("[WeCom] WeComChannel registered")
+
     # Canvas channel (SSE streaming workspace)
     _canvas_channel = CanvasChannel(_canvas_manager)
     _channel_router.register(_canvas_channel)
@@ -332,6 +340,10 @@ async def lifespan(_app: FastAPI):
     logger.info("[Canvas] CanvasChannel registered at /canvas")
 
     await _channel_router.start_all()
+
+    # 显示二维码供用户扫码
+    from utils.qrcode_display import print_gateway_qrcode
+    print_gateway_qrcode(port=8000, path="/chat")
 
     yield
 

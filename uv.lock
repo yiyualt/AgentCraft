@@ -1469,8 +1469,10 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "python-pptx" },
     { name = "pyyaml" },
+    { name = "qrcode" },
     { name = "rich" },
     { name = "tiktoken" },
+    { name = "wechatpy" },
 ]
 
 [package.optional-dependencies]
@@ -1501,8 +1503,10 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "python-pptx", specifier = ">=1.0.2" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "qrcode", specifier = ">=8.2" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "tiktoken", specifier = ">=0.7.0" },
+    { name = "wechatpy", specifier = ">=1.8.18" },
 ]
 provides-extras = ["dev"]
 
@@ -1583,6 +1587,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/9e/de/911ac9e309052aca1b20b2d5549d3db45d1011e1a610e552c6ccdd1b64f8/opentelemetry_semantic_conventions-0.62b1.tar.gz", hash = "sha256:c5cc6e04a7f8c7cdd30be2ed81499fa4e75bfbd52c9cb70d40af1f9cd3619802", size = 145750, upload-time = "2026-04-24T13:15:52.236Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/eb/a6/83dc2ab6fa397ee66fba04fe2e74bdf7be3b3870005359ceb7689103c058/opentelemetry_semantic_conventions-0.62b1-py3-none-any.whl", hash = "sha256:cf506938103d331fbb78eded0d9788095f7fd59016f2bda813c3324e5a74a93c", size = 231620, upload-time = "2026-04-24T13:15:35.454Z" },
+]
+
+[[package]]
+name = "optionaldict"
+version = "0.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ad/8b/cb72b1d40d21963ad1923ce529ae1f9ba49a13c18c7e6c47081c3dc1211f/optionaldict-0.1.2.tar.gz", hash = "sha256:175b62ee8259af703def42e0b44b413ea55e7b0732456cb2fd5cbbc998605966", size = 3454, upload-time = "2021-01-15T07:52:20.311Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/93/c2/408eb8d1ddacc36c6c31e0b0640b8493a4b3e88e26670bdd2b3a8ad7d704/optionaldict-0.1.2-py2.py3-none-any.whl", hash = "sha256:278d9b79b3d6a55b1b8ff5f9017bff6383a33426348d09e699ff50162bbcdab7", size = 3756, upload-time = "2021-01-15T07:52:18.69Z" },
 ]
 
 [[package]]
@@ -2113,6 +2126,18 @@ wheels = [
 ]
 
 [[package]]
+name = "qrcode"
+version = "8.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8f/b2/7fc2931bfae0af02d5f53b174e9cf701adbb35f39d69c2af63d4a39f81a9/qrcode-8.2.tar.gz", hash = "sha256:35c3f2a4172b33136ab9f6b3ef1c00260dd2f66f858f24d88418a015f446506c", size = 43317, upload-time = "2025-05-01T15:44:24.726Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dd/b8/d2d6d731733f51684bbf76bf34dab3b70a9148e8f2cef2bb544fccec681a/qrcode-8.2-py3-none-any.whl", hash = "sha256:16e64e0716c14960108e85d853062c9e8bba5ca8252c0b4d0231b9df4060ff4f", size = 45986, upload-time = "2025-05-01T15:44:22.781Z" },
+]
+
+[[package]]
 name = "regex"
 version = "2026.5.9"
 source = { registry = "https://pypi.org/simple" }
@@ -2628,6 +2653,22 @@ wheels = [
 ]
 
 [[package]]
+name = "wechatpy"
+version = "1.8.18"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "optionaldict" },
+    { name = "python-dateutil" },
+    { name = "requests" },
+    { name = "six" },
+    { name = "xmltodict" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/80/34/849aaa2a03dc41b002e224006746bdb2eea729435225709139c4b3a95d2b/wechatpy-1.8.18.tar.gz", hash = "sha256:b356d0181abcf8487268e5759f942c4ffbb5090c00197858109e90000a301d08", size = 107318, upload-time = "2021-11-11T15:12:32.716Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/09/d6/a49a4571affd12dbb88067d7c3a874dc069ffa471c29fd3a8e2771e7f0c2/wechatpy-1.8.18-py2.py3-none-any.whl", hash = "sha256:bfd0457dfd3f4623a490534cc9cb9c29b53f9397b3ebbee0f11ee7925b9b71f6", size = 159152, upload-time = "2021-11-11T15:12:31.564Z" },
+]
+
+[[package]]
 name = "werkzeug"
 version = "3.1.8"
 source = { registry = "https://pypi.org/simple" }
@@ -2646,6 +2687,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/46/2c/c06ef49dc36e7954e55b802a8b231770d286a9758b3d936bd1e04ce5ba88/xlsxwriter-3.2.9.tar.gz", hash = "sha256:254b1c37a368c444eac6e2f867405cc9e461b0ed97a3233b2ac1e574efb4140c", size = 215940, upload-time = "2025-09-16T00:16:21.63Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3a/0c/3662f4a66880196a590b202f0db82d919dd2f89e99a27fadef91c4a33d41/xlsxwriter-3.2.9-py3-none-any.whl", hash = "sha256:9a5db42bc5dff014806c58a20b9eae7322a134abb6fce3c92c181bfb275ec5b3", size = 175315, upload-time = "2025-09-16T00:16:20.108Z" },
+]
+
+[[package]]
+name = "xmltodict"
+version = "1.0.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/19/70/80f3b7c10d2630aa66414bf23d210386700aa390547278c789afa994fd7e/xmltodict-1.0.4.tar.gz", hash = "sha256:6d94c9f834dd9e44514162799d344d815a3a4faec913717a9ecbfa5be1bb8e61", size = 26124, upload-time = "2026-02-22T02:21:22.074Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/38/34/98a2f52245f4d47be93b580dae5f9861ef58977d73a79eb47c58f1ad1f3a/xmltodict-1.0.4-py3-none-any.whl", hash = "sha256:a4a00d300b0e1c59fc2bfccb53d7b2e88c32f200df138a0dd2229f842497026a", size = 13580, upload-time = "2026-02-22T02:21:21.039Z" },
 ]
 
 [[package]]
