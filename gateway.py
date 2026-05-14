@@ -33,6 +33,7 @@ from channels import ChannelRouter
 from channels.telegram import TelegramChannel
 from channels.web import WebChannel
 from canvas import CanvasManager, CanvasChannel
+from core import PromptBuilder, MemoryLoader
 
 # ===== Config =====
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5050")
@@ -181,6 +182,8 @@ _permission_auditor: PermissionAuditor | None = None
 
 # ===== Memory =====
 _memory_store: VectorMemoryStore | None = None
+_memory_loader: MemoryLoader | None = None
+_prompt_builder: PromptBuilder | None = None
 
 # ===== Error Recovery =====
 _recovery_executor: ResilientExecutor | None = None
@@ -303,6 +306,16 @@ async def lifespan(_app: FastAPI):
     _memory_store = VectorMemoryStore(embedding_model=MockEmbeddingModel())
     _app.state.memory_store = _memory_store
     logger.info("[Memory] VectorMemoryStore initialized")
+
+    # Core PromptBuilder (uses MemoryLoader with task-based retrieval)
+    global _prompt_builder, _memory_loader
+    _memory_loader = MemoryLoader(store=_memory_store)
+    _prompt_builder = PromptBuilder(
+        skill_loader=_skill_loader,
+        memory_loader=_memory_loader,
+    )
+    _app.state.prompt_builder = _prompt_builder
+    logger.info("[Core] PromptBuilder initialized with task-based memory retrieval")
 
     # Initialize channels
     _telegram_channel = TelegramChannel(_session_manager)
@@ -660,20 +673,15 @@ async def _handle_streaming(
             max_tokens = session.context_window or 64000
             history = _session_manager.get_messages_with_limit(session_id, max_tokens)
             messages = history + new_messages
-            # Build system prompt
-            system_parts = []
-            if session.system_prompt:
-                system_parts.append(session.system_prompt)
-            skill_listing = _skill_loader.build_skill_listing()
-            if skill_listing:
-                system_parts.append(skill_listing)
-            # Add memory context
-            if _memory_store:
-                memory_content = _memory_store.get_index_content()
-                if memory_content:
-                    system_parts.append(f"<memory>\n{memory_content}\n</memory>")
-            if system_parts and not any(m["role"] == "system" for m in messages):
-                messages.insert(0, {"role": "system", "content": "\n\n".join(system_parts)})
+            # Build system prompt using core module (task-based memory retrieval)
+            if _prompt_builder:
+                system_prompt = _prompt_builder.build(
+                    messages=messages,
+                    goal=None,  # TODO: session.goal if available
+                    session_system_prompt=session.system_prompt,
+                )
+                if system_prompt:
+                    messages = _prompt_builder.insert_into_messages(messages, system_prompt)
         else:
             messages = new_messages
     else:
@@ -957,34 +965,17 @@ async def _handle_non_streaming(
         logger.info(f"[SESSION] skills={session.skills}, system_prompt={session.system_prompt[:100] if session.system_prompt else None}...")
         logger.info(f"[SESSION] context_window={session.context_window}, history_count={len(history)}")
 
-        # Build system prompt from session system_prompt + skill listing
-        system_parts = []
-        if session.system_prompt:
-            system_parts.append(session.system_prompt)
-
-        # Inject skill listing (Claude Code style - all available skills)
-        # The model will decide which skill to invoke via Skill tool
-        skill_listing = _skill_loader.build_skill_listing()
-        if skill_listing:
-            logger.info(f"[SKILLS] listing_length={len(skill_listing)}")
-            logger.debug(f"[SKILLS LISTING]:\n{skill_listing}")
-            system_parts.append(skill_listing)
-
-        # Add memory context
-        if _memory_store:
-            memory_content = _memory_store.get_index_content()
-            if memory_content:
-                system_parts.append(f"<memory>\n{memory_content}\n</memory>")
-                logger.info(f"[MEMORY] loaded memory index")
-
-        if system_parts:
-            full_system_prompt = "\n\n".join(system_parts)
-            logger.info(f"[SYSTEM PROMPT] length={len(full_system_prompt)}")
-            logger.debug(f"[SYSTEM PROMPT FULL]:\n{full_system_prompt}")
-
-        if system_parts and not any(m["role"] == "system" for m in messages):
-            messages.insert(0, {"role": "system", "content": "\n\n".join(system_parts)})
-            logger.info("inserted system message at messages[0]")
+        # Build system prompt using core module (task-based memory retrieval)
+        if _prompt_builder:
+            system_prompt = _prompt_builder.build(
+                messages=messages,
+                goal=None,  # TODO: session.goal if available
+                session_system_prompt=session.system_prompt,
+            )
+            if system_prompt:
+                messages = _prompt_builder.insert_into_messages(messages, system_prompt)
+                logger.info(f"[SYSTEM PROMPT] length={len(system_prompt)}")
+                logger.debug(f"[SYSTEM PROMPT FULL]:\n{system_prompt}")
     else:
         messages = list(new_messages)
         logger.info("no session_id, using payload messages directly")

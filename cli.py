@@ -47,6 +47,7 @@ from streaming_executor import StreamingToolExecutor, is_concurrency_safe, ToolR
 from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, PermissionMode
 from sessions.vector_memory import MockEmbeddingModel
 from skills import SkillLoader, default_skill_dirs
+from core import PromptBuilder, MemoryLoader
 
 # ===== Config =====
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
@@ -220,6 +221,10 @@ class ToolProgressDisplay:
             console.print(f"[red]✗ Tool: {tool['name']}[/red] Error: {error}")
 
 
+# Global prompt builder (uses core module)
+_prompt_builder = PromptBuilder(skill_loader=_skill_loader)
+
+
 def build_system_prompt(session: CLISession, messages: list[dict] | None = None, skill_name: str | None = None) -> str:
     """Build system prompt for LLM.
 
@@ -228,63 +233,11 @@ def build_system_prompt(session: CLISession, messages: list[dict] | None = None,
         messages: Current messages (used to extract user task for memory search)
         skill_name: Optional specific skill
     """
-    parts = []
-
-    # Add skill listing
-    skill_listing = _skill_loader.build_skill_listing()
-    if skill_listing:
-        parts.append(skill_listing)
-
-    # Add goal if set
-    if session.goal:
-        parts.append(f"\n<goal>\nGoal: {session.goal}\nComplete this goal before ending the session.\n</goal>")
-
-    # Add memory context - 根据用户任务动态检索
-    try:
-        store = get_memory_store()
-
-        if messages:
-            # 提取最新用户消息，进行相关记忆检索
-            user_task = None
-            for msg in reversed(messages):
-                if msg.get("role") == "user":
-                    content = msg.get("content", "")
-                    if content and not content.startswith("/"):  # 排除 slash 命令
-                        user_task = content
-                        break
-
-            if user_task:
-                # 搜索最相关的 5 条记忆（按 hybrid 排序）
-                relevant_memories = store.search_hybrid(user_task, limit=5)
-
-                if relevant_memories:
-                    # 使用强调格式，让LLM重视这些记忆
-                    memory_lines = [
-                        "\n<relevant_memories>\n",
-                        "STOP. READ THESE MEMORIES FIRST BEFORE PROCEEDING.\n",
-                        "These are NOT suggestions - they are REQUIREMENTS based on past experience.\n\n",
-                    ]
-                    for entry in relevant_memories[:3]:  # 只取 top 3
-                        memory_lines.append(f"## {entry.name}\n\n")
-                        memory_lines.append(f"{entry.content}\n\n")
-                    memory_lines.append("You MUST follow these rules. Do NOT ignore them.\n")
-                    memory_lines.append("</relevant_memories>\n")
-
-                    parts.append("".join(memory_lines))
-                    # 显示检索到的记忆名称
-                    names = [e.name for e in relevant_memories[:3]]
-                    logger.info(f"[MEMORY] Loaded memories: {names} for task '{user_task[:30]}...'")
-
-        # 如果没有相关记忆或没有任务，加载 index 作为备选
-        if not parts or not any("<relevant_memories>" in p for p in parts):
-            memory_index = store.get_index_content()
-            if memory_index:
-                parts.append(f"\n<memory_index>\n{memory_index}\n</memory_index>\n")
-    except Exception as e:
-        logger.debug(f"[MEMORY] Load failed: {e}")
-        pass  # Memory loading is optional
-
-    return "\n\n".join(parts) if parts else ""
+    return _prompt_builder.build(
+        messages=messages,
+        goal=session.goal,
+        skill_name=skill_name,
+    )
 
 
 async def execute_tool_loop(
