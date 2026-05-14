@@ -207,8 +207,14 @@ class ToolProgressDisplay:
             console.print(f"[red]✗ Tool: {tool['name']}[/red] Error: {error}")
 
 
-def build_system_prompt(session: CLISession, skill_name: str | None = None) -> str:
-    """Build system prompt for LLM."""
+def build_system_prompt(session: CLISession, messages: list[dict] | None = None, skill_name: str | None = None) -> str:
+    """Build system prompt for LLM.
+
+    Args:
+        session: CLI session with goal
+        messages: Current messages (used to extract user task for memory search)
+        skill_name: Optional specific skill
+    """
     parts = []
 
     # Add skill listing
@@ -220,13 +226,43 @@ def build_system_prompt(session: CLISession, skill_name: str | None = None) -> s
     if session.goal:
         parts.append(f"\n<goal>\nGoal: {session.goal}\nComplete this goal before ending the session.\n</goal>")
 
-    # Add memory context (MEMORY.md)
+    # Add memory context - 根据用户任务动态检索
     try:
         store = get_memory_store()
-        memory_content = store.get_index_content()
-        if memory_content:
-            parts.append(f"\n<memory>\n{memory_content}\n</memory>")
-    except Exception:
+
+        if messages:
+            # 提取最新用户消息，进行相关记忆检索
+            user_task = None
+            for msg in reversed(messages):
+                if msg.get("role") == "user":
+                    content = msg.get("content", "")
+                    if content and not content.startswith("/"):  # 排除 slash 命令
+                        user_task = content
+                        break
+
+            if user_task:
+                # 搜索最相关的 5 条记忆（按 hybrid 排序）
+                relevant_memories = store.search_hybrid(user_task, limit=5)
+
+                if relevant_memories:
+                    # 加载 top 3 的完整内容（不管 similarity 值）
+                    # MockEmbeddingModel similarity 低，但排序正确
+                    memory_lines = ["\n<relevant_memories>\n\n"]
+                    for entry in relevant_memories[:3]:  # 只取 top 3
+                        memory_lines.append(f"## {entry.name}\n\n")
+                        memory_lines.append(f"{entry.content}\n\n")
+                    memory_lines.append("</relevant_memories>\n")
+
+                    parts.append("".join(memory_lines))
+                    logger.info(f"[MEMORY] Loaded {min(3, len(relevant_memories))} relevant memories for task")
+
+        # 如果没有相关记忆或没有任务，加载 index 作为备选
+        if not parts or not any("<relevant_memories>" in p for p in parts):
+            memory_index = store.get_index_content()
+            if memory_index:
+                parts.append(f"\n<memory_index>\n{memory_index}\n</memory_index>\n")
+    except Exception as e:
+        logger.debug(f"[MEMORY] Load failed: {e}")
         pass  # Memory loading is optional
 
     return "\n\n".join(parts) if parts else ""
@@ -246,8 +282,8 @@ async def execute_tool_loop(
     final_content = ""
 
     while True:
-        # Build system prompt
-        system_prompt = build_system_prompt(session)
+        # Build system prompt (根据当前消息动态检索相关记忆)
+        system_prompt = build_system_prompt(session, messages)
         if system_prompt:
             # Insert system message if not present
             if not any(m["role"] == "system" for m in messages):
