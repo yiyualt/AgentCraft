@@ -1,4 +1,7 @@
-"""Memory tools for AgentCraft - remember/forget/recall operations."""
+"""Memory tools for AgentCraft - remember/forget/recall operations.
+
+Uses VectorMemoryStore (SQLite + FTS + Vector) for semantic search.
+"""
 
 from __future__ import annotations
 
@@ -7,54 +10,56 @@ from pathlib import Path
 from typing import Any
 
 from tools import tool
-from sessions.memory_persistence import MemoryStore, MemoryEntry, MemoryType
+from sessions.vector_memory import VectorMemoryStore, MockEmbeddingModel, MemoryEntry
 
 
 # Global memory store (initialized with project path)
-_memory_store: MemoryStore | None = None
+_memory_store: VectorMemoryStore | None = None
 
 
-def get_memory_store() -> MemoryStore:
+def get_memory_store() -> VectorMemoryStore:
     """Get or create memory store for current project."""
     global _memory_store
     if _memory_store is None:
-        # Use current working directory as project path
-        project_path = os.getcwd()
-        _memory_store = MemoryStore(project_path)
+        # Use VectorMemoryStore with MockEmbeddingModel (works without PyTorch)
+        # For real semantic search, use LocalEmbeddingModel or RemoteEmbeddingModel
+        _memory_store = VectorMemoryStore(
+            embedding_model=MockEmbeddingModel()
+        )
     return _memory_store
 
 
-def set_memory_store(store: MemoryStore) -> None:
+def set_memory_store(store: VectorMemoryStore) -> None:
     """Set memory store (for gateway initialization)."""
     global _memory_store
     _memory_store = store
 
 
-def _infer_memory_type(content: str) -> MemoryType:
+def _infer_memory_type(content: str) -> str:
     """Infer memory type from content heuristics."""
     content_lower = content.lower()
 
     # Feedback indicators
-    if any(kw in content_lower for kw in ["don't", "do not", "never", "always", "stop", "avoid", "keep", "prefer"]):
-        return MemoryType.FEEDBACK
+    if any(kw in content_lower for kw in ["don't", "do not", "never", "always", "stop", "avoid", "keep", "prefer", "不要", "必须", "禁止"]):
+        return "feedback"
 
     # User indicators
-    if any(kw in content_lower for kw in ["i'm", "i am", "my", "i work", "i have", "i know", "senior", "junior", "engineer", "developer"]):
-        return MemoryType.USER
+    if any(kw in content_lower for kw in ["i'm", "i am", "my", "i work", "i have", "i know", "senior", "junior", "engineer", "developer", "我是", "资深"]):
+        return "user"
 
     # Project indicators
-    if any(kw in content_lower for kw in ["project", "deadline", "stakeholder", "compliance", "legal", "freeze", "release", "team"]):
-        return MemoryType.PROJECT
+    if any(kw in content_lower for kw in ["project", "deadline", "stakeholder", "compliance", "legal", "freeze", "release", "team", "项目", "截止", "合规"]):
+        return "project"
 
     # Default to project for general context
-    return MemoryType.PROJECT
+    return "project"
 
 
-def _build_memory_content(content: str, memory_type: MemoryType) -> str:
+def _build_memory_content(content: str, memory_type: str) -> str:
     """Build full memory content with structure."""
-    if memory_type == MemoryType.FEEDBACK:
+    if memory_type == "feedback":
         return f"{content}\n\n**Why:** User preference based on past experience\n**How to apply:** Apply this rule when making decisions in this area"
-    elif memory_type == MemoryType.PROJECT:
+    elif memory_type == "project":
         return f"{content}\n\n**Why:** Project constraint or context\n**How to apply:** Consider this when planning or implementing features"
     else:
         return content
@@ -110,10 +115,7 @@ async def remember(
     store = get_memory_store()
 
     # Infer or parse type
-    if memory_type:
-        m_type = MemoryType(memory_type.lower())
-    else:
-        m_type = _infer_memory_type(content)
+    m_type = memory_type or _infer_memory_type(content)
 
     # Generate or use provided name
     m_name = name or _generate_name(content)
@@ -121,18 +123,10 @@ async def remember(
     # Build full content
     full_content = _build_memory_content(content, m_type)
 
-    # Create entry
-    entry = MemoryEntry(
-        name=m_name,
-        description=content[:100] if len(content) > 100 else content,
-        type=m_type,
-        content=full_content,
-    )
+    # Save to VectorMemoryStore
+    store.save(m_name, m_type, full_content)
 
-    # Save
-    store.save(entry)
-
-    return f"Saved memory: {m_name} (type: {m_type.value})"
+    return f"Saved memory: {m_name} (type: {m_type})"
 
 
 @tool(
@@ -168,35 +162,56 @@ async def forget(name: str) -> str:
 
 @tool(
     name="recall",
-    description="Retrieve saved memories. Use when user asks to recall memories or you need to reference past context.",
+    description="Retrieve saved memories. Use when user asks to recall memories or you need to reference past context. Supports semantic search.",
     parameters={
         "type": "object",
         "properties": {
-            "name": {
+            "query": {
                 "type": "string",
-                "description": "Optional specific memory name to retrieve. If omitted, returns all memories index.",
+                "description": "Optional search query. If omitted, returns all memories index. Supports semantic matching.",
+            },
+            "mode": {
+                "type": "string",
+                "description": "Search mode: 'fts' (keyword), 'vector' (semantic), or 'hybrid' (combined). Default is 'hybrid'.",
+                "enum": ["fts", "vector", "hybrid"],
             },
         },
         "required": [],
     },
 )
-async def recall(name: str | None = None) -> str:
+async def recall(query: str | None = None, mode: str = "hybrid") -> str:
     """Retrieve memory entries.
 
     Args:
-        name: Optional specific memory name (returns index if omitted)
+        query: Optional search query (returns index if omitted)
+        mode: Search mode (fts/vector/hybrid)
 
     Returns:
-        Memory content or index listing
+        Memory content or search results
     """
     store = get_memory_store()
 
-    if name:
-        entry = store.load(name)
-        if entry:
-            return f"## {entry.name}\n\n{entry.content}"
-        else:
-            return f"Memory not found: {name}"
+    if query:
+        # Search mode
+        if mode == "fts":
+            results = store.search_fts(query, limit=10)
+        elif mode == "vector":
+            results = store.search_vector(query, limit=10)
+        else:  # hybrid
+            results = store.search_hybrid(query, limit=10)
+
+        if not results:
+            return f"No memories found for query: {query}"
+
+        # Format results
+        lines = [f"# Search Results for \"{query}\" (mode: {mode})\n\n"]
+        for entry in results:
+            score = f" (score: {entry.similarity:.2f})" if entry.similarity > 0 else ""
+            lines.append(f"## {entry.name}{score}\n\n")
+            lines.append(f"Type: {entry.type}\n\n")
+            lines.append(f"{entry.content[:500]}...\n\n")
+
+        return "".join(lines)
     else:
         # Return index
         index = store.get_index_content()

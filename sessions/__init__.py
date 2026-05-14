@@ -61,3 +61,10 @@ from sessions.memory_persistence import (
     MemoryStore,
     MemoryExtractor,
 )
+from sessions.vector_memory import (
+    EmbeddingModel,
+    LocalEmbeddingModel,
+    RemoteEmbeddingModel,
+    MockEmbeddingModel,
+    VectorMemoryStore,
+)

@@ -26,7 +26,8 @@ from tools.skill_tools import *  # noqa: F401,F403 — register Skill tool
 from tools.mcp import MCPToolManager, MCPConfig
 from tools.sandbox import SandboxExecutor, SandboxConfig
 from streaming_executor import StreamingToolExecutor, is_concurrency_safe
-from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, PermissionMode, PermissionRuleKind, HookEvent, HookMatcher, MultiSourceRuleManager, PermissionAuditor, PermissionRule, PermissionResult, RuleSource, MemoryStore, MemoryType, MemoryEntry
+from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, PermissionMode, PermissionRuleKind, HookEvent, HookMatcher, MultiSourceRuleManager, PermissionAuditor, PermissionRule, PermissionResult, RuleSource
+from sessions.vector_memory import VectorMemoryStore
 from skills import SkillLoader, default_skill_dirs
 from channels import ChannelRouter
 from channels.telegram import TelegramChannel
@@ -179,7 +180,7 @@ _permission_rule_manager: MultiSourceRuleManager | None = None
 _permission_auditor: PermissionAuditor | None = None
 
 # ===== Memory =====
-_memory_store: MemoryStore | None = None
+_memory_store: VectorMemoryStore | None = None
 
 # ===== Error Recovery =====
 _recovery_executor: ResilientExecutor | None = None
@@ -296,11 +297,12 @@ async def lifespan(_app: FastAPI):
     agent_executor.set_fork_manager(fork_manager)
     logger.info("[Fork] ForkManager initialized")
 
-    # Memory initialization
+    # Memory initialization (VectorMemoryStore)
     global _memory_store
-    _memory_store = MemoryStore(os.getcwd())
+    from sessions.vector_memory import VectorMemoryStore, MockEmbeddingModel
+    _memory_store = VectorMemoryStore(embedding_model=MockEmbeddingModel())
     _app.state.memory_store = _memory_store
-    logger.info("[Memory] MemoryStore initialized")
+    logger.info("[Memory] VectorMemoryStore initialized")
 
     # Initialize channels
     _telegram_channel = TelegramChannel(_session_manager)
@@ -527,21 +529,14 @@ def save_memory(request: MemorySaveRequest) -> dict[str, str]:
         raise HTTPException(status_code=500, detail="Memory store not initialized")
 
     # Infer or parse type
-    m_type = MemoryType(request.memory_type or "project")
+    m_type = request.memory_type or "project"
 
     # Generate name if not provided
     name = request.name or request.content[:30].replace(" ", "-").lower()
 
-    # Create entry
-    entry = MemoryEntry(
-        name=name,
-        description=request.content[:100],
-        type=m_type,
-        content=request.content,
-    )
-
-    _memory_store.save(entry)
-    return {"status": "saved", "name": name, "type": m_type.value}
+    # Save to VectorMemoryStore
+    _memory_store.save(name, m_type, request.content)
+    return {"status": "saved", "name": name, "type": m_type}
 
 
 @app.get("/memory/list")
@@ -555,7 +550,7 @@ def list_memories() -> dict[str, Any]:
     return {
         "index": index,
         "count": len(entries),
-        "memories": [{"name": e.name, "type": e.type.value, "description": e.description} for e in entries],
+        "memories": [{"name": e.name, "type": e.type, "description": e.content[:100]} for e in entries],
     }
 
 
@@ -571,10 +566,30 @@ def get_memory(name: str) -> dict[str, Any]:
 
     return {
         "name": entry.name,
-        "type": entry.type.value,
-        "description": entry.description,
+        "type": entry.type,
         "content": entry.content,
-        "created_at": entry.created_at.isoformat(),
+        "created_at": entry.created_at,
+    }
+
+
+@app.get("/memory/search")
+def search_memory(query: str, mode: str = "hybrid", limit: int = 10) -> dict[str, Any]:
+    """Search memories (FTS, vector, or hybrid)."""
+    if _memory_store is None:
+        raise HTTPException(status_code=500, detail="Memory store not initialized")
+
+    if mode == "fts":
+        results = _memory_store.search_fts(query, limit)
+    elif mode == "vector":
+        results = _memory_store.search_vector(query, limit)
+    else:
+        results = _memory_store.search_hybrid(query, limit)
+
+    return {
+        "query": query,
+        "mode": mode,
+        "count": len(results),
+        "results": [{"name": e.name, "type": e.type, "score": e.similarity, "content": e.content[:200]} for e in results],
     }
 
 
@@ -652,6 +667,11 @@ async def _handle_streaming(
             skill_listing = _skill_loader.build_skill_listing()
             if skill_listing:
                 system_parts.append(skill_listing)
+            # Add memory context
+            if _memory_store:
+                memory_content = _memory_store.get_index_content()
+                if memory_content:
+                    system_parts.append(f"<memory>\n{memory_content}\n</memory>")
             if system_parts and not any(m["role"] == "system" for m in messages):
                 messages.insert(0, {"role": "system", "content": "\n\n".join(system_parts)})
         else:
@@ -949,6 +969,13 @@ async def _handle_non_streaming(
             logger.info(f"[SKILLS] listing_length={len(skill_listing)}")
             logger.debug(f"[SKILLS LISTING]:\n{skill_listing}")
             system_parts.append(skill_listing)
+
+        # Add memory context
+        if _memory_store:
+            memory_content = _memory_store.get_index_content()
+            if memory_content:
+                system_parts.append(f"<memory>\n{memory_content}\n</memory>")
+                logger.info(f"[MEMORY] loaded memory index")
 
         if system_parts:
             full_system_prompt = "\n\n".join(system_parts)

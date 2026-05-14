@@ -37,10 +37,10 @@ from tools.builtin import *  # noqa: F401,F403 — register built-in tools
 from tools.pptx_tools import *  # noqa: F401,F403 — register PPTX tools
 from tools.agent_executor import AgentExecutor, set_agent_executor
 from tools.skill_tools import *  # noqa: F401,F403 — register Skill tool
-from tools.memory_tools import *  # noqa: F401,F403 — register memory tools
+from tools.memory_tools import get_memory_store, set_memory_store, remember, forget, recall  # noqa: F401,F403
 from streaming_executor import StreamingToolExecutor, is_concurrency_safe, ToolResult
 from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, PermissionMode
-from sessions.memory_persistence import MemoryStore, MemoryType
+from sessions.vector_memory import MockEmbeddingModel
 from skills import SkillLoader, default_skill_dirs
 
 # ===== Config =====
@@ -495,14 +495,9 @@ def handle_slash_command(cmd: str, session: CLISession) -> str | None:
         if not args:
             return "[red]Usage: /remember <content>[/red]"
         store = get_memory_store()
-        entry = MemoryEntry(
-            name=args[:30].replace(" ", "-").lower(),
-            description=args[:100],
-            type=MemoryType.FEEDBACK,
-            content=args + "\n\n**Why:** User preference\n**How to apply:** Apply when relevant",
-        )
-        store.save(entry)
-        return f"[green]Saved memory: {entry.name}[/green]"
+        name = args[:30].replace(" ", "-").lower()
+        store.save(name, "feedback", args + "\n\n**Why:** User preference\n**How to apply:** Apply when relevant")
+        return f"[green]Saved memory: {name}[/green]"
 
     if command == "/forget":
         if not args:
@@ -515,10 +510,20 @@ def handle_slash_command(cmd: str, session: CLISession) -> str | None:
     if command == "/recall":
         store = get_memory_store()
         if args:
-            entry = store.load(args)
-            if entry:
-                return f"[bold]{entry.name}[/bold]\n\n{entry.content}"
-            return f"[red]Memory not found: {args}[/red]"
+            # 搜索模式
+            results = store.search_hybrid(args, limit=5)
+            if not results:
+                entry = store.load(args)  # 尝试按名字加载
+                if entry:
+                    return f"[bold]{entry.name}[/bold]\n\n{entry.content}"
+                return f"[red]Memory not found: {args}[/red]"
+
+            # 返回搜索结果
+            lines = [f"[bold]Search results for \"{args}\":[/bold]\n\n"]
+            for entry in results:
+                score = f" (score: {entry.similarity:.2f})" if entry.similarity > 0 else ""
+                lines.append(f"• [cyan]{entry.name}[/cyan]{score}: {entry.content[:100]}...\n")
+            return "".join(lines)
         else:
             index = store.get_index_content()
             if index:

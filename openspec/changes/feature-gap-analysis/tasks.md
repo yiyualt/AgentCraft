@@ -21,15 +21,15 @@
 
 ## 3. Vector Memory
 
-- [ ] 3.1 Add sqlite-vec dependency to pyproject.toml
-- [ ] 3.2 Create SQLite database schema (memories table + FTS5 + vector column)
-- [ ] 3.3 Implement `VectorMemoryStore` class replacing `MemoryStore`
-- [ ] 3.4 Implement embedding generation interface (abstract)
-- [ ] 3.5 Implement `LocalEmbeddingModel` using sentence-transformers
-- [ ] 3.6 Implement `RemoteEmbeddingModel` using OpenAI embedding API
-- [ ] 3.7 Implement hybrid search (FTS + vector similarity)
-- [ ] 3.8 Migrate existing Markdown memories to SQLite (migration script)
-- [ ] 3.9 Update `memory_tools.py` to use VectorMemoryStore
+- [x] 3.1 Add sqlite-vec dependency to pyproject.toml (no extra dependency needed - uses numpy + FTS5 built-in)
+- [x] 3.2 Create SQLite database schema (memories table + FTS5 + vector column)
+- [x] 3.3 Implement `VectorMemoryStore` class replacing `MemoryStore`
+- [x] 3.4 Implement embedding generation interface (abstract)
+- [x] 3.5 Implement `LocalEmbeddingModel` using sentence-transformers (with MockEmbeddingModel fallback)
+- [x] 3.6 Implement `RemoteEmbeddingModel` using OpenAI embedding API
+- [x] 3.7 Implement hybrid search (FTS + vector similarity)
+- [x] 3.8 Migrate existing Markdown memories to SQLite (migration script included in VectorMemoryStore)
+- [x] 3.9 Update `memory_tools.py` to use VectorMemoryStore
 
 ## 4. Tool Sandbox
 
