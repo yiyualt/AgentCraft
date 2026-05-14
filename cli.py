@@ -44,10 +44,11 @@ from tools.agent_executor import AgentExecutor, set_agent_executor
 from tools.skill_tools import *  # noqa: F401,F403 — register Skill tool
 from tools.memory_tools import get_memory_store, set_memory_store, remember, forget, recall  # noqa: F401,F403
 from streaming_executor import StreamingToolExecutor, is_concurrency_safe, ToolResult
-from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, PermissionMode
+from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, PermissionMode, ForkManager
 from sessions.vector_memory import MockEmbeddingModel
 from skills import SkillLoader, default_skill_dirs
 from core import PromptBuilder, MemoryLoader
+from acp import AgentControlPlane, AcpConfig
 
 # ===== Config =====
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
@@ -220,6 +221,26 @@ class ToolProgressDisplay:
             tool["status"] = "error"
             console.print(f"[red]✗ Tool: {tool['name']}[/red] Error: {error}")
 
+
+# Initialize ACP (Agent Control Plane) for multi-agent tasks
+_fork_manager = ForkManager(
+    session_manager=_session_manager,
+    token_calculator=TokenCalculator(),
+)
+_acp_config = AcpConfig(
+    max_children=10,
+    default_timeout=180,
+    recursion_protection=True,
+)
+_acp = AgentControlPlane(
+    llm_client=client,
+    registry=_registry,
+    session_manager=_session_manager,
+    fork_manager=_fork_manager,
+    config=_acp_config,
+)
+_agent_executor.set_fork_manager(_fork_manager)
+logger.info("[ACP] AgentControlPlane initialized: max_children=10")
 
 # Global prompt builder (uses core module)
 _prompt_builder = PromptBuilder(skill_loader=_skill_loader)
@@ -416,7 +437,7 @@ async def run_interactive(
 
             # Handle slash commands
             if user_input.startswith("/"):
-                cmd_result = handle_slash_command(user_input, session)
+                cmd_result = await handle_slash_command(user_input, session)
                 if cmd_result:
                     console.print(cmd_result)
                 continue
@@ -439,7 +460,7 @@ async def run_interactive(
             break
 
 
-def handle_slash_command(cmd: str, session: CLISession) -> str | None:
+async def handle_slash_command(cmd: str, session: CLISession) -> str | None:
     """Handle slash commands."""
     parts = cmd.strip().split(" ", 1)
     command = parts[0].lower()
@@ -461,7 +482,71 @@ def handle_slash_command(cmd: str, session: CLISession) -> str | None:
   /remember <text> Save to memory for future sessions
   /forget <name> Delete a saved memory
   /recall [name] List memories or show specific memory
+
+[bold]ACP (Agent Control Plane):[/bold]
+  /acp          Show ACP status
+  /spawn <task> [type] Spawn child agent (types: explore, general-purpose, plan)
+  /children     List child agents
+  /wait [timeout] Wait for all children to complete
 """
+
+    # ACP commands
+    if command == "/acp":
+        status = _acp.get_status()
+        return f"""
+[bold]ACP Status:[/bold]
+  Active: {status['active']} / {status['max_children']}
+  Completed: {status['completed']}
+  Failed: {status['failed']}
+  Children: {len(status['children'])}
+
+[bold]Children:[/bold]
+""" + "\n".join([
+    f"  • {cid}: {c['task'][:40]}... ({c['state']}, {c['elapsed']:.1f}s)"
+    for cid, c in status['children'].items()
+]) if status['children'] else "  (none)"
+
+    if command == "/spawn":
+        if not args:
+            return "[red]Usage: /spawn <task> [agent_type][/red]"
+        # Parse task and agent_type
+        parts2 = args.rsplit(" ", 1)
+        if len(parts2) == 2 and parts2[1] in ("explore", "general-purpose", "plan"):
+            task = parts2[0]
+            agent_type = parts2[1]
+        else:
+            task = args
+            agent_type = "general-purpose"
+
+        try:
+            child = _acp.spawn_child(task=task, agent_type=agent_type)
+            return f"[green]✓ Spawned child: {child.child_id}[/green]\n  Task: {task}\n  Type: {agent_type}"
+        except Exception as e:
+            return f"[red]Spawn failed: {e}[/red]"
+
+    if command == "/children":
+        status = _acp.get_status()
+        if not status['children']:
+            return "[yellow]No child agents[/yellow]"
+        lines = ["[bold]Child Agents:[/bold]\n"]
+        for cid, c in status['children'].items():
+            state = c['state']
+            state_color = "green" if state == "completed" else "yellow" if state == "running" else "red"
+            lines.append(f"  [{state_color}]{cid}[/{state_color}]: {c['task'][:50]}...\n")
+            lines.append(f"    State: {state}, Elapsed: {c['elapsed']:.1f}s\n")
+        return "".join(lines)
+
+    if command == "/wait":
+        timeout = int(args) if args else 120
+        console.print(f"[yellow]Waiting for children (timeout: {timeout}s)...[/yellow]")
+        try:
+            results = await asyncio.wait_for(_acp.wait_all(), timeout=timeout)
+            lines = ["[bold]Results:[/bold]\n\n"]
+            for cid, result in results.items():
+                lines.append(f"[cyan]{cid}:[/cyan]\n{result[:200]}...\n\n")
+            return "".join(lines)
+        except asyncio.TimeoutError:
+            return "[red]Timeout waiting for children[/red]"
 
     if command == "/clear":
         session.clear()
