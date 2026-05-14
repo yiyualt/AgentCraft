@@ -49,11 +49,20 @@ from sessions.vector_memory import MockEmbeddingModel
 from skills import SkillLoader, default_skill_dirs
 from core import PromptBuilder, MemoryLoader
 from acp import AgentControlPlane, AcpConfig
+from tools.sandbox import SandboxExecutor, SandboxConfig
 
 # ===== Config =====
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "sk-default")
 CLI_SESSION_DIR = Path.home() / ".agentcraft" / "cli-sessions"
+
+# Sandbox config
+SANDBOX_ENABLED = os.getenv("SANDBOX_ENABLED", "false").lower() == "true"
+SANDBOX_NETWORK = os.getenv("SANDBOX_NETWORK", "false").lower() == "true"
+SANDBOX_HOST_BIN = os.getenv("SANDBOX_HOST_BIN", "false").lower() == "true"
+SANDBOX_PIP_PACKAGES = os.getenv("SANDBOX_PIP_PACKAGES", "").split(",") if os.getenv("SANDBOX_PIP_PACKAGES") else []
+SANDBOX_READ_DIRS = os.getenv("SANDBOX_READ_DIRS", "").split(",") if os.getenv("SANDBOX_READ_DIRS") else []
+SANDBOX_WRITE_DIRS = os.getenv("SANDBOX_WRITE_DIRS", "").split(",") if os.getenv("SANDBOX_WRITE_DIRS") else []
 
 # ===== Console =====
 console = Console()
@@ -70,6 +79,19 @@ _session_manager = SessionManager()
 _skill_loader = SkillLoader(default_skill_dirs())
 _skill_loader.load()
 _registry = UnifiedToolRegistry(get_default_registry())
+
+# Initialize SandboxExecutor (if enabled)
+_sandbox_executor: SandboxExecutor | None = None
+if SANDBOX_ENABLED:
+    sandbox_config = SandboxConfig(
+        network_disabled=not SANDBOX_NETWORK,
+        mount_host_bin=SANDBOX_HOST_BIN,
+        pip_packages=SANDBOX_PIP_PACKAGES,
+        read_dirs=SANDBOX_READ_DIRS,
+        write_dirs=SANDBOX_WRITE_DIRS,
+    )
+    _sandbox_executor = SandboxExecutor(sandbox_config)
+    logger.info(f"[Sandbox] Executor initialized: network={SANDBOX_NETWORK}, host_bin={SANDBOX_HOST_BIN}")
 
 # Initialize Agent executor
 _agent_executor = AgentExecutor(
@@ -127,6 +149,16 @@ def parse_args() -> argparse.Namespace:
         "--json",
         action="store_true",
         help="Output result as JSON (for CI/CD)",
+    )
+    parser.add_argument(
+        "--sandbox",
+        action="store_true",
+        help="Enable sandbox mode (execute tools in Docker container)",
+    )
+    parser.add_argument(
+        "--sandbox-network",
+        action="store_true",
+        help="Allow network access in sandbox",
     )
 
     return parser.parse_args()
@@ -344,6 +376,7 @@ async def execute_tool_loop(
             registry=_registry,
             max_concurrency=10,
             session_id=session.name,
+            sandbox_executor=_sandbox_executor if SANDBOX_ENABLED else None,
         )
 
         await executor.start_unsafe_executor()
@@ -629,6 +662,20 @@ async def handle_slash_command(cmd: str, session: CLISession) -> str | None:
 async def main_async() -> None:
     """Main entry point."""
     args = parse_args()
+
+    # Handle sandbox override from CLI args
+    global SANDBOX_ENABLED, _sandbox_executor
+    if args.sandbox and not SANDBOX_ENABLED:
+        SANDBOX_ENABLED = True
+        sandbox_config = SandboxConfig(
+            network_disabled=not args.sandbox_network,
+            mount_host_bin=SANDBOX_HOST_BIN,
+            pip_packages=SANDBOX_PIP_PACKAGES,
+            read_dirs=SANDBOX_READ_DIRS,
+            write_dirs=SANDBOX_WRITE_DIRS,
+        )
+        _sandbox_executor = SandboxExecutor(sandbox_config)
+        logger.info(f"[Sandbox] Enabled via CLI: network={args.sandbox_network}")
 
     # Create session
     session = CLISession(name=args.session, model=args.model)

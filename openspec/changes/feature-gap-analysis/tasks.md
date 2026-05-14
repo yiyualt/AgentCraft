@@ -33,14 +33,14 @@
 
 ## 4. Tool Sandbox
 
-- [ ] 4.1 Add Docker SDK dependency to pyproject.toml
-- [ ] 4.2 Implement `SandboxExecutor` class for Docker container execution
-- [ ] 4.3 Implement ephemeral container creation and cleanup
-- [ ] 4.4 Implement directory mounting (read and write dirs)
-- [ ] 4.5 Implement network isolation configuration
-- [ ] 4.6 Implement execution timeout handling
-- [ ] 4.7 Refactor `tools/builtin.py` Bash tool to use SandboxExecutor
-- [ ] 4.8 Add sandbox configuration options to gateway.py
+- [x] 4.1 Add Docker SDK dependency to pyproject.toml
+- [x] 4.2 Implement `SandboxExecutor` class for Docker container execution
+- [x] 4.3 Implement ephemeral container creation and cleanup
+- [x] 4.4 Implement directory mounting (read and write dirs)
+- [x] 4.5 Implement network isolation configuration
+- [x] 4.6 Implement execution timeout handling
+- [x] 4.7 Gateway integration with SANDBOX_ENABLED environment variable
+- [x] 4.8 CLI integration with --sandbox and --sandbox-network flags
 
 ## 5. Multi-Channel
 
