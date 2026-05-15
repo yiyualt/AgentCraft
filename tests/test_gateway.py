@@ -26,7 +26,7 @@ import mlflow
 os.environ.setdefault("MLFLOW_TRACKING_URI", "http://127.0.0.1:5050")
 
 # Must import gateway AFTER setting MLFLOW_TRACKING_URI
-from gateway import app
+from app import app
 
 client = TestClient(app)
 

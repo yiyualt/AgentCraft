@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from gateway import app
+from app import app
 from utils.qrcode_display import print_gateway_qrcode
 
 # 启动前显示二维码

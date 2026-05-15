@@ -167,7 +167,7 @@ class TestBuildPrompt:
 class TestGatewaySkills:
     @pytest.fixture
     def api_client(self):
-        from gateway import app
+        from app import app
         return TestClient(app)
 
     def test_list_skills(self, api_client):
