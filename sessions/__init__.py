@@ -55,16 +55,11 @@ from sessions.permission import (
     MultiSourceRuleManager,
     DEFAULT_RULES,
 )
-from sessions.memory_persistence import (
-    MemoryType,
-    MemoryEntry,
-    MemoryStore,
-    MemoryExtractor,
-)
 from sessions.vector_memory import (
     EmbeddingModel,
     LocalEmbeddingModel,
     RemoteEmbeddingModel,
     MockEmbeddingModel,
     VectorMemoryStore,
+    MemoryEntry,
 )
