@@ -435,7 +435,6 @@ def list_models() -> dict[str, Any]:
 
 # ===== Session REST Endpoints =====
 
-
 @app.post("/v1/sessions")
 async def create_session(request: Request) -> dict[str, Any]:
     body = await request.json()
@@ -446,6 +445,60 @@ async def create_session(request: Request) -> dict[str, Any]:
         skills=body.get("skills", ""),
     )
     return session.to_dict()
+
+
+@app.get("/v1/sessions")
+def list_sessions() -> list[dict[str, Any]]:
+    """List all active sessions."""
+    sessions = _session_manager.list_sessions()
+    return [
+        {
+            "id": s.id,
+            "name": s.name,
+            "model": s.model,
+            "message_count": s.message_count,
+            "created_at": s.created_at,
+            "updated_at": s.updated_at,
+        }
+        for s in sessions
+    ]
+
+
+@app.get("/v1/sessions/{session_id}")
+def get_session(session_id: str) -> dict[str, Any]:
+    """Get session details."""
+    session = _session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session.to_dict()
+
+
+@app.get("/v1/sessions/{session_id}/messages")
+def get_session_messages(session_id: str, limit: int = 100) -> list[dict[str, Any]]:
+    """Get messages for a session."""
+    session = _session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    messages = _session_manager.get_messages_openai(session_id, limit)
+    return messages
+
+
+@app.patch("/v1/sessions/{session_id}")
+async def update_session(session_id: str, request: Request) -> dict[str, Any]:
+    """Update session (e.g., rename)."""
+    body = await request.json()
+    session = _session_manager.update_session(session_id, **body)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session.to_dict()
+
+
+@app.delete("/v1/sessions/{session_id}")
+def delete_session_endpoint(session_id: str) -> dict[str, str]:
+    """Delete a session and its messages."""
+    if _session_manager.delete_session(session_id):
+        return {"deleted": session_id}
+    raise HTTPException(status_code=404, detail="Session not found")
 
 
 @app.get("/v1/skills")

@@ -410,32 +410,38 @@
 
     <script>
         let sessionId = null;
-        let chats = [];
+        let chats = [];  // Only stores {id, sessionId, title} - lightweight
         let currentChatId = null;
+        let currentMessages = [];  // Messages loaded from backend, not stored in localStorage
 
         // Interactive component state
         let currentInteractive = null;
         let selectedOptionIndex = -1;
         let optionsData = [];
 
-        // Init - Load history but start with new session on page load/refresh
-        function init() {
-            // Load existing chats from localStorage (preserve history)
-            const savedChats = localStorage.getItem('chats');
-            if (savedChats) {
-                try {
-                    chats = JSON.parse(savedChats);
-                } catch (e) {
-                    chats = [];
-                }
+        // Init - Load session list from backend, create new chat for current page
+        async function init() {
+            setupEvents();
+
+            // Load session list from backend (lightweight)
+            try {
+                const resp = await fetch('/v1/sessions');
+                const sessions = await resp.json();
+                // Map backend sessions to frontend chat list
+                chats = sessions.map(s => ({
+                    id: s.id,  // Use backend session ID as frontend chat ID
+                    sessionId: s.id,
+                    title: s.name,
+                    messageCount: s.message_count
+                }));
+            } catch (e) {
+                console.error('[Init] Failed to load sessions:', e);
+                chats = [];
             }
 
-            // Create new chat (empty state) and switch to it
-            createNewChat();
-            setupEvents();
-            renderChatList();  // Render history list first
-            // Create new session for the new chat
-            createSession();
+            // Create new chat for current page
+            await createNewChat();
+            renderChatList();
         }
 
         function setupEvents() {
@@ -526,11 +532,9 @@
               .then(data => console.log('Selection submitted:', data))
               .catch(err => console.error('Submit error:', err));
 
-            // Add selection as user message
+            // Add selection as user message (local display)
             addMsg('user', `选择了: ${selectedOption.label}`);
-            const chat = chats.find(c => c.id === currentChatId);
-            chat.msgs.push({ role: 'user', content: `[选择] ${selectedOption.label}` });
-            saveChats();
+            currentMessages.push({ role: 'user', content: `[选择] ${selectedOption.label}` });
 
             hideInteractiveOverlay();
 
@@ -597,36 +601,106 @@
             }
         }
 
-        // Chat management
-        function createNewChat() {
-            const id = 'chat-' + Date.now();
-            chats.unshift({ id, title: '新对话', msgs: [] });
-            saveChats();
-            switchChat(id);
-            createSession();
+        // Chat management - Lightweight, no messages stored
+        async function createNewChat() {
+            // Disconnect old SSE if exists
+            if (window._eventSource) {
+                window._eventSource.close();
+            }
+
+            // Create new session on backend
+            try {
+                const resp = await fetch('/v1/sessions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: '新对话', model: 'deepseek-chat' })
+                });
+                const session = await resp.json();
+                sessionId = session.id;
+
+                // Add to chat list (lightweight - no messages)
+                chats.unshift({
+                    id: sessionId,
+                    sessionId: sessionId,
+                    title: '新对话',
+                    messageCount: 0
+                });
+
+                currentChatId = sessionId;
+                currentMessages = [];  // Empty messages for new chat
+
+                // Connect SSE
+                connectSSE(sessionId);
+                updateStatus('connected', '已连接');
+
+                renderChatList();
+                renderMessages(currentMessages);
+                showWelcome();
+
+                console.log('[Session] New session created:', sessionId);
+            } catch (e) {
+                console.error('[Session] Create failed:', e);
+                updateStatus('disconnected', '连接失败');
+            }
         }
 
-        function switchChat(id) {
+        async function switchChat(id) {
+            // Disconnect old SSE
+            if (window._eventSource) {
+                window._eventSource.close();
+            }
+
             currentChatId = id;
-            const chat = chats.find(c => c.id === id);
+            sessionId = id;  // sessionId same as chatId now
+
+            // Load messages from backend
+            try {
+                const resp = await fetch(`/v1/sessions/${id}/messages`);
+                currentMessages = await resp.json();
+            } catch (e) {
+                console.error('[Switch] Failed to load messages:', e);
+                currentMessages = [];
+            }
+
             renderChatList();
-            renderMessages(chat.msgs);
-            if (chat.msgs.length > 0) hideWelcome();
-            else showWelcome();
+            renderMessages(currentMessages);
+
+            if (currentMessages.length > 0) {
+                hideWelcome();
+            } else {
+                showWelcome();
+            }
+
+            // Reconnect SSE for this session
+            connectSSE(id);
+            updateStatus('connected', '已连接');
         }
 
-        function deleteChat(id) {
+        async function deleteChat(id) {
+            // Delete from backend
+            try {
+                await fetch(`/v1/sessions/${id}`, { method: 'DELETE' });
+            } catch (e) {
+                console.error('[Delete] Failed:', e);
+            }
+
+            // Remove from local list
             chats = chats.filter(c => c.id !== id);
-            saveChats();
+
             if (id === currentChatId) {
-                if (chats.length > 0) switchChat(chats[0].id);
-                else createNewChat();
+                if (chats.length > 0) {
+                    await switchChat(chats[0].id);
+                } else {
+                    await createNewChat();
+                }
             }
             renderChatList();
         }
 
-        function saveChats() {
-            localStorage.setItem('chats', JSON.stringify(chats));
+        function updateStatus(status, text) {
+            const el = document.getElementById('status');
+            el.className = 'status ' + status;
+            el.textContent = text;
         }
 
         function renderChatList() {
@@ -649,35 +723,6 @@
                     deleteChat(btn.dataset.id);
                 };
             });
-        }
-
-        // Session - Always create new session
-        async function createSession() {
-            try {
-                // Disconnect old SSE if exists
-                if (window._eventSource) {
-                    window._eventSource.close();
-                }
-
-                const resp = await fetch('/v1/sessions', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: 'canvas-' + Date.now(), model: 'deepseek-chat' })
-                });
-                const data = await resp.json();
-                sessionId = data.id || data.session_id;
-                // Store sessionId for current page lifecycle only (not localStorage)
-                document.getElementById('status').className = 'status connected';
-                document.getElementById('status').textContent = '已连接';
-
-                // Connect to SSE stream for canvas updates
-                connectSSE(sessionId);
-                console.log('[Session] New session created:', sessionId);
-            } catch (e) {
-                console.error('[Session] Create failed:', e);
-                document.getElementById('status').className = 'status disconnected';
-                document.getElementById('status').textContent = '连接失败';
-            }
         }
 
         function connectSSE(sessionId) {
@@ -818,13 +863,21 @@
             input.value = '';
 
             addMsg('user', text);
+            currentMessages.push({ role: 'user', content: text });
+
+            // Update session title on first message
             const chat = chats.find(c => c.id === currentChatId);
-            chat.msgs.push({ role: 'user', content: text });
-            if (chat.title === '新对话') {
-                chat.title = text.slice(0, 30) + (text.length > 30 ? '...' : '');
+            if (chat && chat.title === '新对话') {
+                const newTitle = text.slice(0, 30) + (text.length > 30 ? '...' : '');
+                chat.title = newTitle;
+                // Update backend session name
+                fetch(`/v1/sessions/${sessionId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newTitle })
+                }).catch(e => console.error('[Rename] Failed:', e));
                 renderChatList();
             }
-            saveChats();
 
             const msgDiv = addMsg('assistant', '');
             let fullContent = '';
@@ -874,9 +927,10 @@
                 sendBtn.disabled = false;
                 input.focus();
 
+                // Messages saved to backend via X-Session-Id header
+                // Update local currentMessages for display
                 if (fullContent) {
-                    chat.msgs.push({ role: 'assistant', content: fullContent });
-                    saveChats();
+                    currentMessages.push({ role: 'assistant', content: fullContent });
                 }
             }
         }
