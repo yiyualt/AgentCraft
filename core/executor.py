@@ -125,6 +125,9 @@ class ToolExecutor:
             except ImportError:
                 pass
 
+            # Push progress: tool starting
+            await self._push_progress(f"⏳ 正在执行 **{tool_name}**...", "append")
+
         try:
             result = await self._registry.dispatch(tool_name, arguments)
 
@@ -137,6 +140,13 @@ class ToolExecutor:
                 duration_ms=duration_ms,
             )
             self._results[tool_call_id] = tool_result
+
+            # Push progress: tool completed
+            if self._canvas_manager and self._session_id:
+                await self._push_progress(
+                    f"✅ 完成 **{tool_name}** (耗时 {duration_ms}ms)",
+                    "append"
+                )
 
             logger.info(f"[EXECUTOR] Complete: {tool_name} duration={duration_ms}ms")
             return tool_result
@@ -153,6 +163,13 @@ class ToolExecutor:
             )
             self._results[tool_call_id] = tool_result
 
+            # Push progress: tool failed
+            if self._canvas_manager and self._session_id:
+                await self._push_progress(
+                    f"❌ **{tool_name}** 执行失败: {error_msg}",
+                    "append"
+                )
+
             logger.error(f"[EXECUTOR] Error: {tool_name} - {error_msg}")
             return tool_result
 
@@ -164,6 +181,22 @@ class ToolExecutor:
                     set_current_session_id(None)
                 except ImportError:
                     pass
+
+    async def _push_progress(self, content: str, action: str = "append") -> None:
+        """Push progress update to canvas via SSE."""
+        if not self._canvas_manager or not self._session_id:
+            return
+
+        try:
+            await self._canvas_manager.push_update(
+                session_id=self._session_id,
+                content=content,
+                mode="markdown",
+                section="main",
+                action=action,
+            )
+        except Exception as e:
+            logger.debug(f"[EXECUTOR] Failed to push progress: {e}")
 
     async def _run_unsafe_queue(self) -> None:
         """Process unsafe tools sequentially."""

@@ -43,7 +43,7 @@ LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "sk-default")
 
 # Concurrency / Rate Limiting
-MAX_CONCURRENT_LLM = int(os.getenv("MAX_CONCURRENT_OLLAMA", "3"))
+MAX_CONCURRENT_LLM = int(os.getenv("MAX_CONCURRENT_OLLAMA", "10"))
 RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "false").lower() == "true"
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "60"))
 RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
@@ -756,6 +756,22 @@ def cron_status() -> dict[str, Any]:
     return _cron_scheduler.get_status()
 
 
+@app.post("/test/canvas_push")
+async def test_canvas_push(session_id: str, content: str = "Test message"):
+    """Test canvas push directly."""
+    if _canvas_manager is None:
+        raise HTTPException(status_code=500, detail="Canvas manager not initialized")
+
+    success = await _canvas_manager.push_update(
+        session_id=session_id,
+        content=content,
+        mode="markdown",
+        section="main",
+        action="append",
+    )
+    return {"success": success, "session_id": session_id}
+
+
 @app.get("/cron/jobs")
 def cron_list_jobs() -> list[dict[str, Any]]:
     """List all cron jobs."""
@@ -1220,6 +1236,21 @@ async def _handle_non_streaming(
 ) -> dict[str, Any]:
     start_time = time.time()
 
+    # Helper to push canvas progress
+    async def _push_canvas_progress(content: str, action: str = "append") -> None:
+        if not _canvas_manager or not session_id:
+            return
+        try:
+            await _canvas_manager.push_update(
+                session_id=session_id,
+                content=content,
+                mode="markdown",
+                section="main",
+                action=action,
+            )
+        except Exception:
+            pass
+
     # Use unified registry (local + MCP) or default
     registry = _unified_registry or UnifiedToolRegistry(get_default_registry())
     user_tools = payload.get("tools")
@@ -1438,6 +1469,9 @@ async def _handle_non_streaming(
                         "messages_summary": _summarize_messages(messages),
                         **kwargs,
                     })
+                    # Push canvas progress: LLM thinking
+                    await _push_canvas_progress(f"🤔 正在思考 (第 {n_turns + 1} 轮)...")
+
                     # LLM call with error recovery (retry network/rate-limit/timeout)
                     result = None
                     llm_error = None
@@ -1700,6 +1734,9 @@ async def _handle_non_streaming(
 
             logger.info(f"[REQUEST END] latency={latency:.3f}s, turns={n_turns}")
             logger.info("=" * 80)
+
+            # Push canvas progress: completed
+            await _push_canvas_progress(f"\n✅ 回答完成 (耗时 {latency:.1f}s)")
 
         return result
 
