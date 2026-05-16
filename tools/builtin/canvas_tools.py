@@ -99,14 +99,18 @@ def canvas_update(
     description="Create an interactive component in Canvas. "
                 "Users can interact with buttons, forms, sliders, and select boxes. "
                 "Interaction events will be sent back to you in the next turn. "
-                "Use this to collect user input or confirm actions.",
+                "Use this to collect user input or confirm actions.\n\n"
+                "IMPORTANT: For presenting options, use 'option_list' type which provides "
+                "keyboard navigation (up/down arrows) like Claude Code. "
+                "Example: component_type='option_list', config={'options': [{'value': 'opt1', 'label': 'Option 1'}]}",
     parameters={
         "type": "object",
         "properties": {
             "component_type": {
                 "type": "string",
-                "enum": ["button", "form", "slider", "select", "checkbox", "button_group"],
+                "enum": ["button", "form", "slider", "select", "checkbox", "button_group", "option_list"],
                 "description": "Type of interactive component. "
+                               "option_list: RECOMMENDED for choices - keyboard navigation (↑↓ Enter Esc). "
                                "button: single action button. "
                                "button_group: multiple option buttons with confirm button. "
                                "form: input fields. "
@@ -117,6 +121,7 @@ def canvas_update(
             "config": {
                 "type": "object",
                 "description": "Component configuration. "
+                               "option_list: {options: [{value, label, description}], submit_label (default: '确认')} "
                                "button: {label, style (primary/success/warning/danger)} "
                                "button_group: {options: [{value, label}], submit_label (default: '确认')} "
                                "form: {fields: [{name, type, label, placeholder, required}]} "

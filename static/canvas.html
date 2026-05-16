@@ -6,17 +6,15 @@
     <title>AgentCraft Chat</title>
     <style>
         :root {
-            --bg-primary: #212121;
-            --bg-secondary: #171717;
-            --bg-tertiary: #2f2f2f;
-            --bg-hover: #3f3f3f;
-            --text-primary: #ececec;
-            --text-secondary: #b4b4b4;
-            --text-muted: #8e8e8e;
+            --bg-primary: #ffffff;
+            --bg-secondary: #f7f7f8;
+            --bg-hover: #e5e5e5;
+            --text-primary: #1a1a1a;
+            --text-secondary: #6b6b6b;
+            --text-muted: #9e9e9e;
             --accent-primary: #10a37f;
-            --accent-user: #5436da;
-            --border-primary: #424242;
-            --border-secondary: #2f2f2f;
+            --accent-user: #ab68ff;
+            --border-primary: #d9d9d9;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -30,976 +28,613 @@
             overflow: hidden;
         }
 
-        /* ===== Left Sidebar ===== */
-        .left-sidebar {
+        /* Left Sidebar */
+        .sidebar {
             width: 260px;
-            min-width: 260px;
             background: var(--bg-secondary);
-            border-right: 1px solid var(--border-secondary);
+            border-right: 1px solid var(--border-primary);
             display: flex;
             flex-direction: column;
-            transition: transform 0.3s ease, width 0.3s ease, min-width 0.3s ease;
-            z-index: 100;
+            transition: width 0.3s;
         }
 
-        .left-sidebar.collapsed {
-            transform: translateX(-260px);
-            width: 0;
-            min-width: 0;
-        }
+        .sidebar.collapsed { width: 0; }
 
-        .sidebar-header {
-            padding: 12px;
-        }
+        .sidebar-header { padding: 12px; }
 
         .new-chat-btn {
             width: 100%;
-            padding: 12px 16px;
+            padding: 10px 16px;
             background: transparent;
             border: 1px solid var(--border-primary);
             border-radius: 8px;
             color: var(--text-primary);
             font-size: 14px;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: background 0.2s;
         }
 
-        .new-chat-btn:hover {
-            background: var(--bg-hover);
-        }
+        .new-chat-btn:hover { background: var(--bg-hover); }
 
-        .chat-history {
-            flex: 1;
-            overflow-y: auto;
-            padding: 8px;
-        }
+        .chat-list { flex: 1; overflow-y: auto; padding: 8px; }
 
-        .history-item {
+        .chat-item {
             padding: 10px 12px;
             border-radius: 8px;
             cursor: pointer;
             font-size: 14px;
             color: var(--text-secondary);
             margin-bottom: 4px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            transition: background 0.2s;
             display: flex;
             align-items: center;
             gap: 8px;
         }
 
-        .history-item:hover {
-            background: var(--bg-hover);
-        }
+        .chat-item:hover { background: var(--bg-hover); }
+        .chat-item.active { background: var(--bg-hover); color: var(--text-primary); }
 
-        .history-item.active {
-            background: var(--bg-tertiary);
-            color: var(--text-primary);
-        }
-
-        .history-item .title {
-            flex: 1;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .history-item .delete-btn {
+        .chat-item .title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+        .chat-item .delete-btn {
             opacity: 0;
-            width: 24px;
-            height: 24px;
+            width: 20px;
+            height: 20px;
             background: transparent;
             border: none;
-            color: #ef4444;
+            color: #dc2626;
             cursor: pointer;
-            font-size: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 4px;
-            transition: opacity 0.2s, background 0.2s;
-        }
-
-        .history-item:hover .delete-btn {
-            opacity: 1;
-        }
-
-        .history-item .delete-btn:hover {
-            background: rgba(239, 68, 68, 0.2);
-        }
-
-        .sidebar-footer {
-            padding: 12px;
-            border-top: 1px solid var(--border-secondary);
-        }
-
-        .sidebar-footer h4 {
-            font-size: 12px;
-            color: var(--text-muted);
-            margin-bottom: 8px;
-        }
-
-        .fork-tree {
-            max-height: 150px;
-            overflow-y: auto;
-            font-size: 13px;
-        }
-
-        .fork-item {
-            padding: 6px 8px;
-            border-radius: 4px;
-            margin-bottom: 4px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .fork-item.running { color: #f59e0b; }
-        .fork-item.complete { color: var(--accent-primary); }
-        .fork-item.error { color: #ef4444; }
-
-        .fork-task {
-            flex: 1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        /* ===== Right Sidebar (Tool Status) ===== */
-        .right-sidebar {
-            width: 280px;
-            min-width: 280px;
-            background: var(--bg-secondary);
-            border-left: 1px solid var(--border-secondary);
-            display: flex;
-            flex-direction: column;
-            transition: transform 0.3s ease, width 0.3s ease, min-width 0.3s ease;
-            z-index: 100;
-        }
-
-        .right-sidebar.collapsed {
-            transform: translateX(280px);
-            width: 0;
-            min-width: 0;
-        }
-
-        .right-sidebar-header {
-            padding: 12px;
-            border-bottom: 1px solid var(--border-secondary);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .right-sidebar-header h3 {
             font-size: 14px;
-            color: var(--text-secondary);
         }
+        .chat-item:hover .delete-btn { opacity: 1; }
 
-        .tool-status-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: 8px;
-        }
-
-        .tool-status-item {
-            padding: 12px;
-            border-radius: 8px;
-            background: var(--bg-tertiary);
-            margin-bottom: 8px;
-            border: 1px solid var(--border-primary);
-        }
-
-        .tool-status-item .tool-name {
-            font-size: 14px;
-            font-weight: 500;
-            color: var(--text-primary);
-            margin-bottom: 6px;
-        }
-
-        .tool-status-item .tool-state {
-            font-size: 12px;
-            color: var(--text-secondary);
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .tool-status-item.running .tool-state { color: #f59e0b; }
-        .tool-status-item.success .tool-state { color: var(--accent-primary); }
-        .tool-status-item.error .tool-state { color: #ef4444; }
-
-        .tool-status-item .tool-result {
-            margin-top: 8px;
-            font-size: 12px;
-            color: var(--text-muted);
-            max-height: 100px;
-            overflow-y: auto;
-            padding: 8px;
-            background: var(--bg-secondary);
-            border-radius: 4px;
-        }
-
-        /* ===== Main Container ===== */
-        .main-container {
+        /* Main */
+        .main {
             flex: 1;
             display: flex;
             flex-direction: column;
             min-width: 0;
         }
 
-        /* ===== Header ===== */
         .header {
-            height: 56px;
-            padding: 12px 16px;
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            border-bottom: 1px solid var(--border-secondary);
-        }
-
-        .toggle-sidebar-btn {
-            width: 36px;
-            height: 36px;
-            background: transparent;
-            border: none;
-            color: var(--text-secondary);
-            cursor: pointer;
-            font-size: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 8px;
-            transition: background 0.2s;
-        }
-
-        .toggle-sidebar-btn:hover {
-            background: var(--bg-hover);
-        }
-
-        .header-title {
-            font-size: 16px;
-            font-weight: 600;
-        }
-
-        .model-select {
-            padding: 8px 12px;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-primary);
-            border-radius: 8px;
-            color: var(--text-primary);
-            font-size: 14px;
-            cursor: pointer;
-        }
-
-        .status-pill {
-            padding: 4px 12px;
-            border-radius: 16px;
-            font-size: 12px;
-        }
-
-        .status-pill.connected {
-            background: rgba(16, 163, 127, 0.2);
-            color: var(--accent-primary);
-        }
-
-        .status-pill.disconnected {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-        }
-
-        .header-right {
-            margin-left: auto;
+            height: 50px;
+            padding: 10px 16px;
             display: flex;
             align-items: center;
             gap: 12px;
+            border-bottom: 1px solid var(--border-primary);
         }
 
-        /* ===== Chat Area ===== */
+        .toggle-btn {
+            width: 32px;
+            height: 32px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 18px;
+            border-radius: 6px;
+        }
+
+        .toggle-btn:hover { background: var(--bg-hover); }
+
+        .status {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-left: auto;
+        }
+
+        .status.connected { background: rgba(16,163,127,0.15); color: var(--accent-primary); }
+        .status.disconnected { background: rgba(220,38,38,0.15); color: #dc2626; }
+
+        /* Chat Area */
         .chat-area {
             flex: 1;
             overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            padding-bottom: 100px;
-        }
-
-        .chat-content {
-            width: 100%;
-            max-width: 768px;
-            margin: 0 auto;
             padding: 20px;
+            padding-bottom: 80px;
         }
 
-        /* ===== Welcome Screen ===== */
-        .welcome-screen {
-            text-align: center;
-            padding: 80px 20px;
-        }
+        .messages { max-width: 800px; margin: 0 auto; }
 
-        .welcome-screen h1 {
-            font-size: 32px;
-            margin-bottom: 16px;
-        }
-
-        .welcome-screen p {
-            color: var(--text-secondary);
-            font-size: 18px;
-        }
-
-        .suggestion-chips {
+        .msg {
             display: flex;
-            flex-wrap: wrap;
             gap: 12px;
-            justify-content: center;
-            margin-top: 40px;
+            padding: 16px 0;
+            border-bottom: 1px solid var(--border-primary);
         }
 
-        .chip {
-            padding: 12px 20px;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-primary);
-            border-radius: 16px;
-            color: var(--text-primary);
-            cursor: pointer;
-            font-size: 14px;
-            transition: background 0.2s;
-        }
-
-        .chip:hover {
-            background: var(--bg-hover);
-        }
-
-        /* ===== Messages ===== */
-        .message {
-            display: flex;
-            gap: 16px;
-            padding: 24px 0;
-            border-bottom: 1px solid var(--border-secondary);
-        }
-
-        .message-avatar {
-            width: 30px;
-            height: 30px;
+        .avatar {
+            width: 28px;
+            height: 28px;
             border-radius: 6px;
-            flex-shrink: 0;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 14px;
+            flex-shrink: 0;
         }
 
-        .message.user .message-avatar {
-            background: var(--accent-user);
-        }
+        .msg.user .avatar { background: var(--accent-user); }
+        .msg.assistant .avatar { background: var(--accent-primary); }
 
-        .message.assistant .message-avatar {
-            background: var(--accent-primary);
-        }
-
-        .message-content {
+        .content {
             flex: 1;
-            line-height: 1.75;
-            font-size: 16px;
-            min-width: 0;
+            line-height: 1.6;
+            font-size: 15px;
         }
 
-        .message-content p { margin: 8px 0; }
-        .message-content h1 { font-size: 1.4em; margin: 16px 0 8px; }
-        .message-content h2 { font-size: 1.2em; margin: 12px 0 8px; }
-        .message-content h3 { font-size: 1.1em; margin: 8px 0; }
-        .message-content ul, .message-content ol { margin: 8px 0; padding-left: 24px; }
-        .message-content li { margin: 4px 0; }
-
-        .message-content code {
-            background: var(--bg-tertiary);
+        .content p { margin: 8px 0; }
+        .content ul, .content ol { margin: 8px 0; padding-left: 20px; }
+        .content code {
+            background: var(--bg-secondary);
             padding: 2px 6px;
             border-radius: 4px;
-            font-family: 'Fira Code', 'SF Mono', monospace;
-            font-size: 14px;
+            font-size: 13px;
         }
-
-        .message-content pre {
+        .content pre {
             background: var(--bg-secondary);
-            padding: 16px;
+            padding: 12px;
             border-radius: 8px;
+            margin: 12px 0;
             overflow-x: auto;
-            margin: 12px 0;
         }
+        .content pre code { background: transparent; padding: 0; }
 
-        .message-content pre code {
-            background: transparent;
-            padding: 0;
-        }
-
-        .message-content table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 12px 0;
-        }
-
-        .message-content th {
-            background: var(--bg-tertiary);
-            padding: 10px;
-            text-align: left;
-            border-bottom: 2px solid var(--accent-primary);
-        }
-
-        .message-content td {
-            padding: 10px;
-            border-bottom: 1px solid var(--border-secondary);
-        }
-
-        /* ===== Interactive Components (inline) ===== */
-        .interactive-inline {
-            margin: 16px 0;
-            padding: 16px;
-            background: var(--bg-tertiary);
-            border-radius: 12px;
+        /* Welcome */
+        .welcome { text-align: center; padding: 60px 20px; }
+        .welcome h1 { font-size: 28px; margin-bottom: 12px; }
+        .welcome p { color: var(--text-secondary); font-size: 16px; }
+        .chips { display: flex; gap: 10px; justify-content: center; margin-top: 30px; }
+        .chip {
+            padding: 10px 16px;
+            background: var(--bg-secondary);
             border: 1px solid var(--border-primary);
-        }
-
-        .interactive-inline .prompt-text {
-            margin-bottom: 12px;
-            color: var(--text-secondary);
-        }
-
-        .interactive-inline button {
-            padding: 10px 20px;
-            background: var(--accent-primary);
-            color: white;
-            border: none;
-            border-radius: 8px;
+            border-radius: 12px;
             cursor: pointer;
             font-size: 14px;
-            font-weight: 500;
-            transition: opacity 0.2s;
         }
+        .chip:hover { background: var(--bg-hover); }
 
-        .interactive-inline button:hover {
-            opacity: 0.9;
-        }
-
-        .interactive-inline button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .interactive-inline .form-inline {
+        /* Input */
+        .input-area {
+            position: fixed;
+            bottom: 0;
+            left: 260px;
+            right: 0;
+            padding: 16px 20px;
+            background: var(--bg-primary);
             display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
+            justify-content: center;
+            transition: left 0.3s;
         }
 
-        .interactive-inline .form-field {
+        .sidebar.collapsed ~ .main .input-area { left: 0; }
+
+        .input-box {
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            align-items: center;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 24px;
+            padding: 8px 16px;
+        }
+
+        .input-box textarea {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-size: 15px;
+            line-height: 1.5;
+            resize: none;
+            outline: none;
+            max-height: 150px;
+        }
+
+        .input-box textarea::placeholder { color: var(--text-muted); }
+
+        .send-btn {
+            width: 32px;
+            height: 32px;
+            background: var(--accent-primary);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Interactive Components - Compact Style */
+        .interactive-container {
+            margin: 12px 0;
+            padding: 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        .interactive-prompt {
+            font-size: 13px;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .option-list {
             display: flex;
             flex-direction: column;
             gap: 4px;
         }
 
-        .interactive-inline .form-field label {
-            font-size: 13px;
-            color: var(--text-secondary);
-        }
-
-        .interactive-inline input[type="text"],
-        .interactive-inline input[type="number"],
-        .interactive-inline select {
-            padding: 10px 14px;
-            background: var(--bg-secondary);
-            color: var(--text-primary);
+        .option-item {
+            padding: 8px 10px;
+            background: transparent;
             border: 1px solid var(--border-primary);
-            border-radius: 8px;
-            font-size: 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.1s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        .interactive-inline input:focus,
-        .interactive-inline select:focus {
-            outline: none;
+        .option-item:hover {
+            background: var(--bg-hover);
+        }
+
+        .option-item.selected {
+            background: rgba(16,163,127,0.08);
             border-color: var(--accent-primary);
         }
 
-        /* ===== Input Area ===== */
-        .input-area {
-            position: fixed;
-            bottom: 0;
-            left: 260px;
-            right: 280px;
-            padding: 16px 20px 24px;
-            background: linear-gradient(to top, var(--bg-primary) 80%, transparent);
-            display: flex;
-            justify-content: center;
-            transition: left 0.3s ease, right 0.3s ease;
+        .option-item.selected .option-indicator {
+            color: var(--accent-primary);
         }
 
-        .left-sidebar.collapsed ~ .main-container .input-area {
-            left: 0;
-        }
-
-        .right-sidebar.collapsed ~ .input-area {
-            right: 0;
-        }
-
-        .left-sidebar.collapsed ~ .main-container .right-sidebar.collapsed ~ .input-area {
-            left: 0;
-            right: 0;
-        }
-
-        .input-container {
-            width: 100%;
-            max-width: 768px;
-            background: var(--bg-tertiary);
-            border-radius: 24px;
-            border: 1px solid var(--border-primary);
-            display: flex;
-            align-items: flex-end;
-            padding: 12px 16px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        }
-
-        .input-container textarea {
-            flex: 1;
-            background: transparent;
-            border: none;
-            color: var(--text-primary);
-            font-size: 16px;
-            resize: none;
-            max-height: 200px;
-            line-height: 1.5;
-            outline: none;
-        }
-
-        .input-container textarea::placeholder {
+        .option-indicator {
+            width: 16px;
+            text-align: center;
             color: var(--text-muted);
+            font-weight: 600;
+            font-size: 12px;
         }
 
-        .input-container textarea:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            background: var(--bg-secondary);
+        .option-content {
+            flex: 1;
+            line-height: 1.4;
         }
 
-        .send-btn {
-            width: 36px;
-            height: 36px;
+        .option-label {
+            font-weight: normal;
+        }
+
+        .option-description {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .option-submit {
+            margin-top: 8px;
+            padding: 6px 16px;
             background: var(--accent-primary);
-            border: none;
-            border-radius: 8px;
             color: white;
+            border: none;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 13px;
+        }
+
+        .option-submit:hover { opacity: 0.9; }
+        .option-submit:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .keyboard-hint {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-primary);
+            font-size: 11px;
+            color: var(--text-muted);
             display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: opacity 0.2s;
+            gap: 12px;
         }
 
-        .send-btn:hover {
-            opacity: 0.9;
-        }
-
-        .send-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+        .keyboard-hint kbd {
+            padding: 1px 4px;
             background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 10px;
         }
 
-        /* ===== Error Message ===== */
-        .error-message {
-            padding: 12px 16px;
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            border-radius: 8px;
-            color: #ef4444;
-            margin: 12px 0;
-        }
-
-        /* ===== Responsive ===== */
+        /* Responsive */
         @media (max-width: 768px) {
-            .left-sidebar {
-                position: fixed;
-                left: 0;
-                top: 0;
-                bottom: 0;
-            }
-
-            .right-sidebar {
-                position: fixed;
-                right: 0;
-                top: 0;
-                bottom: 0;
-            }
-
-            .input-area {
-                left: 0;
-                right: 0;
-            }
+            .sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 100; }
+            .input-area { left: 0; }
         }
     </style>
     <script src="/static/marked.min.js"></script>
 </head>
 <body>
-    <!-- Left Sidebar -->
-    <nav id="left-sidebar" class="left-sidebar">
+    <nav class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            <button id="new-chat" class="new-chat-btn">
-                <span>+</span> 新对话
-            </button>
+            <button class="new-chat-btn" id="newChat">+ 新对话</button>
         </div>
-        <div id="chat-history" class="chat-history"></div>
-        <div class="sidebar-footer">
-            <h4>Fork 任务</h4>
-            <div id="fork-tree" class="fork-tree"></div>
-        </div>
+        <div class="chat-list" id="chatList"></div>
     </nav>
 
-    <!-- Main Container -->
-    <div class="main-container">
-        <!-- Header -->
+    <div class="main">
         <header class="header">
-            <button id="toggle-sidebar" class="toggle-sidebar-btn">☰</button>
-            <span class="header-title">AgentCraft</span>
-            <div class="header-right">
-                <select id="model-select" class="model-select">
-                    <option value="deepseek-chat">DeepSeek Chat</option>
-                </select>
-                <span id="status" class="status-pill disconnected">未连接</span>
-            </div>
+            <button class="toggle-btn" id="toggleSidebar">☰</button>
+            <span>AgentCraft</span>
+            <span class="status disconnected" id="status">未连接</span>
         </header>
 
-        <!-- Chat Area -->
-        <main id="chat-area" class="chat-area">
-            <div id="welcome-screen" class="welcome-screen">
+        <main class="chat-area" id="chatArea">
+            <div class="welcome" id="welcome">
                 <h1>Hello!</h1>
                 <p>有什么可以帮助你的?</p>
-                <div class="suggestion-chips">
-                    <button class="chip" data-prompt="帮我写一段 Python 代码">写代码</button>
-                    <button class="chip" data-prompt="解释一下什么是机器学习">解释概念</button>
-                    <button class="chip" data-prompt="帮我分析这个问题">分析问题</button>
+                <div class="chips">
+                    <button class="chip" data-text="帮我写一段 Python 代码">写代码</button>
+                    <button class="chip" data-text="解释一下什么是机器学习">解释概念</button>
+                    <button class="chip" data-text="帮我分析这个问题">分析问题</button>
                 </div>
             </div>
-            <div class="chat-content" id="chat-content"></div>
+            <div class="messages" id="messages"></div>
         </main>
 
-        <!-- Input Area -->
         <footer class="input-area">
-            <div class="input-container">
+            <div class="input-box">
                 <textarea id="input" placeholder="发送消息..." rows="1"></textarea>
-                <button id="send" class="send-btn">➤</button>
+                <button class="send-btn" id="send">➤</button>
             </div>
         </footer>
+
+        <!-- Interactive Component Overlay -->
+        <div id="interactiveOverlay" class="interactive-container" style="display: none;">
+            <div class="interactive-prompt" id="interactivePrompt"></div>
+            <div class="option-list" id="optionList"></div>
+            <button class="option-submit" id="optionSubmit" disabled>确认选择</button>
+            <div class="keyboard-hint">
+                <span><kbd>↑</kbd><kbd>↓</kbd> 选择</span>
+                <span><kbd>Enter</kbd> 确认</span>
+                <span><kbd>Esc</kbd> 取消</span>
+            </div>
+        </div>
     </div>
 
-    <!-- Right Sidebar (Tool Status) -->
-    <aside id="right-sidebar" class="right-sidebar">
-        <div class="right-sidebar-header">
-            <h3>工具执行</h3>
-            <button id="toggle-right-sidebar" class="toggle-sidebar-btn">☰</button>
-        </div>
-        <div id="tool-status-list" class="tool-status-list"></div>
-    </aside>
-
     <script>
-        // ===== Configuration =====
-        const API_BASE = '/canvas';
         let sessionId = null;
-        let eventSource = null;
-        let sidebarCollapsed = false;
-        // ===== Initialization =====
-        let chatHistory = [];
+        let chats = [];
         let currentChatId = null;
-        let lastAssistantMessageId = null;
 
-        // 从 localStorage 加载历史对话
-        function loadHistory() {
-            const saved = localStorage.getItem('chat_history');
-            if (saved) {
-                chatHistory = JSON.parse(saved);
-                updateHistorySidebar();
-            }
-        }
+        // Interactive component state
+        let currentInteractive = null;
+        let selectedOptionIndex = -1;
+        let optionsData = [];
 
-        // 保存历史对话到 localStorage
-        function saveHistory() {
-            localStorage.setItem('chat_history', JSON.stringify(chatHistory));
-        }
-
-        // ===== Initialization =====
-        async function init() {
-            loadHistory();  // 加载历史对话
-            setupEventListeners();
+        // Init - Always start fresh on page load/refresh
+        function init() {
+            // Clear any previous data - always start fresh
+            chats = [];
+            localStorage.removeItem('chats');
             createNewChat();
-            await createOrReuseSession();
+            setupEvents();
+            // Create new session
+            createSession();
         }
 
-        async function createOrReuseSession() {
-            // 尝试从 localStorage 复用 session
-            const savedSessionId = localStorage.getItem('canvas_session_id');
+        function setupEvents() {
+            document.getElementById('toggleSidebar').onclick = () => {
+                document.getElementById('sidebar').classList.toggle('collapsed');
+            };
+            document.getElementById('newChat').onclick = createNewChat;
+            document.getElementById('send').onclick = sendMessage;
+            document.getElementById('input').onkeydown = (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            };
+            document.querySelectorAll('.chip').forEach(c => {
+                c.onclick = () => {
+                    document.getElementById('input').value = c.dataset.text;
+                    sendMessage();
+                };
+            });
 
-            if (savedSessionId) {
-                // 验证 session 是否仍然有效
-                try {
-                    const checkResp = await fetch(`/v1/sessions/${savedSessionId}`);
-                    if (checkResp.ok) {
-                        const sessionData = await checkResp.json();
-                        if (sessionData.status === 'active') {
-                            sessionId = savedSessionId;
-                            console.log('复用已有 session:', sessionId);
-                            connectSSE();
-                            return;
-                        }
+            // Keyboard navigation for interactive components
+            document.onkeydown = handleKeyboardNavigation;
+
+            // Submit button for interactive component
+            document.getElementById('optionSubmit').onclick = submitInteractiveSelection;
+        }
+
+        // Keyboard navigation for option selection
+        function handleKeyboardNavigation(e) {
+            const overlay = document.getElementById('interactiveOverlay');
+            if (overlay.style.display === 'none' || !currentInteractive) return;
+
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                const direction = e.key === 'ArrowUp' ? -1 : 1;
+                const newIndex = selectedOptionIndex + direction;
+
+                if (newIndex >= 0 && newIndex < optionsData.length) {
+                    selectedOptionIndex = newIndex;
+                    updateOptionSelection();
+                }
+            } else if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (selectedOptionIndex >= 0) {
+                    submitInteractiveSelection();
+                }
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                hideInteractiveOverlay();
+            }
+        }
+
+        function updateOptionSelection() {
+            const items = document.querySelectorAll('.option-item');
+            items.forEach((item, idx) => {
+                if (idx === selectedOptionIndex) {
+                    item.classList.add('selected');
+                    item.querySelector('.option-indicator').textContent = '›';
+                } else {
+                    item.classList.remove('selected');
+                    item.querySelector('.option-indicator').textContent = '';
+                }
+            });
+
+            document.getElementById('optionSubmit').disabled = selectedOptionIndex < 0;
+        }
+
+        function submitInteractiveSelection() {
+            if (selectedOptionIndex < 0 || !currentInteractive) return;
+
+            const selectedOption = optionsData[selectedOptionIndex];
+
+            // Send selection to backend using current sessionId
+            fetch(`/canvas/event/${sessionId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'selection',
+                    component_id: currentInteractive.id,
+                    data: {
+                        selected_value: selectedOption.value,
+                        selected_label: selectedOption.label,
+                        selected_index: selectedOptionIndex
                     }
-                } catch (e) {
-                    console.log('Session 无效，创建新的');
-                }
-            }
+                })
+            }).then(resp => resp.json())
+              .then(data => console.log('Selection submitted:', data))
+              .catch(err => console.error('Submit error:', err));
 
-            // 创建新的 session
-            await createSession();
+            // Add selection as user message
+            addMsg('user', `选择了: ${selectedOption.label}`);
+            const chat = chats.find(c => c.id === currentChatId);
+            chat.msgs.push({ role: 'user', content: `[选择] ${selectedOption.label}` });
+            saveChats();
+
+            hideInteractiveOverlay();
+
+            // Trigger next response
+            sendSelectionAsMessage(selectedOption);
         }
 
-        async function createSession() {
-            try {
-                const resp = await fetch('/v1/sessions', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        name: `chat-${Date.now()}`,
-                        model: 'deepseek-chat',
-                        skills: 'canvas-interactive'
-                    })
-                });
-
-                if (!resp.ok) throw new Error('Failed to create session');
-
-                const data = await resp.json();
-                sessionId = data.id || data.session_id;
-
-                // 保存到 localStorage
-                localStorage.setItem('canvas_session_id', sessionId);
-
-                // 关联 session 到当前 chat
-                const currentChat = chatHistory.find(c => c.id === currentChatId);
-                if (currentChat) {
-                    currentChat.sessionId = sessionId;
-                    saveHistory();
-                }
-
-                console.log('创建新 session:', sessionId);
-
-                connectSSE();
-            } catch (e) {
-                console.error('Init error:', e);
-                showStatus('连接失败', false);
-            }
+        function sendSelectionAsMessage(option) {
+            const input = document.getElementById('input');
+            input.value = `用户选择了选项: ${option.label} (value: ${option.value})`;
+            sendMessage();
         }
 
-        // ===== SSE Connection =====
-        function connectSSE() {
-            if (!sessionId) return;
-
-            eventSource = new EventSource(`${API_BASE}/stream/${sessionId}`);
-
-            eventSource.onopen = () => {
-                showStatus('已连接', true);
-            };
-
-            eventSource.onerror = () => {
-                showStatus('未连接', false);
-                setTimeout(() => { if (sessionId) connectSSE(); }, 3000);
-            };
-
-            eventSource.addEventListener('connected', () => {
-                showStatus('已连接', true);
-            });
-
-            eventSource.addEventListener('canvas_update', (event) => {
-                handleCanvasUpdate(JSON.parse(event.data));
-            });
-
-            eventSource.addEventListener('canvas_interact', (event) => {
-                handleInteractiveComponent(JSON.parse(event.data));
-            });
-
-            eventSource.addEventListener('fork_event', (event) => {
-                handleForkEvent(JSON.parse(event.data));
-            });
-
-            // 工具执行事件
-            eventSource.addEventListener('tool_start', (event) => {
-                handleToolStart(JSON.parse(event.data));
-            });
-
-            eventSource.addEventListener('tool_result', (event) => {
-                handleToolResult(JSON.parse(event.data));
-            });
-
-            eventSource.addEventListener('tool_error', (event) => {
-                handleToolError(JSON.parse(event.data));
-            });
-
-            eventSource.addEventListener('heartbeat', () => {});
+        function hideInteractiveOverlay() {
+            document.getElementById('interactiveOverlay').style.display = 'none';
+            currentInteractive = null;
+            selectedOptionIndex = -1;
+            optionsData = [];
+            document.getElementById('input').disabled = false;
+            document.getElementById('send').disabled = false;
         }
 
-        // ===== Tool Status =====
-        let toolStatusList = {};
+        function showInteractiveOverlay(data) {
+            currentInteractive = data;
+            optionsData = data.config?.options || [];
 
-        function handleToolStart(data) {
-            console.log('Tool start:', data);
-            const { id, name } = data;
-            toolStatusList[id] = { name, state: 'running', result: null };
+            // Set prompt
+            document.getElementById('interactivePrompt').textContent =
+                data.prompt || '请选择一个选项:';
 
-            const container = document.getElementById('tool-status-list');
-            const div = document.createElement('div');
-            div.className = 'tool-status-item running';
-            div.id = `tool-${id}`;
-            div.innerHTML = `
-                <div class="tool-name">${name}</div>
-                <div class="tool-state">⏳ 执行中...</div>
-            `;
-            container.appendChild(div);
-        }
-
-        function handleToolResult(data) {
-            console.log('Tool result:', data);
-            const { id, result } = data;
-            toolStatusList[id] = { ...toolStatusList[id], state: 'success', result };
-
-            const el = document.getElementById(`tool-${id}`);
-            if (el) {
-                el.className = 'tool-status-item success';
-                el.querySelector('.tool-state').innerHTML = '✓ 完成';
-                if (result) {
-                    const resultDiv = document.createElement('div');
-                    resultDiv.className = 'tool-result';
-                    resultDiv.textContent = result;
-                    el.appendChild(resultDiv);
-                }
-            }
-        }
-
-        function handleToolError(data) {
-            console.log('Tool error:', data);
-            const { id, error } = data;
-            toolStatusList[id] = { ...toolStatusList[id], state: 'error', result: error };
-
-            const el = document.getElementById(`tool-${id}`);
-            if (el) {
-                el.className = 'tool-status-item error';
-                el.querySelector('.tool-state').innerHTML = `✗ ${error}`;
-            }
-        }
-
-        // ===== Status =====
-        function showStatus(text, connected) {
-            const status = document.getElementById('status');
-            status.textContent = text;
-            status.className = `status-pill ${connected ? 'connected' : 'disconnected'}`;
-        }
-
-        // ===== Sidebar =====
-        function toggleSidebar() {
-            const sidebar = document.getElementById('left-sidebar');
-            sidebar.classList.toggle('collapsed');
-            sidebarCollapsed = sidebar.classList.contains('collapsed');
-        }
-
-        function toggleRightSidebar() {
-            const sidebar = document.getElementById('right-sidebar');
-            sidebar.classList.toggle('collapsed');
-        }
-
-        // ===== Chat Management =====
-        function createNewChat() {
-            currentChatId = `chat-${Date.now()}`;
-            chatHistory.push({
-                id: currentChatId,
-                sessionId: null,  // 创建后会被设置
-                title: '新对话',
-                messages: [],
-                timestamp: Date.now()
-            });
-            clearChatContent();
-            showWelcomeScreen();
-            updateHistorySidebar();
-            saveHistory();  // 保存到 localStorage
-
-            // 创建新的 session
-            createSession();
-        }
-
-        function switchChat(chatId) {
-            const chat = chatHistory.find(c => c.id === chatId);
-            if (!chat) return;
-
-            currentChatId = chatId;
-            clearChatContent();
-            hideWelcomeScreen();
-            chat.messages.forEach(msg => {
-                addMessage(msg.role, msg.content, { skipHistory: true });
-            });
-            updateHistorySidebar();
-
-            // 切换到对应的 session
-            if (chat.sessionId && chat.sessionId !== sessionId) {
-                sessionId = chat.sessionId;
-                localStorage.setItem('canvas_session_id', sessionId);
-                connectSSE();
-            }
-        }
-        function createNewChat() {
-            currentChatId = `chat-${Date.now()}`;
-            chatHistory.push({
-                id: currentChatId,
-                sessionId: null,  // 创建后会被设置
-                title: '新对话',
-                messages: [],
-                timestamp: Date.now()
-            });
-            clearChatContent();
-            showWelcomeScreen();
-            updateHistorySidebar();
-            saveHistory();  // 保存到 localStorage
-
-            // 创建新的 session
-            createSession();
-        }
-
-        function clearChatContent() {
-            document.getElementById('chat-content').innerHTML = '';
-            lastAssistantMessageId = null;
-        }
-
-        function showWelcomeScreen() {
-            document.getElementById('welcome-screen').style.display = 'block';
-        }
-
-        function hideWelcomeScreen() {
-            document.getElementById('welcome-screen').style.display = 'none';
-        }
-
-        function updateHistorySidebar() {
-            const container = document.getElementById('chat-history');
-            container.innerHTML = chatHistory.map(chat => `
-                <div class="history-item ${chat.id === currentChatId ? 'active' : ''}" data-id="${chat.id}">
-                    <span class="title">${chat.title}</span>
-                    <button class="delete-btn" data-id="${chat.id}">×</button>
+            // Build option list
+            const listEl = document.getElementById('optionList');
+            listEl.innerHTML = optionsData.map((opt, idx) => `
+                <div class="option-item" data-index="${idx}">
+                    <span class="option-indicator"></span>
+                    <div class="option-content">
+                        <div class="option-label">${opt.label || opt.value}</div>
+                        ${opt.description ? `<div class="option-description">${opt.description}</div>` : ''}
+                    </div>
                 </div>
             `).join('');
 
-            container.querySelectorAll('.history-item').forEach(item => {
+            // Add click handlers
+            listEl.querySelectorAll('.option-item').forEach(item => {
+                item.onclick = () => {
+                    selectedOptionIndex = parseInt(item.dataset.index);
+                    updateOptionSelection();
+                };
+            });
+
+            // Show overlay
+            document.getElementById('interactiveOverlay').style.display = 'block';
+            selectedOptionIndex = -1;
+            document.getElementById('optionSubmit').disabled = true;
+
+            // Disable input while interactive
+            document.getElementById('input').disabled = true;
+            document.getElementById('send').disabled = true;
+
+            // Auto-select first option for convenience
+            if (optionsData.length > 0) {
+                selectedOptionIndex = 0;
+                updateOptionSelection();
+            }
+        }
+
+        // Chat management
+        function createNewChat() {
+            const id = 'chat-' + Date.now();
+            chats.unshift({ id, title: '新对话', msgs: [] });
+            saveChats();
+            switchChat(id);
+            createSession();
+        }
+
+        function switchChat(id) {
+            currentChatId = id;
+            const chat = chats.find(c => c.id === id);
+            renderChatList();
+            renderMessages(chat.msgs);
+            if (chat.msgs.length > 0) hideWelcome();
+            else showWelcome();
+        }
+
+        function deleteChat(id) {
+            chats = chats.filter(c => c.id !== id);
+            saveChats();
+            if (id === currentChatId) {
+                if (chats.length > 0) switchChat(chats[0].id);
+                else createNewChat();
+            }
+            renderChatList();
+        }
+
+        function saveChats() {
+            localStorage.setItem('chats', JSON.stringify(chats));
+        }
+
+        function renderChatList() {
+            document.getElementById('chatList').innerHTML = chats.map(c => `
+                <div class="chat-item ${c.id === currentChatId ? 'active' : ''}" data-id="${c.id}">
+                    <span class="title">${c.title}</span>
+                    <button class="delete-btn" data-id="${c.id}">×</button>
+                </div>
+            `).join('');
+            document.querySelectorAll('.chat-item').forEach(item => {
                 item.onclick = (e) => {
                     if (!e.target.classList.contains('delete-btn')) {
                         switchChat(item.dataset.id);
                     }
                 };
             });
-
-            container.querySelectorAll('.delete-btn').forEach(btn => {
+            document.querySelectorAll('.delete-btn').forEach(btn => {
                 btn.onclick = (e) => {
                     e.stopPropagation();
                     deleteChat(btn.dataset.id);
@@ -1007,554 +642,236 @@
             });
         }
 
-        function deleteChat(chatId) {
-            const chat = chatHistory.find(c => c.id === chatId);
-            if (!chat) return;
-
-            // 如果删除的是当前对话，先切换到其他对话
-            if (chatId === currentChatId) {
-                const remaining = chatHistory.filter(c => c.id !== chatId);
-                if (remaining.length > 0) {
-                    switchChat(remaining[0].id);
-                } else {
-                    createNewChat();
+        // Session - Always create new session
+        async function createSession() {
+            try {
+                // Disconnect old SSE if exists
+                if (window._eventSource) {
+                    window._eventSource.close();
                 }
-            }
 
-            // 从历史中删除
-            chatHistory = chatHistory.filter(c => c.id !== chatId);
-            saveHistory();
-            updateHistorySidebar();
+                const resp = await fetch('/v1/sessions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'canvas-' + Date.now(), model: 'deepseek-chat' })
+                });
+                const data = await resp.json();
+                sessionId = data.id || data.session_id;
+                // Store sessionId for current page lifecycle only (not localStorage)
+                document.getElementById('status').className = 'status connected';
+                document.getElementById('status').textContent = '已连接';
 
-            // 如果有 session，也删除后端 session
-            if (chat.sessionId) {
-                fetch(`/v1/sessions/${chat.sessionId}`, { method: 'DELETE' }).catch(() => {});
+                // Connect to SSE stream for canvas updates
+                connectSSE(sessionId);
+                console.log('[Session] New session created:', sessionId);
+            } catch (e) {
+                console.error('[Session] Create failed:', e);
+                document.getElementById('status').className = 'status disconnected';
+                document.getElementById('status').textContent = '连接失败';
             }
         }
 
-        function loadChat(chatId) {
-            // 已被 switchChat 替代，保留兼容性
-            switchChat(chatId);
-        }
+        function connectSSE(sessionId) {
+            const eventSource = new EventSource(`/canvas/stream/${sessionId}`);
+            window._eventSource = eventSource;
 
-        // ===== Messages =====
-        function addMessage(role, content, options = {}) {
-            hideWelcomeScreen();
-            const contentDiv = document.getElementById('chat-content');
-            const msgId = options.id || `msg-${Date.now()}`;
+            eventSource.onopen = () => {
+                console.log('[SSE] Connected to canvas stream');
+            };
 
-            const div = document.createElement('div');
-            div.className = `message ${role}`;
-            div.id = msgId;
+            eventSource.onerror = (err) => {
+                console.error('[SSE] Connection error:', err);
+                // Don't auto-reconnect - user can refresh page for new session
+            };
 
-            const avatar = role === 'user' ? '👤' : '🤖';
-            const rendered = role === 'user' ? escapeHtml(content) : marked.parse(content);
+            eventSource.addEventListener('connected', (e) => {
+                console.log('[SSE] Session connected:', e.data);
+            });
 
-            // 为 assistant 消息添加单独的文本和交互容器
-            if (role === 'assistant') {
-                div.innerHTML = `
-                    <div class="message-avatar">${avatar}</div>
-                    <div class="message-content">
-                        <div class="text-content">${rendered}</div>
-                        <div class="interactive-container"></div>
-                    </div>
-                `;
-            } else {
-                div.innerHTML = `
-                    <div class="message-avatar">${avatar}</div>
-                    <div class="message-content">${rendered}</div>
-                `;
-            }
+            eventSource.addEventListener('heartbeat', (e) => {
+                // Keep alive
+            });
 
-            contentDiv.appendChild(div);
-            scrollToBottom();
+            eventSource.addEventListener('canvas_update', (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    // Append canvas update to last message
+                    updateLastMsg(data.content);
+                } catch (err) {
+                    console.error('[SSE] Parse error:', err);
+                }
+            });
 
-            if (!options.skipHistory) {
-                const chat = chatHistory.find(c => c.id === currentChatId);
-                if (chat) {
-                    chat.messages.push({ role, content });
-                    if (role === 'user' && chat.title === '新对话') {
-                        chat.title = content.substring(0, 30) + (content.length > 30 ? '...' : '');
-                        updateHistorySidebar();
+            eventSource.addEventListener('canvas_interact', (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    console.log('[SSE] Interactive component received:', data);
+
+                    // Handle different component types
+                    if (data.component_type === 'option_list' || data.component_type === 'button_group') {
+                        showInteractiveOverlay(data);
+                    } else if (data.component_type === 'button') {
+                        // Single button - just show and wait for click
+                        showSingleButton(data);
                     }
-                    saveHistory();  // 每次添加消息都保存
+                } catch (err) {
+                    console.error('[SSE] Parse error:', err);
                 }
-            }
+            });
 
+            eventSource.addEventListener('fork_event', (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    console.log('[SSE] Fork event:', data.event_type);
+                    // Could show fork progress in UI
+                } catch (err) {
+                    console.error('[SSE] Parse error:', err);
+                }
+            });
+        }
+
+        function showSingleButton(data) {
+            // For single button, show a simple prompt
+            const label = data.config?.label || '确认';
+            const prompt = data.prompt || '请确认操作';
+
+            const listEl = document.getElementById('optionList');
+            listEl.innerHTML = `
+                <div class="option-item selected" data-index="0">
+                    <span class="option-indicator">›</span>
+                    <div class="option-content">
+                        <div class="option-label">${label}</div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('interactivePrompt').textContent = prompt;
+            document.getElementById('interactiveOverlay').style.display = 'block';
+            selectedOptionIndex = 0;
+            currentInteractive = data;
+            optionsData = [{ value: 'confirm', label: label }];
+
+            document.getElementById('input').disabled = true;
+            document.getElementById('send').disabled = true;
+        }
+
+        // Messages
+        function renderMessages(msgs) {
+            document.getElementById('messages').innerHTML = msgs.map(m => `
+                <div class="msg ${m.role}">
+                    <div class="avatar">${m.role === 'user' ? '👤' : '🤖'}</div>
+                    <div class="content">${m.role === 'user' ? esc(m.content) : marked.parse(m.content)}</div>
+                </div>
+            `).join('');
+            scrollDown();
+        }
+
+        function addMsg(role, content) {
+            hideWelcome();
+            const div = document.createElement('div');
+            div.className = `msg ${role}`;
+            div.innerHTML = `
+                <div class="avatar">${role === 'user' ? '👤' : '🤖'}</div>
+                <div class="content">${role === 'user' ? esc(content) : marked.parse(content)}</div>
+            `;
+            document.getElementById('messages').appendChild(div);
+            scrollDown();
             return div;
         }
 
-        function getOrCreateLastAssistantMessage() {
-            if (lastAssistantMessageId) {
-                const existing = document.getElementById(lastAssistantMessageId);
-                if (existing) return existing;
-            }
-            const msg = addMessage('assistant', '', { id: `msg-${Date.now()}` });
-            lastAssistantMessageId = msg.id;
-            return msg;
-        }
-
-        function appendToMessage(msgDiv, content, mode) {
-            const contentEl = msgDiv.querySelector('.message-content');
-            if (mode === 'markdown') {
-                contentEl.innerHTML += marked.parse(content);
-            } else if (mode === 'code') {
-                const pre = document.createElement('pre');
-                pre.innerHTML = `<code>${escapeHtml(content)}</code>`;
-                contentEl.appendChild(pre);
-            } else {
-                contentEl.innerHTML += content;
-            }
-            scrollToBottom();
-        }
-
-        function addError(text) {
-            const contentDiv = document.getElementById('chat-content');
-            const div = document.createElement('div');
-            div.className = 'error-message';
-            div.textContent = text;
-            contentDiv.appendChild(div);
-            scrollToBottom();
-        }
-
-        // ===== Canvas Update Handler =====
-        function handleCanvasUpdate(data) {
-            const { mode, content, section, action } = data;
-            console.log('Canvas update:', data);
-
-            if (section === 'sidebar') return; // Ignore sidebar content
-
-            hideWelcomeScreen();
-
-            if (action === 'clear') {
-                clearChatContent();
-                return;
-            }
-
-            // Route to message bubble
-            const msgDiv = getOrCreateLastAssistantMessage();
-            appendToMessage(msgDiv, content, mode);
-        }
-
-        // ===== Interactive Component =====
-        function handleInteractiveComponent(data) {
-            console.log('Interactive component:', data);
-            hideWelcomeScreen();
-
-            const { component_type, id, config, prompt } = data;
-            const msgDiv = getOrCreateLastAssistantMessage();
-            const interactiveEl = msgDiv.querySelector('.interactive-container');
-
-            const container = document.createElement('div');
-            container.className = 'interactive-inline';
-            container.id = id;
-
-            if (prompt) {
-                const promptEl = document.createElement('div');
-                promptEl.className = 'prompt-text';
-                promptEl.innerHTML = marked.parse(prompt);
-                container.appendChild(promptEl);
-            }
-
-            switch (component_type) {
-                case 'button':
-                    const btn = document.createElement('button');
-                    btn.textContent = config.label || '确认';
-                    btn.onclick = () => handleInteraction(id, 'click', { label: config.label });
-                    container.appendChild(btn);
-                    break;
-
-                case 'form':
-                    const form = document.createElement('div');
-                    form.className = 'form-inline';
-                    (config.fields || []).forEach(field => {
-                        const fieldDiv = document.createElement('div');
-                        fieldDiv.className = 'form-field';
-                        if (field.label) {
-                            const label = document.createElement('label');
-                            label.textContent = field.label;
-                            fieldDiv.appendChild(label);
-                        }
-                        const input = document.createElement('input');
-                        input.type = field.type || 'text';
-                        input.name = field.name;
-                        input.placeholder = field.placeholder || '';
-                        input.required = field.required || false;
-                        fieldDiv.appendChild(input);
-                        form.appendChild(fieldDiv);
-                    });
-                    const submitBtn = document.createElement('button');
-                    submitBtn.textContent = config.submit_label || '提交';
-                    submitBtn.onclick = () => {
-                        const formData = {};
-                        form.querySelectorAll('input, select').forEach(input => {
-                            formData[input.name] = input.value;
-                        });
-                        handleInteraction(id, 'submit', formData);
-                    };
-                    form.appendChild(submitBtn);
-                    container.appendChild(form);
-                    break;
-
-                case 'select':
-                    const selectDiv = document.createElement('div');
-                    selectDiv.className = 'form-field';
-                    if (config.label) {
-                        const label = document.createElement('label');
-                        label.textContent = config.label;
-                        selectDiv.appendChild(label);
-                    }
-                    const select = document.createElement('select');
-                    (config.options || []).forEach(opt => {
-                        const option = document.createElement('option');
-                        option.value = opt.value;
-                        option.textContent = opt.label;
-                        select.appendChild(option);
-                    });
-                    select.onchange = () => handleInteraction(id, 'select', { value: select.value });
-                    selectDiv.appendChild(select);
-                    container.appendChild(selectDiv);
-                    break;
-
-                case 'checkbox':
-                    const checkDiv = document.createElement('div');
-                    checkDiv.className = 'form-inline';
-                    const checkbox = document.createElement('input');
-                    checkbox.type = 'checkbox';
-                    checkbox.checked = config.checked || false;
-                    checkbox.onchange = () => handleInteraction(id, 'change', { checked: checkbox.checked });
-                    const checkLabel = document.createElement('label');
-                    checkLabel.textContent = config.label || '';
-                    checkLabel.style.marginLeft = '8px';
-                    checkDiv.appendChild(checkbox);
-                    checkDiv.appendChild(checkLabel);
-                    container.appendChild(checkDiv);
-                    break;
-
-                case 'button_group':
-                    // 多选项按钮组 + 确认按钮
-                    const buttonGroup = document.createElement('div');
-                    buttonGroup.className = 'button-group';
-                    buttonGroup.style.display = 'flex';
-                    buttonGroup.style.flexWrap = 'wrap';
-                    buttonGroup.style.gap = '8px';
-                    buttonGroup.style.marginBottom = '12px';
-
-                    let selectedValue = null;
-
-                    (config.options || []).forEach(opt => {
-                        const optBtn = document.createElement('button');
-                        optBtn.className = 'option-button';
-                        optBtn.textContent = opt.label || opt.value;
-                        optBtn.style.padding = '10px 16px';
-                        optBtn.style.border = '1px solid var(--border-primary)';
-                        optBtn.style.borderRadius = '8px';
-                        optBtn.style.background = 'var(--bg-secondary)';
-                        optBtn.style.color = 'var(--text-primary)';
-                        optBtn.style.cursor = 'pointer';
-                        optBtn.style.transition = 'all 0.2s';
-
-                        optBtn.onclick = () => {
-                            // 移除其他按钮的选中状态
-                            buttonGroup.querySelectorAll('.option-button').forEach(b => {
-                                b.style.background = 'var(--bg-secondary)';
-                                b.style.borderColor = 'var(--border-primary)';
-                            });
-                            // 高亮当前按钮
-                            optBtn.style.background = 'var(--accent-primary)';
-                            optBtn.style.borderColor = 'var(--accent-primary)';
-                            optBtn.style.color = 'white';
-                            selectedValue = opt.value;
-                        };
-
-                        buttonGroup.appendChild(optBtn);
-                    });
-
-                    container.appendChild(buttonGroup);
-
-                    // 确认按钮
-                    const confirmBtn = document.createElement('button');
-                    confirmBtn.className = 'confirm-button';
-                    confirmBtn.textContent = config.submit_label || '确认';
-                    confirmBtn.style.padding = '10px 20px';
-                    confirmBtn.style.background = 'var(--accent-primary)';
-                    confirmBtn.style.border = 'none';
-                    confirmBtn.style.borderRadius = '8px';
-                    confirmBtn.style.color = 'white';
-                    confirmBtn.style.cursor = 'pointer';
-                    confirmBtn.style.fontWeight = '500';
-                    confirmBtn.style.marginTop = '8px';
-
-                    confirmBtn.onclick = () => {
-                        if (selectedValue !== null) {
-                            handleInteraction(id, 'select', { value: selectedValue });
-                        } else {
-                            alert('请先选择一个选项');
-                        }
-                    };
-
-                    container.appendChild(confirmBtn);
-                    break;
-            }
-
-            interactiveEl.appendChild(container);
-            scrollToBottom();
-        }
-
-        // ===== Fork Event =====
-        function handleForkEvent(data) {
-            console.log('Fork event:', data);
-            const { event_type, task, result, error } = data;
-            const forkTree = document.getElementById('fork-tree');
-
-            if (event_type === 'fork_start') {
-                const div = document.createElement('div');
-                div.className = 'fork-item running';
-                div.id = `fork-${data.id}`;
-                div.innerHTML = `<span class="fork-task">${escapeHtml(task || '任务')}</span><span>⏳</span>`;
-                forkTree.appendChild(div);
-            } else if (event_type === 'fork_complete') {
-                const el = document.getElementById(`fork-${data.id}`);
-                if (el) {
-                    el.className = 'fork-item complete';
-                    el.querySelector('span:last-child').textContent = '✓';
-                }
-            } else if (event_type === 'fork_error') {
-                const el = document.getElementById(`fork-${data.id}`);
-                if (el) {
-                    el.className = 'fork-item error';
-                    el.querySelector('span:last-child').textContent = '✗';
-                }
-            }
-
-            forkTree.scrollTop = forkTree.scrollHeight;
-        }
-
-        // ===== Interaction Handler =====
-        async function handleInteraction(componentId, eventType, eventData) {
-            console.log('Interaction:', componentId, eventType, eventData);
-
-            const component = document.getElementById(componentId);
-            if (component) {
-                component.querySelectorAll('button').forEach(b => b.disabled = true);
-            }
-
-            try {
-                await fetch(`/canvas/event/${sessionId}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        type: eventType,
-                        component_id: componentId,
-                        data: eventData
-                    })
-                });
-
-                await fetch('/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Session-Id': sessionId
-                    },
-                    body: JSON.stringify({
-                        model: 'deepseek-chat',
-                        stream: true,
-                        messages: [{
-                            role: 'user',
-                            content: `用户通过组件 ${componentId} 触发了 ${eventType} 事件，数据: ${JSON.stringify(eventData)}`
-                        }]
-                    })
-                });
-            } catch (e) {
-                console.error('Interaction error:', e);
-                if (component) {
-                    component.querySelectorAll('button').forEach(b => b.disabled = false);
-                }
+        function updateLastMsg(content) {
+            const msgs = document.getElementById('messages');
+            const last = msgs.lastElementChild;
+            if (last && last.classList.contains('assistant')) {
+                last.querySelector('.content').innerHTML = marked.parse(content);
+                scrollDown();
             }
         }
 
-        // ===== Send Message =====
+        function hideWelcome() { document.getElementById('welcome').style.display = 'none'; }
+        function showWelcome() { document.getElementById('welcome').style.display = 'block'; }
+        function scrollDown() { document.getElementById('chatArea').scrollTop = 999999; }
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        // Send message
         async function sendMessage() {
             const input = document.getElementById('input');
             const sendBtn = document.getElementById('send');
             const text = input.value.trim();
-            if (!text || !sessionId) return;
+            if (!text) return;
 
-            // 禁用输入框和发送按钮
             input.disabled = true;
             sendBtn.disabled = true;
-
             input.value = '';
-            input.style.height = 'auto';
 
-            addMessage('user', text);
-            lastAssistantMessageId = null;
+            addMsg('user', text);
+            const chat = chats.find(c => c.id === currentChatId);
+            chat.msgs.push({ role: 'user', content: text });
+            if (chat.title === '新对话') {
+                chat.title = text.slice(0, 30) + (text.length > 30 ? '...' : '');
+                renderChatList();
+            }
+            saveChats();
+
+            const msgDiv = addMsg('assistant', '');
+            let fullContent = '';
 
             try {
                 const resp = await fetch('/v1/chat/completions', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Session-Id': sessionId
-                    },
+                    headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
                     body: JSON.stringify({
-                        model: document.getElementById('model-select').value,
+                        model: 'deepseek-chat',
                         messages: [{ role: 'user', content: text }],
                         stream: true
                     })
                 });
 
-                if (!resp.ok) throw new Error('Request failed');
-
-                // Handle SSE stream
                 const reader = resp.body.getReader();
                 const decoder = new TextDecoder();
-                let buffer = '';
-                let currentContent = '';
-                let currentEventType = '';
-
-                // 清空右侧工具状态栏
-                document.getElementById('tool-status-list').innerHTML = '';
+                let buf = '';
 
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
 
-                    buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split('\n');
-                    buffer = lines.pop() || '';
+                    buf += decoder.decode(value, { stream: true });
+                    const lines = buf.split('\n');
+                    buf = lines.pop();
 
                     for (const line of lines) {
-                        // 处理 event 类型
-                        if (line.startsWith('event:')) {
-                            currentEventType = line.slice(6).trim();
-                            continue;
-                        }
-
                         if (!line.startsWith('data:')) continue;
-
-                        const dataStr = line.slice(5).trim();
-                        if (!dataStr) continue;
+                        const json = line.slice(5).trim();
+                        if (!json) continue;
 
                         try {
-                            const data = JSON.parse(dataStr);
-
-                            // 根据事件类型处理
-                            if (currentEventType === 'tool_start') {
-                                handleToolStart(data);
-                            } else if (currentEventType === 'tool_result') {
-                                handleToolResult(data);
-                            } else if (currentEventType === 'tool_error') {
-                                handleToolError(data);
-                            } else if (currentEventType === 'turn_complete') {
-                                // 一轮工具执行完成，清空准备下一轮
-                            } else {
-                                // 默认处理文本数据
-                                if (data.text) {
-                                    currentContent += data.text;
-                                    updateAssistantMessage(currentContent);
-                                }
-
-                                if (data.finish_reason === 'stop') {
-                                    if (currentContent) {
-                                        finalizeAssistantMessage(currentContent);
-                                    }
-                                }
-
-                                if (data.error) {
-                                    addError(data.error);
-                                }
+                            const data = JSON.parse(json);
+                            if (data.text) {
+                                fullContent += data.text;
+                                updateLastMsg(fullContent);
                             }
-                            currentEventType = '';
-                        } catch (e) {
-                            // Skip invalid JSON
-                        }
+                        } catch {}
                     }
                 }
-
-                // Handle remaining buffer
-                if (buffer.startsWith('data:')) {
-                    const dataStr = buffer.slice(5).trim();
-                    try {
-                        const data = JSON.parse(dataStr);
-                        if (data.text) {
-                            currentContent += data.text;
-                            updateAssistantMessage(currentContent);
-                        }
-                    } catch (e) {}
-                }
-
             } catch (e) {
-                console.error('Send error:', e);
-                addError(e.message);
+                console.error(e);
+                msgDiv.querySelector('.content').textContent = '错误: ' + e.message;
             } finally {
-                // 恢复输入框和发送按钮
                 input.disabled = false;
                 sendBtn.disabled = false;
                 input.focus();
-            }
-        }
 
-        function updateAssistantMessage(content) {
-            hideWelcomeScreen();
-            const msgDiv = getOrCreateLastAssistantMessage();
-            const textEl = msgDiv.querySelector('.text-content');
-            textEl.innerHTML = marked.parse(content);
-            scrollToBottom();
-        }
-
-        function finalizeAssistantMessage(content) {
-            const chat = chatHistory.find(c => c.id === currentChatId);
-            if (chat) {
-                chat.messages.push({ role: 'assistant', content });
-            }
-        }
-
-        // ===== Utilities =====
-        function escapeHtml(str) {
-            const div = document.createElement('div');
-            div.textContent = str;
-            return div.innerHTML;
-        }
-
-        function scrollToBottom() {
-            const chatArea = document.getElementById('chat-area');
-            chatArea.scrollTop = chatArea.scrollHeight;
-        }
-
-        // ===== Event Listeners =====
-        function setupEventListeners() {
-            document.getElementById('toggle-sidebar').onclick = toggleSidebar;
-            document.getElementById('toggle-right-sidebar').onclick = toggleRightSidebar;
-            document.getElementById('new-chat').onclick = createNewChat;
-            document.getElementById('send').onclick = sendMessage;
-
-            const input = document.getElementById('input');
-            input.onkeydown = (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage();
+                if (fullContent) {
+                    chat.msgs.push({ role: 'assistant', content: fullContent });
+                    saveChats();
                 }
-            };
-
-            input.oninput = () => {
-                input.style.height = 'auto';
-                input.style.height = Math.min(input.scrollHeight, 200) + 'px';
-            };
-
-            // Suggestion chips
-            document.querySelectorAll('.chip').forEach(chip => {
-                chip.onclick = () => {
-                    const prompt = chip.dataset.prompt;
-                    if (prompt) {
-                        input.value = prompt;
-                        sendMessage();
-                    }
-                };
-            });
+            }
         }
 
-        // ===== Start =====
         init();
     </script>
 </body>

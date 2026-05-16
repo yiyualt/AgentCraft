@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -68,7 +69,10 @@ class CanvasChannel(Channel):
             """Serve the Canvas HTML page."""
             html_path = Path(__file__).parent.parent / "static" / "canvas.html"
             if html_path.exists():
-                return HTMLResponse(content=html_path.read_text())
+                return HTMLResponse(
+                    content=html_path.read_text(),
+                    headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+                )
             return HTMLResponse(
                 content="<h1>Canvas page not found</h1><p>Please create static/canvas.html</p>",
                 status_code=404,
@@ -136,8 +140,19 @@ class CanvasChannel(Channel):
                 f"component={component_id}, data={event_data}"
             )
 
-            # For now, just acknowledge the event
-            # In future, this could trigger agent response via session message
+            # Push the event back to the session queue for agent to receive
+            queue = self._manager.get_or_create_queue(session_id)
+            if queue:
+                event_update = {
+                    "type": "user_interaction",
+                    "id": component_id,
+                    "event_type": event_type,
+                    "data": event_data,
+                    "timestamp": datetime.now().isoformat(),
+                }
+                await queue.put(event_update)
+                logger.info(f"[Canvas] User interaction pushed to queue: {event_type}")
+
             return {
                 "status": "received",
                 "session_id": session_id,
