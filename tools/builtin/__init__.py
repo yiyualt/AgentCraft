@@ -14,7 +14,6 @@ from .web_tools import *      # noqa: F401,F403 — WebFetch, WebSearch
 from .agent_tools import *    # noqa: F401,F403 — Agent
 from .token_tools import *    # noqa: F401,F403 — CountTokens
 from .memory_tools import *   # noqa: F401,F403 — remember, forget, recall
-from .canvas_tools import *   # noqa: F401,F403 — canvas_update, canvas_interact
 from .skill_tools import *    # noqa: F401,F403 — Skill
 
 __all__ = [
@@ -30,7 +29,5 @@ __all__ = [
     "web_search",
     "agent_delegate",
     "count_tokens",
-    "canvas_update",
-    "canvas_interact",
     "invoke_skill",
 ]
