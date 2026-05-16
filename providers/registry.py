@@ -208,6 +208,32 @@ class ProviderRegistry:
         logger.info(f"[ProviderRegistry] Streaming from {provider.name}")
         return provider.stream(messages, model, **kwargs)
 
+    async def stream_iterator(
+        self,
+        messages: list[dict[str, Any]],
+        model: str | None = None,
+        **kwargs,
+    ) -> Any:
+        """Get streaming iterator from provider for direct consumption.
+
+        Returns AsyncIterator[dict] that can be directly iterated
+        in streaming response handlers.
+
+        Unlike stream_with_fallback, this is designed for the new
+        LLMQueue architecture where streaming happens after semaphore
+        acquisition.
+        """
+        chain = self.get_fallback_chain()
+
+        if not chain:
+            raise RuntimeError("No available providers")
+
+        provider = chain[0]
+        logger.info(f"[ProviderRegistry] stream_iterator from {provider.name}")
+
+        # Return the async iterator directly (provider.stream is async generator)
+        return provider.stream(messages, model, **kwargs)
+
     def get_provider_info(self) -> list[ProviderInfo]:
         """Get info for all registered providers."""
         return [p.get_info() for p in self._providers.values()]

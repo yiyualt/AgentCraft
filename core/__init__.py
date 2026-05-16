@@ -6,6 +6,8 @@ This module contains the core components:
 - Concurrency: Safety classification
 - Prompt builder: System prompt generation
 - Memory loader: Task-based retrieval
+- LLM Queue: Request queue for concurrent handling
+- Stream Handler: Provider to SSE bridge
 """
 
 from core.prompt_builder import PromptBuilder, build_system_prompt
@@ -13,6 +15,8 @@ from core.memory_loader import MemoryLoader, load_relevant_memories
 from core.tool_loop import run_tool_loop, clean_orphan_tool_messages
 from core.executor import ToolExecutor, ToolResult
 from core.concurrency import is_safe, SAFE_TOOLS, UNSAFE_TOOLS
+from core.llm_queue import LLMRequestQueue, QueuedRequest, QueueMetrics, RequestStatus
+from core.stream_handler import StreamHandler
 
 __all__ = [
     # Tool Loop
@@ -30,4 +34,11 @@ __all__ = [
     "build_system_prompt",
     "MemoryLoader",
     "load_relevant_memories",
+    # LLM Queue
+    "LLMRequestQueue",
+    "QueuedRequest",
+    "QueueMetrics",
+    "RequestStatus",
+    # Stream Handler
+    "StreamHandler",
 ]

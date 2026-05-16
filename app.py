@@ -28,6 +28,7 @@ from automation.webhook import WebhookStore, WebhookExecutor, init_webhooks
 from providers import ProviderRegistry, register_default_providers
 from gateway import GATEWAY_VERSION, get_version_headers, validate_client_version, get_changelog
 from core import run_tool_loop, clean_orphan_tool_messages, ToolExecutor, is_safe
+from core import LLMRequestQueue, StreamHandler
 from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, PermissionMode, PermissionRuleKind, HookEvent, HookMatcher, MultiSourceRuleManager, PermissionAuditor, PermissionRule, PermissionResult, RuleSource
 from sessions.vector_memory import VectorMemoryStore
 from skills import SkillLoader, default_skill_dirs
@@ -47,6 +48,13 @@ MAX_CONCURRENT_LLM = int(os.getenv("MAX_CONCURRENT_OLLAMA", "10"))
 RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "false").lower() == "true"
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "60"))
 RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
+
+# LLM Queue Configuration (new architecture)
+LLM_QUEUE_ENABLED = os.getenv("LLM_QUEUE_ENABLED", "true").lower() == "true"
+LLM_MAX_CONCURRENT = int(os.getenv("LLM_MAX_CONCURRENT", "10"))
+LLM_MAX_QUEUE_SIZE = int(os.getenv("LLM_MAX_QUEUE_SIZE", "100"))
+LLM_QUEUE_TIMEOUT = float(os.getenv("LLM_QUEUE_TIMEOUT", "60.0"))
+LLM_REQUEST_TIMEOUT = float(os.getenv("LLM_REQUEST_TIMEOUT", "300.0"))
 
 # ===== Logging (写入文件) =====
 import logging
@@ -94,9 +102,12 @@ client = OpenAI(
 )
 
 # ===== Concurrency & Rate Limiting =====
-_llm_semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLM)
 _rate_limit_buckets: dict[str, list[float]] = {}
 _rate_limit_lock = asyncio.Lock()
+
+# ===== LLM Queue (new architecture) =====
+_llm_queue: LLMRequestQueue | None = None
+_stream_handler: StreamHandler | None = None
 
 
 # ===== MCP Tool Manager =====
@@ -285,6 +296,23 @@ async def lifespan(_app: FastAPI):
         status = _provider_registry.get_status_summary()
         logger.info(f"[ProviderRegistry] Initialized: {status}")
 
+    # LLM Queue initialization (new concurrent request handling)
+    global _llm_queue, _stream_handler
+    _llm_queue = LLMRequestQueue(
+        max_concurrent=LLM_MAX_CONCURRENT,
+        max_queue_size=LLM_MAX_QUEUE_SIZE,
+        queue_timeout=LLM_QUEUE_TIMEOUT,
+        request_timeout=LLM_REQUEST_TIMEOUT,
+    )
+    await _llm_queue.start()
+    _app.state.llm_queue = _llm_queue
+    _stream_handler = StreamHandler(_provider_registry)
+    _app.state.stream_handler = _stream_handler
+    logger.info(
+        f"[LLMQueue] Initialized: max_concurrent={LLM_MAX_CONCURRENT}, "
+        f"max_queue={LLM_MAX_QUEUE_SIZE}, queue_timeout={LLM_QUEUE_TIMEOUT}s"
+    )
+
     # Webhook initialization (external event triggers)
     global _webhook_store, _webhook_executor
     _webhook_store = WebhookStore()
@@ -299,6 +327,8 @@ async def lifespan(_app: FastAPI):
 
     # Cleanup
     await _channel_router.stop_all()
+    if _llm_queue:
+        await _llm_queue.stop()
     if _mcp_manager:
         await _mcp_manager.shutdown()
 
@@ -416,58 +446,6 @@ async def create_session(request: Request) -> dict[str, Any]:
         skills=body.get("skills", ""),
     )
     return session.to_dict()
-
-
-@app.get("/v1/sessions")
-def list_sessions(status: str = "active") -> list[dict[str, Any]]:
-    return [s.to_dict() for s in _session_manager.list_sessions(status)]
-
-
-@app.get("/v1/sessions/{session_id}")
-def get_session(session_id: str) -> dict[str, Any]:
-    session = _session_manager.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return session.to_dict()
-
-
-@app.patch("/v1/sessions/{session_id}")
-async def update_session(session_id: str, request: Request) -> dict[str, Any]:
-    body = await request.json()
-    session = _session_manager.update_session(session_id, **body)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return session.to_dict()
-
-
-@app.delete("/v1/sessions/{session_id}")
-def delete_session(session_id: str) -> dict[str, str]:
-    if not _session_manager.delete_session(session_id):
-        raise HTTPException(status_code=404, detail="Session not found")
-    return {"status": "deleted"}
-
-
-@app.get("/v1/sessions/{session_id}/messages")
-def get_session_messages(session_id: str, limit: int = 50) -> list[dict[str, Any]]:
-    return _session_manager.get_messages_openai(session_id, limit)
-
-
-@app.post("/v1/sessions/{session_id}/messages")
-async def add_session_message(session_id: str, request: Request) -> dict[str, Any]:
-    """Add a message directly to session (for testing/bulk operations)."""
-    body = await request.json()
-    session = _session_manager.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    msg = _session_manager.add_message(
-        session_id=session_id,
-        role=body.get("role", "user"),
-        content=body.get("content", ""),
-        tool_call_id=body.get("tool_call_id"),
-        name=body.get("name"),
-    )
-    return {"id": msg.id, "token_count": msg.token_count}
 
 
 @app.get("/v1/skills")
@@ -1017,42 +995,32 @@ async def chat_completions(request: Request):
     payload = await request.json()
     model = payload.get("model", "deepseek-chat")
     session_id = request.headers.get("X-Session-Id")
-    stream = payload.get("stream", False)
 
-    if _llm_semaphore.locked():
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "error": {
-                    "message": "Too many concurrent requests. Try again later.",
-                    "type": "concurrency_limit_error",
-                }
-            },
-        )
+    # Use LLMQueue for concurrent request handling (no direct rejection)
+    if _llm_queue is None:
+        raise HTTPException(status_code=500, detail="LLM queue not initialized")
 
-    # Only support streaming mode
     return StreamingResponse(
-        _handle_streaming(request, client, payload, model, session_id),
+        _handle_streaming_via_queue(payload, model, session_id),
         media_type="text/event-stream",
     )
 
 
-async def _handle_streaming(
-    request: Request,
-    llm_client: OpenAI,
+@app.get("/llm/queue/status")
+def get_llm_queue_status() -> dict[str, Any]:
+    """Get LLM request queue status for monitoring."""
+    if _llm_queue is None:
+        raise HTTPException(status_code=500, detail="LLM queue not initialized")
+    return _llm_queue.get_status()
+
+
+async def _handle_streaming_via_queue(
     payload: dict[str, Any],
     model: str,
     session_id: str | None = None,
 ):
-    """SSE streaming response with tool execution progress."""
-    import asyncio
-
-    # Initialize (similar to non-streaming setup)
-    registry = _unified_registry or UnifiedToolRegistry(get_default_registry())
-    user_tools = payload.get("tools")
-    tools = user_tools if user_tools is not None else registry.list_tools()
-
-    # Build messages (simplified)
+    """SSE streaming response via LLMQueue (new architecture)."""
+    # Build messages
     new_messages = list(payload.get("messages", []))
     if session_id:
         session = _session_manager.get_session(session_id)
@@ -1060,11 +1028,10 @@ async def _handle_streaming(
             max_tokens = session.context_window or 64000
             history = _session_manager.get_messages_with_limit(session_id, max_tokens)
             messages = history + new_messages
-            # Build system prompt using core module (task-based memory retrieval)
             if _prompt_builder:
                 system_prompt = _prompt_builder.build(
                     messages=messages,
-                    goal=None,  # TODO: session.goal if available
+                    goal=None,
                     session_system_prompt=session.system_prompt,
                 )
                 if system_prompt:
@@ -1076,16 +1043,8 @@ async def _handle_streaming(
 
     messages = clean_orphan_tool_messages(messages)
     kwargs = {k: v for k, v in payload.items() if k not in ("messages", "tools", "stream")}
-
-    # Yield initial event
-    yield f"event: stream_request_start\ndata: {{\"model\": \"{model}\"}}\n\n"
-
-    # Execute with ToolExecutor
-    executor = ToolExecutor(
-        registry=registry,
-        session_id=session_id,
-        canvas_manager=_canvas_manager,
-    )
+    if payload.get("tools"):
+        kwargs["tools"] = payload["tools"]
 
     # Save incoming messages to session
     if session_id:
@@ -1096,112 +1055,42 @@ async def _handle_streaming(
                 content=msg.get("content", ""),
             )
 
-    # Tool loop
-    n_turns = 0
-    while True:
-        call_kwargs: dict[str, Any] = {"model": model, "messages": messages, "stream": True, **kwargs}
-        if tools:
-            call_kwargs["tools"] = tools
+    # Create stream executor function for LLMQueue
+    def stream_executor(request: Any):
+        """Stream generator that will be executed by LLMQueue."""
+        return _stream_handler.handle_streaming_request(request)
 
-        # Streaming LLM call
-        full_content = ""
-        tool_calls_list = []
-        finish_reason = None
+    # Submit to queue and stream results
+    queue_stream = await _llm_queue.submit_streaming(
+        messages=messages,
+        model=model,
+        session_id=session_id,
+        stream_executor=stream_executor,
+        **kwargs,
+    )
 
-        try:
-            async with _llm_semaphore:
-                # Use streaming with direct client
-                stream = await asyncio.to_thread(
-                    llm_client.chat.completions.create, **call_kwargs
-                )
+    # Iterate and yield SSE events
+    full_content = ""
+    for event in queue_stream:
+        yield event
+        # Extract content from text events for session saving
+        if event.startswith("data: {") and "text" in event:
+            try:
+                import re
+                match = re.search(r'"text": "([^"]*)"', event)
+                if match:
+                    text = match.group(1).replace("\\n", "\n").replace('\\"', '"')
+                    full_content += text
+            except Exception:
+                pass
 
-                # Iterate over stream chunks
-                for chunk in stream:
-                    choice = chunk.choices[0] if chunk.choices else None
-                    if not choice:
-                        continue
-
-                    # Stream content chunks
-                    delta = choice.delta
-                    if delta and delta.content:
-                        full_content += delta.content
-                        # Escape JSON and yield
-                        escaped = delta.content.replace('"', '\\"').replace('\n', '\\n')
-                        yield f"data: {{\"text\": \"{escaped}\"}}\n\n"
-
-                    # Collect tool calls
-                    if delta and delta.tool_calls:
-                        for tc in delta.tool_calls:
-                            # Accumulate tool call fragments
-                            idx = tc.index
-                            if idx >= len(tool_calls_list):
-                                tool_calls_list.append({"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
-                            if tc.id:
-                                tool_calls_list[idx]["id"] = tc.id
-                            if tc.function:
-                                if tc.function.name:
-                                    tool_calls_list[idx]["function"]["name"] = tc.function.name
-                                if tc.function.arguments:
-                                    tool_calls_list[idx]["function"]["arguments"] += tc.function.arguments
-
-                    # Get finish reason
-                    if choice.finish_reason:
-                        finish_reason = choice.finish_reason
-
-        except Exception as e:
-            yield f"event: error\ndata: {{\"error\": \"{str(e)}\"}}\n\n"
-            break
-
-        # Build complete message
-        message = {"role": "assistant", "content": full_content}
-        if tool_calls_list:
-            message["tool_calls"] = tool_calls_list
-        messages.append(message)
-
-        # Yield done event
-        yield f"data: {{\"finish_reason\": \"{finish_reason or 'stop'}\"}}\n\n"
-
-        # No tool calls - done
-        if not tool_calls_list:
-            break
-
-        n_turns += 1
-        if n_turns > 50:
-            yield f"event: error\ndata: {{\"error\": \"Tool limit exceeded\"}}\n\n"
-            break
-
-        # Yield tool start events
-        for tc in tool_calls_list:
-            fn_name = tc["function"]["name"]
-            yield f"event: tool_start\ndata: {{\"id\": \"{tc['id']}\", \"name\": \"{fn_name}\"}}\n\n"
-
-        # Execute tools
-        results = await executor.execute_tools(tool_calls_list)
-
-        # Yield tool results and append to messages
-        for tc in tool_calls_list:
-            tc_id = tc["id"]
-            tool_result = results.get(tc_id)
-            if tool_result:
-                if tool_result.error:
-                    yield f"event: tool_error\ndata: {{\"id\": \"{tc_id}\", \"error\": \"{tool_result.error}\"}}\n\n"
-                else:
-                    result_preview = tool_result.content[:200] if len(tool_result.content) > 200 else tool_result.content
-                    yield f"event: tool_result\ndata: {{\"id\": \"{tc_id}\", \"result\": \"{result_preview}\"}}\n\n"
-                messages.append(tool_result.to_tool_message())
-
-        yield f"event: turn_complete\ndata: {{\"turn\": {n_turns}, \"tools\": {len(tool_calls_list)}}}\n\n"
-
-    # Save final messages
-    if session_id:
-        for msg in messages[len(new_messages):]:
-            _session_manager.add_message(
-                session_id=session_id,
-                role=msg["role"],
-                content=msg.get("content", ""),
-                tool_calls=json.dumps(msg.get("tool_calls")) if msg.get("tool_calls") else None,
-                tool_call_id=msg.get("tool_call_id"),
-            )
+    # Save final assistant message
+    if session_id and full_content:
+        _session_manager.add_message(
+            session_id=session_id,
+            role="assistant",
+            content=full_content,
+        )
 
 
 # ===== Slash command processing =====
