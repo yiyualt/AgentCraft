@@ -88,6 +88,9 @@
             overflow: hidden;
             text-overflow: ellipsis;
             transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .history-item:hover {
@@ -97,6 +100,36 @@
         .history-item.active {
             background: var(--bg-tertiary);
             color: var(--text-primary);
+        }
+
+        .history-item .title {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .history-item .delete-btn {
+            opacity: 0;
+            width: 24px;
+            height: 24px;
+            background: transparent;
+            border: none;
+            color: #ef4444;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: opacity 0.2s, background 0.2s;
+        }
+
+        .history-item:hover .delete-btn {
+            opacity: 1;
+        }
+
+        .history-item .delete-btn:hover {
+            background: rgba(239, 68, 68, 0.2);
         }
 
         .sidebar-footer {
@@ -134,6 +167,81 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+        }
+
+        /* ===== Right Sidebar (Tool Status) ===== */
+        .right-sidebar {
+            width: 280px;
+            min-width: 280px;
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border-secondary);
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease, width 0.3s ease, min-width 0.3s ease;
+            z-index: 100;
+        }
+
+        .right-sidebar.collapsed {
+            transform: translateX(280px);
+            width: 0;
+            min-width: 0;
+        }
+
+        .right-sidebar-header {
+            padding: 12px;
+            border-bottom: 1px solid var(--border-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .right-sidebar-header h3 {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .tool-status-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .tool-status-item {
+            padding: 12px;
+            border-radius: 8px;
+            background: var(--bg-tertiary);
+            margin-bottom: 8px;
+            border: 1px solid var(--border-primary);
+        }
+
+        .tool-status-item .tool-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+
+        .tool-status-item .tool-state {
+            font-size: 12px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tool-status-item.running .tool-state { color: #f59e0b; }
+        .tool-status-item.success .tool-state { color: var(--accent-primary); }
+        .tool-status-item.error .tool-state { color: #ef4444; }
+
+        .tool-status-item .tool-result {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--text-muted);
+            max-height: 100px;
+            overflow-y: auto;
+            padding: 8px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
         }
 
         /* ===== Main Container ===== */
@@ -420,16 +528,25 @@
             position: fixed;
             bottom: 0;
             left: 260px;
-            right: 0;
+            right: 280px;
             padding: 16px 20px 24px;
             background: linear-gradient(to top, var(--bg-primary) 80%, transparent);
             display: flex;
             justify-content: center;
-            transition: left 0.3s ease;
+            transition: left 0.3s ease, right 0.3s ease;
         }
 
         .left-sidebar.collapsed ~ .main-container .input-area {
             left: 0;
+        }
+
+        .right-sidebar.collapsed ~ .input-area {
+            right: 0;
+        }
+
+        .left-sidebar.collapsed ~ .main-container .right-sidebar.collapsed ~ .input-area {
+            left: 0;
+            right: 0;
         }
 
         .input-container {
@@ -460,6 +577,12 @@
             color: var(--text-muted);
         }
 
+        .input-container textarea:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: var(--bg-secondary);
+        }
+
         .send-btn {
             width: 36px;
             height: 36px;
@@ -482,6 +605,7 @@
         .send-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+            background: var(--bg-secondary);
         }
 
         /* ===== Error Message ===== */
@@ -503,12 +627,20 @@
                 bottom: 0;
             }
 
+            .right-sidebar {
+                position: fixed;
+                right: 0;
+                top: 0;
+                bottom: 0;
+            }
+
             .input-area {
                 left: 0;
+                right: 0;
             }
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="/static/marked.min.js"></script>
 </head>
 <body>
     <!-- Left Sidebar -->
@@ -562,20 +694,71 @@
         </footer>
     </div>
 
+    <!-- Right Sidebar (Tool Status) -->
+    <aside id="right-sidebar" class="right-sidebar">
+        <div class="right-sidebar-header">
+            <h3>工具执行</h3>
+            <button id="toggle-right-sidebar" class="toggle-sidebar-btn">☰</button>
+        </div>
+        <div id="tool-status-list" class="tool-status-list"></div>
+    </aside>
+
     <script>
         // ===== Configuration =====
         const API_BASE = '/canvas';
         let sessionId = null;
         let eventSource = null;
         let sidebarCollapsed = false;
+        // ===== Initialization =====
         let chatHistory = [];
         let currentChatId = null;
         let lastAssistantMessageId = null;
 
+        // 从 localStorage 加载历史对话
+        function loadHistory() {
+            const saved = localStorage.getItem('chat_history');
+            if (saved) {
+                chatHistory = JSON.parse(saved);
+                updateHistorySidebar();
+            }
+        }
+
+        // 保存历史对话到 localStorage
+        function saveHistory() {
+            localStorage.setItem('chat_history', JSON.stringify(chatHistory));
+        }
+
         // ===== Initialization =====
         async function init() {
+            loadHistory();  // 加载历史对话
             setupEventListeners();
             createNewChat();
+            await createOrReuseSession();
+        }
+
+        async function createOrReuseSession() {
+            // 尝试从 localStorage 复用 session
+            const savedSessionId = localStorage.getItem('canvas_session_id');
+
+            if (savedSessionId) {
+                // 验证 session 是否仍然有效
+                try {
+                    const checkResp = await fetch(`/v1/sessions/${savedSessionId}`);
+                    if (checkResp.ok) {
+                        const sessionData = await checkResp.json();
+                        if (sessionData.status === 'active') {
+                            sessionId = savedSessionId;
+                            console.log('复用已有 session:', sessionId);
+                            connectSSE();
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.log('Session 无效，创建新的');
+                }
+            }
+
+            // 创建新的 session
             await createSession();
         }
 
@@ -595,6 +778,19 @@
 
                 const data = await resp.json();
                 sessionId = data.id || data.session_id;
+
+                // 保存到 localStorage
+                localStorage.setItem('canvas_session_id', sessionId);
+
+                // 关联 session 到当前 chat
+                const currentChat = chatHistory.find(c => c.id === currentChatId);
+                if (currentChat) {
+                    currentChat.sessionId = sessionId;
+                    saveHistory();
+                }
+
+                console.log('创建新 session:', sessionId);
+
                 connectSSE();
             } catch (e) {
                 console.error('Init error:', e);
@@ -633,7 +829,69 @@
                 handleForkEvent(JSON.parse(event.data));
             });
 
+            // 工具执行事件
+            eventSource.addEventListener('tool_start', (event) => {
+                handleToolStart(JSON.parse(event.data));
+            });
+
+            eventSource.addEventListener('tool_result', (event) => {
+                handleToolResult(JSON.parse(event.data));
+            });
+
+            eventSource.addEventListener('tool_error', (event) => {
+                handleToolError(JSON.parse(event.data));
+            });
+
             eventSource.addEventListener('heartbeat', () => {});
+        }
+
+        // ===== Tool Status =====
+        let toolStatusList = {};
+
+        function handleToolStart(data) {
+            console.log('Tool start:', data);
+            const { id, name } = data;
+            toolStatusList[id] = { name, state: 'running', result: null };
+
+            const container = document.getElementById('tool-status-list');
+            const div = document.createElement('div');
+            div.className = 'tool-status-item running';
+            div.id = `tool-${id}`;
+            div.innerHTML = `
+                <div class="tool-name">${name}</div>
+                <div class="tool-state">⏳ 执行中...</div>
+            `;
+            container.appendChild(div);
+        }
+
+        function handleToolResult(data) {
+            console.log('Tool result:', data);
+            const { id, result } = data;
+            toolStatusList[id] = { ...toolStatusList[id], state: 'success', result };
+
+            const el = document.getElementById(`tool-${id}`);
+            if (el) {
+                el.className = 'tool-status-item success';
+                el.querySelector('.tool-state').innerHTML = '✓ 完成';
+                if (result) {
+                    const resultDiv = document.createElement('div');
+                    resultDiv.className = 'tool-result';
+                    resultDiv.textContent = result;
+                    el.appendChild(resultDiv);
+                }
+            }
+        }
+
+        function handleToolError(data) {
+            console.log('Tool error:', data);
+            const { id, error } = data;
+            toolStatusList[id] = { ...toolStatusList[id], state: 'error', result: error };
+
+            const el = document.getElementById(`tool-${id}`);
+            if (el) {
+                el.className = 'tool-status-item error';
+                el.querySelector('.tool-state').innerHTML = `✗ ${error}`;
+            }
         }
 
         // ===== Status =====
@@ -650,17 +908,65 @@
             sidebarCollapsed = sidebar.classList.contains('collapsed');
         }
 
+        function toggleRightSidebar() {
+            const sidebar = document.getElementById('right-sidebar');
+            sidebar.classList.toggle('collapsed');
+        }
+
         // ===== Chat Management =====
         function createNewChat() {
             currentChatId = `chat-${Date.now()}`;
             chatHistory.push({
                 id: currentChatId,
+                sessionId: null,  // 创建后会被设置
                 title: '新对话',
-                messages: []
+                messages: [],
+                timestamp: Date.now()
             });
             clearChatContent();
             showWelcomeScreen();
             updateHistorySidebar();
+            saveHistory();  // 保存到 localStorage
+
+            // 创建新的 session
+            createSession();
+        }
+
+        function switchChat(chatId) {
+            const chat = chatHistory.find(c => c.id === chatId);
+            if (!chat) return;
+
+            currentChatId = chatId;
+            clearChatContent();
+            hideWelcomeScreen();
+            chat.messages.forEach(msg => {
+                addMessage(msg.role, msg.content, { skipHistory: true });
+            });
+            updateHistorySidebar();
+
+            // 切换到对应的 session
+            if (chat.sessionId && chat.sessionId !== sessionId) {
+                sessionId = chat.sessionId;
+                localStorage.setItem('canvas_session_id', sessionId);
+                connectSSE();
+            }
+        }
+        function createNewChat() {
+            currentChatId = `chat-${Date.now()}`;
+            chatHistory.push({
+                id: currentChatId,
+                sessionId: null,  // 创建后会被设置
+                title: '新对话',
+                messages: [],
+                timestamp: Date.now()
+            });
+            clearChatContent();
+            showWelcomeScreen();
+            updateHistorySidebar();
+            saveHistory();  // 保存到 localStorage
+
+            // 创建新的 session
+            createSession();
         }
 
         function clearChatContent() {
@@ -680,25 +986,55 @@
             const container = document.getElementById('chat-history');
             container.innerHTML = chatHistory.map(chat => `
                 <div class="history-item ${chat.id === currentChatId ? 'active' : ''}" data-id="${chat.id}">
-                    ${chat.title}
+                    <span class="title">${chat.title}</span>
+                    <button class="delete-btn" data-id="${chat.id}">×</button>
                 </div>
             `).join('');
 
             container.querySelectorAll('.history-item').forEach(item => {
-                item.onclick = () => loadChat(item.dataset.id);
+                item.onclick = (e) => {
+                    if (!e.target.classList.contains('delete-btn')) {
+                        switchChat(item.dataset.id);
+                    }
+                };
+            });
+
+            container.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    deleteChat(btn.dataset.id);
+                };
             });
         }
 
-        function loadChat(chatId) {
+        function deleteChat(chatId) {
             const chat = chatHistory.find(c => c.id === chatId);
             if (!chat) return;
-            currentChatId = chatId;
-            clearChatContent();
-            hideWelcomeScreen();
-            chat.messages.forEach(msg => {
-                addMessage(msg.role, msg.content, { skipHistory: true });
-            });
+
+            // 如果删除的是当前对话，先切换到其他对话
+            if (chatId === currentChatId) {
+                const remaining = chatHistory.filter(c => c.id !== chatId);
+                if (remaining.length > 0) {
+                    switchChat(remaining[0].id);
+                } else {
+                    createNewChat();
+                }
+            }
+
+            // 从历史中删除
+            chatHistory = chatHistory.filter(c => c.id !== chatId);
+            saveHistory();
             updateHistorySidebar();
+
+            // 如果有 session，也删除后端 session
+            if (chat.sessionId) {
+                fetch(`/v1/sessions/${chat.sessionId}`, { method: 'DELETE' }).catch(() => {});
+            }
+        }
+
+        function loadChat(chatId) {
+            // 已被 switchChat 替代，保留兼容性
+            switchChat(chatId);
         }
 
         // ===== Messages =====
@@ -714,10 +1050,21 @@
             const avatar = role === 'user' ? '👤' : '🤖';
             const rendered = role === 'user' ? escapeHtml(content) : marked.parse(content);
 
-            div.innerHTML = `
-                <div class="message-avatar">${avatar}</div>
-                <div class="message-content">${rendered}</div>
-            `;
+            // 为 assistant 消息添加单独的文本和交互容器
+            if (role === 'assistant') {
+                div.innerHTML = `
+                    <div class="message-avatar">${avatar}</div>
+                    <div class="message-content">
+                        <div class="text-content">${rendered}</div>
+                        <div class="interactive-container"></div>
+                    </div>
+                `;
+            } else {
+                div.innerHTML = `
+                    <div class="message-avatar">${avatar}</div>
+                    <div class="message-content">${rendered}</div>
+                `;
+            }
 
             contentDiv.appendChild(div);
             scrollToBottom();
@@ -730,6 +1077,7 @@
                         chat.title = content.substring(0, 30) + (content.length > 30 ? '...' : '');
                         updateHistorySidebar();
                     }
+                    saveHistory();  // 每次添加消息都保存
                 }
             }
 
@@ -795,7 +1143,7 @@
 
             const { component_type, id, config, prompt } = data;
             const msgDiv = getOrCreateLastAssistantMessage();
-            const contentEl = msgDiv.querySelector('.message-content');
+            const interactiveEl = msgDiv.querySelector('.interactive-container');
 
             const container = document.createElement('div');
             container.className = 'interactive-inline';
@@ -882,9 +1230,74 @@
                     checkDiv.appendChild(checkLabel);
                     container.appendChild(checkDiv);
                     break;
+
+                case 'button_group':
+                    // 多选项按钮组 + 确认按钮
+                    const buttonGroup = document.createElement('div');
+                    buttonGroup.className = 'button-group';
+                    buttonGroup.style.display = 'flex';
+                    buttonGroup.style.flexWrap = 'wrap';
+                    buttonGroup.style.gap = '8px';
+                    buttonGroup.style.marginBottom = '12px';
+
+                    let selectedValue = null;
+
+                    (config.options || []).forEach(opt => {
+                        const optBtn = document.createElement('button');
+                        optBtn.className = 'option-button';
+                        optBtn.textContent = opt.label || opt.value;
+                        optBtn.style.padding = '10px 16px';
+                        optBtn.style.border = '1px solid var(--border-primary)';
+                        optBtn.style.borderRadius = '8px';
+                        optBtn.style.background = 'var(--bg-secondary)';
+                        optBtn.style.color = 'var(--text-primary)';
+                        optBtn.style.cursor = 'pointer';
+                        optBtn.style.transition = 'all 0.2s';
+
+                        optBtn.onclick = () => {
+                            // 移除其他按钮的选中状态
+                            buttonGroup.querySelectorAll('.option-button').forEach(b => {
+                                b.style.background = 'var(--bg-secondary)';
+                                b.style.borderColor = 'var(--border-primary)';
+                            });
+                            // 高亮当前按钮
+                            optBtn.style.background = 'var(--accent-primary)';
+                            optBtn.style.borderColor = 'var(--accent-primary)';
+                            optBtn.style.color = 'white';
+                            selectedValue = opt.value;
+                        };
+
+                        buttonGroup.appendChild(optBtn);
+                    });
+
+                    container.appendChild(buttonGroup);
+
+                    // 确认按钮
+                    const confirmBtn = document.createElement('button');
+                    confirmBtn.className = 'confirm-button';
+                    confirmBtn.textContent = config.submit_label || '确认';
+                    confirmBtn.style.padding = '10px 20px';
+                    confirmBtn.style.background = 'var(--accent-primary)';
+                    confirmBtn.style.border = 'none';
+                    confirmBtn.style.borderRadius = '8px';
+                    confirmBtn.style.color = 'white';
+                    confirmBtn.style.cursor = 'pointer';
+                    confirmBtn.style.fontWeight = '500';
+                    confirmBtn.style.marginTop = '8px';
+
+                    confirmBtn.onclick = () => {
+                        if (selectedValue !== null) {
+                            handleInteraction(id, 'select', { value: selectedValue });
+                        } else {
+                            alert('请先选择一个选项');
+                        }
+                    };
+
+                    container.appendChild(confirmBtn);
+                    break;
             }
 
-            contentEl.appendChild(container);
+            interactiveEl.appendChild(container);
             scrollToBottom();
         }
 
@@ -963,8 +1376,13 @@
         // ===== Send Message =====
         async function sendMessage() {
             const input = document.getElementById('input');
+            const sendBtn = document.getElementById('send');
             const text = input.value.trim();
             if (!text || !sessionId) return;
+
+            // 禁用输入框和发送按钮
+            input.disabled = true;
+            sendBtn.disabled = true;
 
             input.value = '';
             input.style.height = 'auto';
@@ -993,6 +1411,10 @@
                 const decoder = new TextDecoder();
                 let buffer = '';
                 let currentContent = '';
+                let currentEventType = '';
+
+                // 清空右侧工具状态栏
+                document.getElementById('tool-status-list').innerHTML = '';
 
                 while (true) {
                     const { done, value } = await reader.read();
@@ -1003,6 +1425,12 @@
                     buffer = lines.pop() || '';
 
                     for (const line of lines) {
+                        // 处理 event 类型
+                        if (line.startsWith('event:')) {
+                            currentEventType = line.slice(6).trim();
+                            continue;
+                        }
+
                         if (!line.startsWith('data:')) continue;
 
                         const dataStr = line.slice(5).trim();
@@ -1011,21 +1439,33 @@
                         try {
                             const data = JSON.parse(dataStr);
 
-                            if (data.text) {
-                                currentContent += data.text;
-                                updateAssistantMessage(currentContent);
-                            }
+                            // 根据事件类型处理
+                            if (currentEventType === 'tool_start') {
+                                handleToolStart(data);
+                            } else if (currentEventType === 'tool_result') {
+                                handleToolResult(data);
+                            } else if (currentEventType === 'tool_error') {
+                                handleToolError(data);
+                            } else if (currentEventType === 'turn_complete') {
+                                // 一轮工具执行完成，清空准备下一轮
+                            } else {
+                                // 默认处理文本数据
+                                if (data.text) {
+                                    currentContent += data.text;
+                                    updateAssistantMessage(currentContent);
+                                }
 
-                            if (data.finish_reason === 'stop') {
-                                // Finalize message
-                                if (currentContent) {
-                                    finalizeAssistantMessage(currentContent);
+                                if (data.finish_reason === 'stop') {
+                                    if (currentContent) {
+                                        finalizeAssistantMessage(currentContent);
+                                    }
+                                }
+
+                                if (data.error) {
+                                    addError(data.error);
                                 }
                             }
-
-                            if (data.error) {
-                                addError(data.error);
-                            }
+                            currentEventType = '';
                         } catch (e) {
                             // Skip invalid JSON
                         }
@@ -1047,14 +1487,19 @@
             } catch (e) {
                 console.error('Send error:', e);
                 addError(e.message);
+            } finally {
+                // 恢复输入框和发送按钮
+                input.disabled = false;
+                sendBtn.disabled = false;
+                input.focus();
             }
         }
 
         function updateAssistantMessage(content) {
             hideWelcomeScreen();
             const msgDiv = getOrCreateLastAssistantMessage();
-            const contentEl = msgDiv.querySelector('.message-content');
-            contentEl.innerHTML = marked.parse(content);
+            const textEl = msgDiv.querySelector('.text-content');
+            textEl.innerHTML = marked.parse(content);
             scrollToBottom();
         }
 
@@ -1080,6 +1525,7 @@
         // ===== Event Listeners =====
         function setupEventListeners() {
             document.getElementById('toggle-sidebar').onclick = toggleSidebar;
+            document.getElementById('toggle-right-sidebar').onclick = toggleRightSidebar;
             document.getElementById('new-chat').onclick = createNewChat;
             document.getElementById('send').onclick = sendMessage;
 

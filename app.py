@@ -19,6 +19,7 @@ from openai import OpenAI
 
 from tools import get_default_registry, UnifiedToolRegistry
 from tools.builtin import *  # noqa: F401,F403 — register built-in tools
+from tools.builtin.canvas_tools import set_canvas_manager  # Canvas tools
 from tools.builtin.agent_tools import set_agent_context, get_fork_manager, get_agent_runner, AGENT_TYPES
 from tools.builtin.skill_tools import *  # noqa: F401,F403 — register Skill tool
 from tools.mcp import MCPToolManager, MCPConfig
@@ -159,6 +160,8 @@ async def lifespan(_app: FastAPI):
     # Canvas initialization (before channels, so tools can use it)
     _canvas_manager = CanvasManager()
     _app.state.canvas_manager = _canvas_manager
+    set_canvas_manager(_canvas_manager)
+    logger.info("[Canvas] CanvasManager initialized")
 
     # MCP initialization
     config = MCPConfig.load()
@@ -301,6 +304,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Ollama MLflow Gateway", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 # ===== Version Middleware =====
