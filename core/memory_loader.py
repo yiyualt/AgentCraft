@@ -9,7 +9,7 @@ import logging
 from typing import Any
 
 from sessions.vector_memory import VectorMemoryStore, MemoryEntry
-from tools.memory_tools import get_memory_store
+from tools.builtin.memory_tools import get_memory_store
 
 logger = logging.getLogger(__name__)
 

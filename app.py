@@ -19,9 +19,8 @@ from openai import OpenAI
 
 from tools import get_default_registry, UnifiedToolRegistry
 from tools.builtin import *  # noqa: F401,F403 — register built-in tools
-from tools.canvas_tools import set_canvas_manager  # Canvas tools
-from tools.pptx_tools import *  # noqa: F401,F403 — register PPTX tools
-from tools.agent_executor import AgentExecutor, set_agent_executor  # Agent executor
+from tools.builtin.canvas_tools import set_canvas_manager  # Canvas tools
+from tools.builtin.agent_tools import set_agent_context, get_fork_manager, get_agent_runner, AGENT_TYPES
 from tools.skill_tools import *  # noqa: F401,F403 — register Skill tool
 from tools.mcp import MCPToolManager, MCPConfig
 from automation import CronStore, CronScheduler
@@ -178,17 +177,6 @@ async def lifespan(_app: FastAPI):
         _unified_registry = UnifiedToolRegistry(get_default_registry())
         _app.state.unified_registry = _unified_registry
 
-    # Agent Executor initialization
-    agent_executor = AgentExecutor(
-        llm_client=client,
-        registry=_unified_registry,
-        session_manager=_session_manager,
-        model="deepseek-chat",
-        base_url=LLM_BASE_URL,
-    )
-    set_agent_executor(agent_executor)
-    logger.info("[AgentExecutor] Initialized with unified registry")
-
     # Compaction Manager initialization
     global _compaction_manager
     compaction_config = CompactionConfig()
@@ -239,7 +227,12 @@ async def lifespan(_app: FastAPI):
         token_calculator=TokenCalculator(),
         canvas_manager=_canvas_manager,
     )
-    agent_executor.set_fork_manager(fork_manager)
+    set_agent_context(
+        llm_client=client,
+        registry=_unified_registry,
+        fork_manager=fork_manager,
+        canvas_manager=_canvas_manager,
+    )
     logger.info("[Fork] ForkManager initialized")
 
     # ACP (Agent Control Plane) initialization for multi-agent tasks
@@ -295,7 +288,7 @@ async def lifespan(_app: FastAPI):
     # Webhook initialization (external event triggers)
     global _webhook_store, _webhook_executor
     _webhook_store = WebhookStore()
-    _webhook_executor = WebhookExecutor(_webhook_store, lambda: agent_executor)
+    _webhook_executor = WebhookExecutor(_webhook_store, get_agent_runner)
     _app.state.webhook_store = _webhook_store
     _app.state.webhook_executor = _webhook_executor
     logger.info("[Webhook] WebhookExecutor initialized")
@@ -739,7 +732,7 @@ async def init_cron():
     _cron_store = CronStore()
     _cron_scheduler = CronScheduler(
         store=_cron_store,
-        agent_executor_factory=lambda: _agent_executor,
+        agent_executor_factory=get_agent_runner,
     )
     _cron_scheduler.start()
     set_scheduler(_cron_scheduler)
@@ -907,22 +900,7 @@ def cron_disable_job(job_id: str) -> dict[str, Any]:
 
 # ===== Webhook API =====
 
-_webhook_store: Any | None = None
-_webhook_executor: Any | None = None
-
-
-@app.on_event("startup")
-async def init_webhook_system():
-    """Initialize webhook system."""
-    global _webhook_store, _webhook_executor
-
-    from automation.webhook import WebhookStore, WebhookExecutor, init_webhooks
-
-    init_webhooks(lambda: _agent_executor)
-    _webhook_store = WebhookStore()
-    _webhook_executor = WebhookExecutor(_webhook_store, lambda: _agent_executor)
-    _app.state.webhook_executor = _webhook_executor
-    logger.info("[Webhook] System initialized")
+# Webhook initialized in lifespan, no separate startup needed
 
 
 @app.post("/webhook/{webhook_name}")
@@ -1202,96 +1180,13 @@ def _process_slash_command(content: str) -> str | None:
     args = parts[1] if len(parts) > 1 else ""
 
     if command == "/goal":
-        executor = get_agent_executor()
-        if not executor:
-            return "[Error] Agent executor not initialized"
-        if args:
-            result = executor.set_goal(args)
-            logger.info(f"[Goal] Set: {args}")
-            return result
-        else:
-            result = executor.clear_goal()
-            logger.info("[Goal] Cleared")
-            return result
+        return "[Deprecated] Goal setting moved to session-level configuration."
 
     if command == "/permission":
-        executor = get_agent_executor()
-        if not executor:
-            return "[Error] Agent executor not initialized"
-        if not args:
-            mode = executor.get_permission_mode()
-            return f"Current permission mode: **{mode.value}**\nAvailable modes: default, acceptEdits, bypass, auto, plan"
-        mode_map = {
-            "default": PermissionMode.DEFAULT,
-            "acceptedits": PermissionMode.ACCEPT_EDITS,
-            "accept_edits": PermissionMode.ACCEPT_EDITS,
-            "bypass": PermissionMode.BYPASS,
-            "auto": PermissionMode.AUTO,
-            "plan": PermissionMode.PLAN,
-        }
-        mode = mode_map.get(args.lower().replace(" ", "_"))
-        if mode is None:
-            return f"Unknown mode: {args}. Available: {list(mode_map.keys())}"
-        executor.set_permission_mode(mode)
-        return f"Permission mode set to: **{mode.value}**"
+        return "[Deprecated] Permission mode moved to session-level configuration. Available via session metadata."
 
     if command == "/hook":
-        executor = get_agent_executor()
-        if not executor:
-            return "[Error] Agent executor not initialized"
-        hook_exec = executor.get_hook_executor()
-        sub_parts = args.split(" ", 1) if args else [""]
-        sub_cmd = sub_parts[0].lower()
-        sub_args = sub_parts[1] if len(sub_parts) > 1 else ""
-
-        if sub_cmd == "demo":
-            # Register demo hooks that log to gateway.log
-            hooks = [
-                HookMatcher(event=HookEvent.PRE_TOOL_USE, matcher="Bash",
-                            command="echo \"[HOOK DEMO] PreToolUse: Bash called at $(date)\" >> logs/gateway.log"),
-                HookMatcher(event=HookEvent.POST_TOOL_USE, matcher="Write",
-                            command="echo \"[HOOK DEMO] PostToolUse: Write completed at $(date)\" >> logs/gateway.log"),
-                HookMatcher(event=HookEvent.SUBAGENT_START,
-                            command="echo \"[HOOK DEMO] Subagent started at $(date)\" >> logs/gateway.log"),
-            ]
-            for h in hooks:
-                hook_exec.register(h)
-            return "Demo hooks registered:\n- PreToolUse(Bash) → log\n- PostToolUse(Write) → log\n- SubagentStart → log\n\nTry running a Bash command or writing a file to see hooks fire."
-
-        if sub_cmd == "list":
-            if not hook_exec._hooks:
-                return "No hooks registered."
-            lines = ["Registered hooks:"]
-            for i, h in enumerate(hook_exec._hooks):
-                matcher = f" ({h.matcher})" if h.matcher else ""
-                blocking = " [BLOCKING]" if h.blocking else ""
-                lines.append(f"  {i}. {h.event.value}{matcher}: {h.command[:60]}{blocking}")
-            return "\n".join(lines)
-
-        if sub_cmd == "clear":
-            count = len(hook_exec._hooks)
-            hook_exec.clear()
-            return f"Cleared {count} hook(s)."
-
-        if sub_cmd == "add":
-            # /hook add <event> <command>
-            # /hook add <event> <matcher> <command>
-            add_parts = sub_args.split(" ", 2)
-            if len(add_parts) < 2:
-                return "Usage: /hook add <event> <command>\nEvents: " + ", ".join(e.value for e in HookEvent)
-            event_name = add_parts[0]
-            try:
-                event = HookEvent(event_name)
-            except ValueError:
-                return f"Unknown event: {event_name}\nAvailable: " + ", ".join(e.value for e in HookEvent)
-            if len(add_parts) == 2:
-                hook = HookMatcher(event=event, command=add_parts[1])
-            else:
-                hook = HookMatcher(event=event, matcher=add_parts[1], command=add_parts[2])
-            hook_exec.register(hook)
-            return f"Hook registered: {event.value} → {hook.command[:60]}"
-
-        return "Usage:\n  /hook demo — register demo hooks\n  /hook list — list hooks\n  /hook clear — remove all\n  /hook add <event> <command>\n  /hook add <event> <matcher> <command>\nEvents: " + ", ".join(e.value for e in HookEvent)
+        return "[Deprecated] Hooks configuration moved to settings.json. See /config for setup."
 
     logger.info(f"[Command] Unknown slash command: {command}")
     return None
