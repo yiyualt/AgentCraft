@@ -28,7 +28,7 @@ from automation import CronStore, CronScheduler
 from automation.webhook import WebhookStore, WebhookExecutor, init_webhooks
 from providers import ProviderRegistry, register_default_providers
 from gateway import GATEWAY_VERSION, get_version_headers, validate_client_version, get_changelog
-from streaming_executor import StreamingToolExecutor, is_concurrency_safe
+from core import run_tool_loop, clean_orphan_tool_messages, ToolExecutor, is_safe
 from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, PermissionMode, PermissionRuleKind, HookEvent, HookMatcher, MultiSourceRuleManager, PermissionAuditor, PermissionRule, PermissionResult, RuleSource
 from sessions.vector_memory import VectorMemoryStore
 from skills import SkillLoader, default_skill_dirs
@@ -98,51 +98,6 @@ client = OpenAI(
 _llm_semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLM)
 _rate_limit_buckets: dict[str, list[float]] = {}
 _rate_limit_lock = asyncio.Lock()
-
-
-def _clean_orphan_tool_messages(messages: list[dict]) -> list[dict]:
-    """Remove orphan tool messages without preceding tool_calls.
-
-    Tool messages must have a preceding assistant message with tool_calls.
-    This ensures messages list is valid for LLM API.
-    """
-    cleaned = []
-    last_assistant_tool_calls = None
-    removed_count = 0
-
-    for msg in messages:
-        role = msg.get("role")
-
-        if role == "assistant":
-            # Track tool_calls from this assistant message
-            last_assistant_tool_calls = msg.get("tool_calls")
-            cleaned.append(msg)
-        elif role == "tool":
-            # Check if there's a preceding assistant with tool_calls
-            if last_assistant_tool_calls:
-                # Verify tool_call_id matches
-                tool_call_id = msg.get("tool_call_id")
-                if tool_call_id:
-                    matching_ids = [tc["id"] for tc in last_assistant_tool_calls]
-                    if tool_call_id in matching_ids:
-                        cleaned.append(msg)
-                    else:
-                        removed_count += 1
-                else:
-                    removed_count += 1
-            else:
-                removed_count += 1
-        else:
-            # Keep system and user messages
-            cleaned.append(msg)
-            # Reset tool_calls tracker after user message
-            if role == "user":
-                last_assistant_tool_calls = None
-
-    if removed_count > 0:
-        logger.info(f"[MESSAGES] Cleaned orphan tool messages: removed {removed_count}")
-
-    return cleaned
 
 
 # ===== MCP Tool Manager =====
@@ -420,7 +375,6 @@ def health() -> dict[str, str]:
         "status": "ok",
         "mlflow_tracking_uri": MLFLOW_TRACKING_URI,
         "llm_base_url": LLM_BASE_URL,
-        "sandbox_enabled": str(SANDBOX_ENABLED),
         "gateway_version": GATEWAY_VERSION,
     }
 
@@ -1100,7 +1054,6 @@ async def _handle_streaming(
 ):
     """SSE streaming response with tool execution progress."""
     import asyncio
-    from streaming_executor import ToolProgressEvent
 
     # Initialize (similar to non-streaming setup)
     registry = _unified_registry or UnifiedToolRegistry(get_default_registry())
@@ -1129,16 +1082,15 @@ async def _handle_streaming(
     else:
         messages = new_messages
 
-    messages = _clean_orphan_tool_messages(messages)
+    messages = clean_orphan_tool_messages(messages)
     kwargs = {k: v for k, v in payload.items() if k not in ("messages", "tools", "stream")}
 
     # Yield initial event
     yield f"event: stream_request_start\ndata: {{\"model\": \"{model}\"}}\n\n"
 
-    # Execute with StreamingToolExecutor
-    executor = StreamingToolExecutor(
+    # Execute with ToolExecutor
+    executor = ToolExecutor(
         registry=registry,
-        max_concurrency=10,
         session_id=session_id,
         canvas_manager=_canvas_manager,
     )
@@ -1200,19 +1152,13 @@ async def _handle_streaming(
             yield f"event: error\ndata: {{\"error\": \"Tool limit exceeded\"}}\n\n"
             break
 
-        # Execute tools with progress events
-        await executor.start_unsafe_executor()
-
+        # Yield tool start events
         for tc in tool_calls:
             fn_name = tc["function"]["name"]
-            try:
-                fn_args = json.loads(tc["function"]["arguments"])
-            except json.JSONDecodeError:
-                fn_args = {}
-
-            # Yield tool start event
             yield f"event: tool_start\ndata: {{\"id\": \"{tc['id']}\", \"name\": \"{fn_name}\"}}\n\n"
-            await executor.on_tool_use_block(tc["id"], fn_name, fn_args)
+
+        # Execute tools
+        results = await executor.execute_tools(tool_calls)
 
         # Wait for results
         results = await executor.get_results()
@@ -1435,7 +1381,7 @@ async def _handle_non_streaming(
     kwargs = {k: v for k, v in payload.items() if k not in ("messages", "tools")}
 
     # ===== Clean orphan tool messages =====
-    messages = _clean_orphan_tool_messages(messages)
+    messages = clean_orphan_tool_messages(messages)
 
     # ===== LOG: 最终发给 LLM 的 messages =====
     logger.info(f"[MESSAGES] count={len(messages)}")
@@ -1694,7 +1640,7 @@ async def _handle_non_streaming(
                     "tool_results": [],
                 })
 
-                # ===== TOOL EXECUTION (Parallel execution with StreamingToolExecutor) =====
+                # ===== TOOL EXECUTION =====
                 with mlflow.start_span(
                     name=f"Tool Execution (turn {n_turns})",
                     span_type=SpanType.CHAIN,
@@ -1712,30 +1658,16 @@ async def _handle_non_streaming(
                         "tool_calls": tool_calls_summary,
                     })
 
-                    # Create StreamingToolExecutor for parallel execution
-                    executor = StreamingToolExecutor(
+                    # Create ToolExecutor
+                    executor = ToolExecutor(
                         registry=registry,
-                        max_concurrency=10,
                         session_id=session_id,
                         canvas_manager=_canvas_manager,
                     )
 
-                    # Start unsafe tool executor
-                    await executor.start_unsafe_executor()
-
-                    # Queue all tool calls (safe ones start immediately)
-                    for tc in tool_calls:
-                        fn_name = tc["function"]["name"]
-                        try:
-                            fn_args = json.loads(tc["function"]["arguments"])
-                        except json.JSONDecodeError:
-                            fn_args = {}
-
-                        logger.info(f"[TOOL QUEUE] {fn_name} (safe={is_concurrency_safe(fn_name)})")
-                        await executor.on_tool_use_block(tc["id"], fn_name, fn_args)
-
-                    # Wait for all tools to complete
-                    results = await executor.get_results()
+                    # Execute all tools
+                    logger.info(f"[TOOL] {[tc['function']['name'] for tc in tool_calls]}")
+                    results = await executor.execute_tools(tool_calls)
 
                     # Process results and append to messages
                     skill_injections: list[str] = []
@@ -1812,8 +1744,8 @@ async def _handle_non_streaming(
                         "tool_names": [tc["function"]["name"] for tc in tool_calls],
                         "full_results": [tr["result"] for tr in turn_log[-1]["tool_results"]],
                         "parallel_execution": True,
-                        "safe_tools": [tc["function"]["name"] for tc in tool_calls if is_concurrency_safe(tc["function"]["name"])],
-                        "unsafe_tools": [tc["function"]["name"] for tc in tool_calls if not is_concurrency_safe(tc["function"]["name"])],
+                        "safe_tools": [tc["function"]["name"] for tc in tool_calls if is_safe(tc["function"]["name"])],
+                        "unsafe_tools": [tc["function"]["name"] for tc in tool_calls if not is_safe(tc["function"]["name"])],
                     })
 
             latency = time.time() - start_time

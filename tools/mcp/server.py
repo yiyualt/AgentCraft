@@ -110,8 +110,8 @@ class MCPServer:
         self._tools = []
 
         for tool_data in tools_data:
-            # Prefix tool name with server name to avoid collisions
-            prefixed_name = f"{self.config.name}.{tool_data.get('name', '')}"
+            # Prefix tool name with server name using '__' to comply with OpenAI naming pattern
+            prefixed_name = f"{self.config.name}__{tool_data.get('name', '')}"
             tool = MCPTool(
                 name=prefixed_name,
                 original_name=tool_data.get("name", ""),

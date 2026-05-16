@@ -23,7 +23,7 @@ class MCPConfig:
 
         Priority:
         1. Explicit config_path
-        2. mcp_config.json in project root
+        2. mcp_config.json in project root (relative to this file)
         3. Environment variables (MCP_SERVER_<NAME>_COMMAND, etc.)
 
         Args:
@@ -34,15 +34,18 @@ class MCPConfig:
         """
         config = cls()
 
+        # Project root: 3 levels up from this file (tools/mcp/config.py)
+        project_root = Path(__file__).parent.parent.parent
+
         # Try loading from file
         if config_path:
             file_config = cls._load_from_file(Path(config_path))
             config.servers.extend(file_config.servers)
         else:
-            # Try default locations
+            # Try default locations (always relative to project root)
             default_paths = [
-                Path.cwd() / "mcp_config.json",
-                Path.cwd() / "config" / "mcp_config.json",
+                project_root / "mcp_config.json",
+                project_root / "config" / "mcp_config.json",
             ]
             for path in default_paths:
                 if path.exists():

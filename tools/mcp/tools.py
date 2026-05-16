@@ -1,4 +1,8 @@
-"""MCP Tool wrapper - converts MCP tool schema to OpenAI format."""
+"""MCP Tool wrapper - converts MCP tool schema to OpenAI format.
+
+Note: MCP tool names are prefixed with server name using '__' (double underscore)
+to comply with OpenAI's naming pattern: ^[a-zA-Z0-9_-]+$
+"""
 
 from __future__ import annotations
 
@@ -10,10 +14,10 @@ from typing import Any
 class MCPTool:
     """Represents a tool from an MCP server.
 
-    Tool names are prefixed with server name to avoid collisions
-    between different MCP servers.
+    Tool names are prefixed with server name using '__' to avoid collisions
+    between different MCP servers and comply with OpenAI naming pattern.
     """
-    name: str  # Prefixed name: "server.tool_name"
+    name: str  # Prefixed name: "server__tool_name" (uses __ instead of .)
     original_name: str  # Original name without prefix
     description: str
     input_schema: dict[str, Any]  # JSON Schema for input
@@ -27,7 +31,7 @@ class MCPTool:
             {
                 "type": "function",
                 "function": {
-                    "name": "server.tool_name",
+                    "name": "server__tool_name",
                     "description": "...",
                     "parameters": {...}  # inputSchema
                 }

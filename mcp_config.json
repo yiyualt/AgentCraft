@@ -1,11 +1,17 @@
 {
   "$schema": "https://modelcontextprotocol.io/schema/mcp-config",
   "mcpServers": {
+    "sentiment": {
+      "command": "python",
+      "args": ["mcp_servers/sentiment_mcp_server.py"],
+      "enabled": true,
+      "description": "Sentiment classification using keyword analysis (positive/negative/neutral)"
+    },
     "filesystem": {
       "command": "npx",
-      "args": ["-y", "@anthropic/mcp-server-filesystem", "/tmp"],
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
       "enabled": false,
-      "description": "Filesystem operations (read, write, list)"
+      "description": "Filesystem operations (disabled - use builtin Read/Write instead)"
     },
     "git": {
       "command": "uvx",
