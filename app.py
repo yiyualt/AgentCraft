@@ -1352,7 +1352,7 @@ async def _handle_non_streaming(
         saved_count = len(messages)
         logger.info(f"saved_count={saved_count} (messages persisted to session)")
 
-    with mlflow.start_run(run_name=f"gateway-{model}"):
+    with mlflow.start_run(run_name=f"gateway-{model}", nested=True):
         mlflow.log_param("model", model)
         mlflow.log_param("runtime", "openai")
         mlflow.log_param("llm_base_url", LLM_BASE_URL)
