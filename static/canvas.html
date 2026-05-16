@@ -915,18 +915,21 @@
                     const lines = buf.split('\n');
                     buf = lines.pop();
 
-                    for (const line of lines) {
+                    for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i];
+
                         // Handle SSE events (tool execution notifications)
                         if (line.startsWith('event:')) {
                             const eventType = line.slice(6).trim();
-                            const nextIdx = lines.indexOf(line) + 1;
-                            if (nextIdx < lines.length && lines[nextIdx].startsWith('data:')) {
+                            // Check next line for data
+                            if (i + 1 < lines.length && lines[i + 1].startsWith('data:')) {
                                 try {
-                                    const eventData = JSON.parse(lines[nextIdx].slice(5).trim());
+                                    const eventData = JSON.parse(lines[i + 1].slice(5).trim());
                                     if (eventType === 'tool_exec') {
                                         fullContent += `\n[正在执行工具: ${eventData.tools.join(', ')}]\n`;
                                         updateLastMsg(fullContent);
                                     }
+                                    i++; // Skip the data line we already processed
                                 } catch {}
                             }
                             continue;
