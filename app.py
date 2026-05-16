@@ -21,7 +21,7 @@ from tools import get_default_registry, UnifiedToolRegistry
 from tools.builtin import *  # noqa: F401,F403 — register built-in tools
 from tools.builtin.canvas_tools import set_canvas_manager  # Canvas tools
 from tools.builtin.agent_tools import set_agent_context, get_fork_manager, get_agent_runner, AGENT_TYPES
-from tools.skill_tools import *  # noqa: F401,F403 — register Skill tool
+from tools.builtin.skill_tools import *  # noqa: F401,F403 — register Skill tool
 from tools.mcp import MCPToolManager, MCPConfig
 from automation import CronStore, CronScheduler
 from automation.webhook import WebhookStore, WebhookExecutor, init_webhooks
