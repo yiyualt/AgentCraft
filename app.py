@@ -44,14 +44,14 @@ LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "sk-default")
 
 # Concurrency / Rate Limiting
-MAX_CONCURRENT_LLM = int(os.getenv("MAX_CONCURRENT_OLLAMA", "10"))
+MAX_CONCURRENT_LLM = int(os.getenv("MAX_CONCURRENT_OLLAMA", "100"))
 RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "false").lower() == "true"
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "60"))
 RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
 
 # LLM Queue Configuration (new architecture)
 LLM_QUEUE_ENABLED = os.getenv("LLM_QUEUE_ENABLED", "true").lower() == "true"
-LLM_MAX_CONCURRENT = int(os.getenv("LLM_MAX_CONCURRENT", "10"))
+LLM_MAX_CONCURRENT = int(os.getenv("LLM_MAX_CONCURRENT", "100"))
 LLM_MAX_QUEUE_SIZE = int(os.getenv("LLM_MAX_QUEUE_SIZE", "100"))
 LLM_QUEUE_TIMEOUT = float(os.getenv("LLM_QUEUE_TIMEOUT", "60.0"))
 LLM_REQUEST_TIMEOUT = float(os.getenv("LLM_REQUEST_TIMEOUT", "300.0"))
@@ -504,6 +504,14 @@ def delete_session_endpoint(session_id: str) -> dict[str, str]:
 @app.get("/v1/skills")
 def list_skills() -> list[dict[str, Any]]:
     return [s.to_dict() for s in _skill_loader.list_skills()]
+
+
+@app.get("/v1/tools")
+def list_tools() -> list[dict[str, Any]]:
+    """Return available tools for LLM to use."""
+    if _unified_registry is None:
+        return []
+    return _unified_registry.list_tools()
 
 
 @app.get("/permission/rules")
@@ -1072,8 +1080,19 @@ async def _handle_streaming_via_queue(
     model: str,
     session_id: str | None = None,
 ):
-    """SSE streaming response using ProviderRegistry async stream."""
-    # Build messages
+    """SSE streaming response with tool loop support.
+
+    Architecture:
+        Request → Semaphore → Tool Loop (LLM → Tools → LLM ...) → SSE Events
+
+    Uses existing components:
+    - ToolExecutor: executes tools with concurrency control
+    - clean_orphan_tool_messages: ensures valid tool message chains
+    - ProviderRegistry: async streaming LLM calls
+    """
+    from core.executor import ToolExecutor
+
+    # Build messages from session history + new messages
     new_messages = list(payload.get("messages", []))
     if session_id:
         session = _session_manager.get_session(session_id)
@@ -1094,15 +1113,18 @@ async def _handle_streaming_via_queue(
     else:
         messages = new_messages
 
+    # Clean orphan tool messages before starting
     messages = clean_orphan_tool_messages(messages)
-    kwargs = {k: v for k, v in payload.items() if k not in ("messages", "tools", "stream")}
+
+    # Build kwargs (exclude already-handled params)
+    kwargs = {k: v for k, v in payload.items() if k not in ("messages", "tools", "stream", "model")}
     if payload.get("tools"):
         kwargs["tools"] = payload["tools"]
 
     # Yield queue status event
     yield f"event: queue_status\ndata: {{\"status\": \"waiting\", \"model\": \"{model}\"}}\n\n"
 
-    # Save incoming messages to session
+    # Save incoming user messages to session
     if session_id:
         for msg in new_messages:
             _session_manager.add_message(
@@ -1111,61 +1133,111 @@ async def _handle_streaming_via_queue(
                 content=msg.get("content", ""),
             )
 
+    # Create ToolExecutor once (reused across tool turns)
+    executor = ToolExecutor(
+        registry=_unified_registry,
+        session_id=session_id,
+        canvas_manager=_canvas_manager,
+    )
+
     # Acquire semaphore (wait in queue)
     async with _llm_queue._semaphore:
         yield f"event: stream_request_start\ndata: {{\"model\": \"{model}\"}}\n\n"
 
-        # Use ProviderRegistry for async streaming
-        full_content = ""
-        tool_calls_list: list[dict] = []
-        finish_reason = None
+        full_content = ""  # Accumulates all turns for final save
+        n_tool_turns = 0
 
         try:
-            # Get async stream iterator from ProviderRegistry
-            stream = await _provider_registry.stream_iterator(
-                messages=messages,
-                model=model,
-                stream=True,
-                **kwargs,
-            )
+            # Tool loop: LLM call → execute tools → next LLM call
+            while True:
+                # Get async stream iterator from ProviderRegistry
+                stream = await _provider_registry.stream_iterator(
+                    messages=messages,
+                    model=model,
+                    stream=True,
+                    **kwargs,
+                )
 
-            # Async iterate over stream chunks
-            async for chunk in stream:
-                choices = chunk.get("choices", [])
-                if not choices:
-                    continue
+                # Accumulators for this turn
+                turn_content = ""
+                tool_calls_list: list[dict] = []
+                finish_reason = None
 
-                choice = choices[0]
-                delta = choice.get("delta", {})
+                # Async iterate over stream chunks
+                async for chunk in stream:
+                    choices = chunk.get("choices", [])
+                    if not choices:
+                        continue
 
-                # Stream content
-                if delta.get("content"):
-                    text = delta["content"]
-                    full_content += text
-                    escaped = text.replace('"', '\\"').replace('\n', '\\n')
-                    yield f"data: {{\"text\": \"{escaped}\"}}\n\n"
+                    choice = choices[0]
+                    delta = choice.get("delta", {})
 
-                # Accumulate tool calls
-                if delta.get("tool_calls"):
-                    for tc in delta["tool_calls"]:
-                        idx = tc.get("index", 0)
-                        while idx >= len(tool_calls_list):
-                            tool_calls_list.append({
-                                "id": "",
-                                "type": "function",
-                                "function": {"name": "", "arguments": ""}
-                            })
-                        if tc.get("id"):
-                            tool_calls_list[idx]["id"] = tc["id"]
-                        fn = tc.get("function", {})
-                        if fn.get("name"):
-                            tool_calls_list[idx]["function"]["name"] = fn["name"]
-                        if fn.get("arguments"):
-                            tool_calls_list[idx]["function"]["arguments"] += fn["arguments"]
+                    # Stream content to frontend
+                    if delta.get("content"):
+                        text = delta["content"]
+                        turn_content += text
+                        full_content += text
+                        escaped = text.replace('"', '\\"').replace('\n', '\\n')
+                        yield f"data: {{\"text\": \"{escaped}\"}}\n\n"
 
-                # Finish reason
-                if choice.get("finish_reason"):
-                    finish_reason = choice["finish_reason"]
+                    # Accumulate tool calls
+                    if delta.get("tool_calls"):
+                        for tc in delta["tool_calls"]:
+                            idx = tc.get("index", 0)
+                            while idx >= len(tool_calls_list):
+                                tool_calls_list.append({
+                                    "id": "",
+                                    "type": "function",
+                                    "function": {"name": "", "arguments": ""}
+                                })
+                            if tc.get("id"):
+                                tool_calls_list[idx]["id"] = tc["id"]
+                            fn = tc.get("function", {})
+                            if fn.get("name"):
+                                tool_calls_list[idx]["function"]["name"] = fn["name"]
+                            if fn.get("arguments"):
+                                tool_calls_list[idx]["function"]["arguments"] += fn["arguments"]
+
+                    # Finish reason
+                    if choice.get("finish_reason"):
+                        finish_reason = choice["finish_reason"]
+
+                # Check if we need to execute tools
+                if not tool_calls_list:
+                    # No tool calls - stream complete
+                    break
+
+                n_tool_turns += 1
+                # Notify frontend about tool execution
+                tool_names = [tc["function"]["name"] for tc in tool_calls_list]
+                yield f"event: tool_exec\ndata: {{\"tools\": {json.dumps(tool_names)}}}\n\n"
+                logger.info(f"[Streaming] Turn {n_tool_turns}: executing {tool_names}")
+
+                # Execute tools using ToolExecutor
+                results = await executor.execute_tools(tool_calls_list)
+
+                # Append assistant message with tool_calls
+                messages.append({
+                    "role": "assistant",
+                    "content": turn_content,
+                    "tool_calls": tool_calls_list,
+                })
+
+                # Append tool results
+                for tc in tool_calls_list:
+                    tc_id = tc["id"]
+                    result = results.get(tc_id)
+                    if result:
+                        messages.append(result.to_tool_message())
+                    else:
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc_id,
+                            "content": "Tool not executed",
+                        })
+
+                # Clean orphan tool messages before next turn
+                messages = clean_orphan_tool_messages(messages)
 
             # Stream complete
             yield f"data: {{\"finish_reason\": \"{finish_reason or 'stop'}\"}}\n\n"
@@ -1174,7 +1246,7 @@ async def _handle_streaming_via_queue(
             logger.error(f"[Streaming] Error: {e}")
             yield f"event: error\ndata: {{\"error\": \"{str(e)}\"}}\n\n"
 
-    # Save final assistant message
+    # Save final assistant message to session
     if session_id and full_content:
         _session_manager.add_message(
             session_id=session_id,

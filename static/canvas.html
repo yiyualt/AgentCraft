@@ -883,13 +883,23 @@
             let fullContent = '';
 
             try {
+                // Fetch tools from backend
+                let toolsList = [];
+                try {
+                    const toolsResp = await fetch('/v1/tools');
+                    toolsList = await toolsResp.json();
+                } catch (e) {
+                    console.error('[Tools] Failed to fetch:', e);
+                }
+
                 const resp = await fetch('/v1/chat/completions', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
                     body: JSON.stringify({
                         model: 'deepseek-chat',
                         messages: [{ role: 'user', content: text }],
-                        stream: true
+                        stream: true,
+                        tools: toolsList  // Include tools for agent capabilities
                     })
                 });
 
@@ -906,6 +916,22 @@
                     buf = lines.pop();
 
                     for (const line of lines) {
+                        // Handle SSE events (tool execution notifications)
+                        if (line.startsWith('event:')) {
+                            const eventType = line.slice(6).trim();
+                            const nextIdx = lines.indexOf(line) + 1;
+                            if (nextIdx < lines.length && lines[nextIdx].startsWith('data:')) {
+                                try {
+                                    const eventData = JSON.parse(lines[nextIdx].slice(5).trim());
+                                    if (eventType === 'tool_exec') {
+                                        fullContent += `\n[正在执行工具: ${eventData.tools.join(', ')}]\n`;
+                                        updateLastMsg(fullContent);
+                                    }
+                                } catch {}
+                            }
+                            continue;
+                        }
+
                         if (!line.startsWith('data:')) continue;
                         const json = line.slice(5).trim();
                         if (!json) continue;
@@ -915,6 +941,8 @@
                             if (data.text) {
                                 fullContent += data.text;
                                 updateLastMsg(fullContent);
+                            } else if (data.finish_reason) {
+                                // Stream finished
                             }
                         } catch {}
                     }
