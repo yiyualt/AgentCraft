@@ -34,9 +34,6 @@ from sessions import SessionManager, TokenCalculator, CompactionManager, Compact
 from sessions.vector_memory import VectorMemoryStore
 from skills import SkillLoader, default_skill_dirs
 from channels import ChannelRouter
-from channels.telegram import TelegramChannel
-from channels.web import WebChannel
-from channels.wecom import WeComChannel
 from canvas import CanvasManager, CanvasChannel
 from core import PromptBuilder, MemoryLoader
 from acp import AgentControlPlane, AcpConfig
@@ -48,7 +45,7 @@ LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "sk-default")
 
 # Concurrency / Rate Limiting
-MAX_CONCURRENT_LLM = int(os.getenv("MAX_CONCURRENT_OLLAMA", "1"))
+MAX_CONCURRENT_LLM = int(os.getenv("MAX_CONCURRENT_OLLAMA", "3"))
 RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "false").lower() == "true"
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "60"))
 RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
@@ -199,9 +196,7 @@ _recovery_executor: ResilientExecutor | None = None
 
 # ===== Channels =====
 _channel_router = ChannelRouter()
-_telegram_channel: TelegramChannel | None = None
-_web_channel: WebChannel | None = None
-_wecom_channel: WeComChannel | None = None
+_canvas_channel: CanvasChannel | None = None
 
 # ===== Provider Registry =====
 _provider_registry: ProviderRegistry | None = None
@@ -214,7 +209,7 @@ _webhook_executor: WebhookExecutor | None = None
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Initialize MCP servers and channels on startup, shut down on exit."""
-    global _mcp_manager, _unified_registry, _telegram_channel, _web_channel, _wecom_channel, _sandbox_executor, _canvas_manager, _canvas_channel
+    global _mcp_manager, _unified_registry, _sandbox_executor, _canvas_manager, _canvas_channel
 
     _app.state.session_manager = _session_manager
     _skill_loader.load()
@@ -353,21 +348,7 @@ async def lifespan(_app: FastAPI):
     _app.state.prompt_builder = _prompt_builder
     logger.info("[Core] PromptBuilder initialized with task-based memory retrieval")
 
-    # Initialize channels
-    _telegram_channel = TelegramChannel(_session_manager)
-    _channel_router.register(_telegram_channel)
-
-    _web_channel = WebChannel(_session_manager)
-    _channel_router.register(_web_channel)
-    _app.include_router(_web_channel.get_router())
-
-    # 企业微信 channel
-    global _wecom_channel
-    _wecom_channel = WeComChannel(_session_manager)
-    _channel_router.register(_wecom_channel)
-    logger.info("[WeCom] WeComChannel registered")
-
-    # Canvas channel (SSE streaming workspace)
+    # Initialize channels - Canvas only
     _canvas_channel = CanvasChannel(_canvas_manager)
     _channel_router.register(_canvas_channel)
     _app.include_router(_canvas_channel.get_router())
@@ -390,10 +371,6 @@ async def lifespan(_app: FastAPI):
     logger.info("[Webhook] WebhookExecutor initialized")
 
     await _channel_router.start_all()
-
-    # 显示二维码供用户扫码
-    from utils.qrcode_display import print_gateway_qrcode
-    print_gateway_qrcode(port=8000, path="/chat")
 
     yield
 
