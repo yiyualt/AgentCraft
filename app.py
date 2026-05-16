@@ -1019,7 +1019,7 @@ async def _handle_streaming_via_queue(
     model: str,
     session_id: str | None = None,
 ):
-    """SSE streaming response via LLMQueue (new architecture)."""
+    """SSE streaming response using ProviderRegistry async stream."""
     # Build messages
     new_messages = list(payload.get("messages", []))
     if session_id:
@@ -1046,6 +1046,9 @@ async def _handle_streaming_via_queue(
     if payload.get("tools"):
         kwargs["tools"] = payload["tools"]
 
+    # Yield queue status event
+    yield f"event: queue_status\ndata: {{\"status\": \"waiting\", \"model\": \"{model}\"}}\n\n"
+
     # Save incoming messages to session
     if session_id:
         for msg in new_messages:
@@ -1055,34 +1058,68 @@ async def _handle_streaming_via_queue(
                 content=msg.get("content", ""),
             )
 
-    # Create stream executor function for LLMQueue
-    def stream_executor(request: Any):
-        """Stream generator that will be executed by LLMQueue."""
-        return _stream_handler.handle_streaming_request(request)
+    # Acquire semaphore (wait in queue)
+    async with _llm_queue._semaphore:
+        yield f"event: stream_request_start\ndata: {{\"model\": \"{model}\"}}\n\n"
 
-    # Submit to queue and stream results
-    queue_stream = await _llm_queue.submit_streaming(
-        messages=messages,
-        model=model,
-        session_id=session_id,
-        stream_executor=stream_executor,
-        **kwargs,
-    )
+        # Use ProviderRegistry for async streaming
+        full_content = ""
+        tool_calls_list: list[dict] = []
+        finish_reason = None
 
-    # Iterate and yield SSE events
-    full_content = ""
-    for event in queue_stream:
-        yield event
-        # Extract content from text events for session saving
-        if event.startswith("data: {") and "text" in event:
-            try:
-                import re
-                match = re.search(r'"text": "([^"]*)"', event)
-                if match:
-                    text = match.group(1).replace("\\n", "\n").replace('\\"', '"')
+        try:
+            # Get async stream iterator from ProviderRegistry
+            stream = await _provider_registry.stream_iterator(
+                messages=messages,
+                model=model,
+                stream=True,
+                **kwargs,
+            )
+
+            # Async iterate over stream chunks
+            async for chunk in stream:
+                choices = chunk.get("choices", [])
+                if not choices:
+                    continue
+
+                choice = choices[0]
+                delta = choice.get("delta", {})
+
+                # Stream content
+                if delta.get("content"):
+                    text = delta["content"]
                     full_content += text
-            except Exception:
-                pass
+                    escaped = text.replace('"', '\\"').replace('\n', '\\n')
+                    yield f"data: {{\"text\": \"{escaped}\"}}\n\n"
+
+                # Accumulate tool calls
+                if delta.get("tool_calls"):
+                    for tc in delta["tool_calls"]:
+                        idx = tc.get("index", 0)
+                        while idx >= len(tool_calls_list):
+                            tool_calls_list.append({
+                                "id": "",
+                                "type": "function",
+                                "function": {"name": "", "arguments": ""}
+                            })
+                        if tc.get("id"):
+                            tool_calls_list[idx]["id"] = tc["id"]
+                        fn = tc.get("function", {})
+                        if fn.get("name"):
+                            tool_calls_list[idx]["function"]["name"] = fn["name"]
+                        if fn.get("arguments"):
+                            tool_calls_list[idx]["function"]["arguments"] += fn["arguments"]
+
+                # Finish reason
+                if choice.get("finish_reason"):
+                    finish_reason = choice["finish_reason"]
+
+            # Stream complete
+            yield f"data: {{\"finish_reason\": \"{finish_reason or 'stop'}\"}}\n\n"
+
+        except Exception as e:
+            logger.error(f"[Streaming] Error: {e}")
+            yield f"event: error\ndata: {{\"error\": \"{str(e)}\"}}\n\n"
 
     # Save final assistant message
     if session_id and full_content:

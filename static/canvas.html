@@ -418,14 +418,23 @@
         let selectedOptionIndex = -1;
         let optionsData = [];
 
-        // Init - Always start fresh on page load/refresh
+        // Init - Load history but start with new session on page load/refresh
         function init() {
-            // Clear any previous data - always start fresh
-            chats = [];
-            localStorage.removeItem('chats');
+            // Load existing chats from localStorage (preserve history)
+            const savedChats = localStorage.getItem('chats');
+            if (savedChats) {
+                try {
+                    chats = JSON.parse(savedChats);
+                } catch (e) {
+                    chats = [];
+                }
+            }
+
+            // Create new chat (empty state) and switch to it
             createNewChat();
             setupEvents();
-            // Create new session
+            renderChatList();  // Render history list first
+            // Create new session for the new chat
             createSession();
         }
 
