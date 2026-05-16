@@ -3,362 +3,563 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AgentCraft Canvas</title>
+    <title>AgentCraft Chat</title>
     <style>
+        :root {
+            --bg-primary: #212121;
+            --bg-secondary: #171717;
+            --bg-tertiary: #2f2f2f;
+            --bg-hover: #3f3f3f;
+            --text-primary: #ececec;
+            --text-secondary: #b4b4b4;
+            --text-muted: #8e8e8e;
+            --accent-primary: #10a37f;
+            --accent-user: #5436da;
+            --border-primary: #424242;
+            --border-secondary: #2f2f2f;
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #0f0f1a;
-            color: #eee;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
             height: 100vh;
-        }
-
-        .canvas-container {
-            display: grid;
-            grid-template-columns: 1fr 280px;
-            grid-template-rows: auto 1fr auto;
-            height: 100vh;
-        }
-
-        header {
-            grid-column: 1 / -1;
-            background: #16213e;
-            padding: 12px 20px;
-            border-bottom: 1px solid #333;
             display: flex;
-            align-items: center;
-            gap: 15px;
+            overflow: hidden;
         }
 
-        header h1 {
-            color: #4fc3f7;
-            font-size: 1.2em;
-        }
-
-        .status {
-            font-size: 0.85em;
-            padding: 4px 12px;
-            border-radius: 4px;
-        }
-
-        .status.connected { background: #2e7d32; color: #fff; }
-        .status.disconnected { background: #c62828; color: #fff; }
-
-        .main-canvas {
-            background: #1a1a2e;
-            overflow-y: auto;
-            padding: 20px;
-        }
-
-        .sidebar {
-            background: #16213e;
-            border-left: 1px solid #333;
-            padding: 15px;
-            overflow-y: auto;
-        }
-
-        .sidebar h3 {
-            color: #4fc3f7;
-            font-size: 0.95em;
-            margin-bottom: 10px;
-        }
-
-        .sidebar hr {
-            border-color: #333;
-            margin: 15px 0;
-        }
-
-        .session-info {
-            font-size: 0.8em;
-            color: #888;
-        }
-
-        .input-footer {
-            grid-column: 1 / -1;
-            background: #16213e;
-            padding: 12px 20px;
-            border-top: 1px solid #333;
-            display: flex;
-            gap: 10px;
-        }
-
-        #input {
-            flex: 1;
-            padding: 10px 14px;
-            background: #0f3460;
-            color: #eee;
-            border: 1px solid #333;
-            border-radius: 8px;
-            font-size: 0.95em;
-        }
-
-        #input:focus {
-            outline: none;
-            border-color: #4fc3f7;
-        }
-
-        #send {
-            padding: 10px 20px;
-            background: #4fc3f7;
-            color: #1a1a2e;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 500;
-        }
-
-        #send:hover {
-            background: #29b6f6;
-        }
-
-        /* Content sections */
-        .content-section {
-            margin: 12px 0;
-            padding: 15px;
-            background: #0f3460;
-            border-radius: 8px;
-            border: 1px solid #1e3a5f;
-        }
-
-        .content-section.markdown {
-            line-height: 1.6;
-        }
-
-        .content-section.markdown h1 { font-size: 1.4em; margin: 10px 0; color: #4fc3f7; }
-        .content-section.markdown h2 { font-size: 1.2em; margin: 8px 0; color: #81d4fa; }
-        .content-section.markdown h3 { font-size: 1.1em; margin: 6px 0; }
-        .content-section.markdown p { margin: 8px 0; }
-        .content-section.markdown ul, .content-section.markdown ol { margin: 8px 0; padding-left: 20px; }
-        .content-section.markdown code {
-            background: #1e1e1e;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: 'Fira Code', monospace;
-        }
-        .content-section.markdown pre {
-            background: #1e1e1e;
-            padding: 12px;
-            border-radius: 8px;
-            overflow-x: auto;
-            margin: 10px 0;
-        }
-        .content-section.markdown pre code {
-            padding: 0;
-        }
-
-        .content-section.code {
-            background: #1e1e1e;
-            font-family: 'Fira Code', monospace;
-            overflow-x: auto;
-        }
-
-        .content-section.code pre {
-            margin: 0;
-        }
-
-        .content-section.table table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .content-section.table th {
-            background: #1e3a5f;
-            padding: 8px;
-            text-align: left;
-            border-bottom: 2px solid #4fc3f7;
-        }
-
-        .content-section.table td {
-            padding: 8px;
-            border-bottom: 1px solid #333;
-        }
-
-        .content-section.html {
-            /* Raw HTML styling */
-        }
-
-        /* Interactive components */
-        .interactive-component {
-            margin: 12px 0;
-            padding: 12px;
-            background: #16213e;
-            border-radius: 8px;
-            border: 1px solid #4fc3f7;
-        }
-
-        .interactive-component button {
-            padding: 8px 16px;
-            background: #4fc3f7;
-            color: #1a1a2e;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: 500;
-        }
-
-        .interactive-component button:hover {
-            background: #29b6f6;
-        }
-
-        .interactive-component input[type="text"],
-        .interactive-component input[type="number"],
-        .interactive-component select {
-            padding: 8px;
-            background: #0f3460;
-            color: #eee;
-            border: 1px solid #333;
-            border-radius: 4px;
-        }
-
-        .interactive-component form {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .interactive-component .form-field {
+        /* ===== Left Sidebar ===== */
+        .left-sidebar {
+            width: 260px;
+            min-width: 260px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-secondary);
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            transition: transform 0.3s ease, width 0.3s ease, min-width 0.3s ease;
+            z-index: 100;
         }
 
-        .interactive-component .form-field label {
-            font-size: 0.85em;
-            color: #81d4fa;
+        .left-sidebar.collapsed {
+            transform: translateX(-260px);
+            width: 0;
+            min-width: 0;
         }
 
-        .interactive-component .prompt-text {
-            margin-bottom: 10px;
-            color: #eee;
-            font-size: 0.95em;
+        .sidebar-header {
+            padding: 12px;
         }
 
-        /* Button styles */
-        .interactive-component button.primary { background: #4fc3f7; color: #1a1a2e; }
-        .interactive-component button.success { background: #4caf50; color: #fff; }
-        .interactive-component button.warning { background: #ff9800; color: #fff; }
-        .interactive-component button.danger { background: #f44336; color: #fff; }
-
-        /* Slider */
-        .slider-container {
+        .new-chat-btn {
+            width: 100%;
+            padding: 12px 16px;
+            background: transparent;
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
+            transition: background 0.2s;
         }
 
-        .slider-input {
-            width: 150px;
-            accent-color: #4fc3f7;
+        .new-chat-btn:hover {
+            background: var(--bg-hover);
         }
 
-        .slider-value {
-            background: #0f3460;
-            padding: 4px 8px;
+        .chat-history {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .history-item {
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            transition: background 0.2s;
+        }
+
+        .history-item:hover {
+            background: var(--bg-hover);
+        }
+
+        .history-item.active {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .sidebar-footer {
+            padding: 12px;
+            border-top: 1px solid var(--border-secondary);
+        }
+
+        .sidebar-footer h4 {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .fork-tree {
+            max-height: 150px;
+            overflow-y: auto;
+            font-size: 13px;
+        }
+
+        .fork-item {
+            padding: 6px 8px;
             border-radius: 4px;
-            min-width: 40px;
-            text-align: center;
-        }
-
-        /* Select */
-        .select-container {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .select-input {
-            padding: 8px 12px;
-            background: #0f3460;
-            color: #eee;
-            border: 1px solid #333;
-            border-radius: 4px;
-            min-width: 120px;
-        }
-
-        /* Checkbox */
-        .checkbox-container {
+            margin-bottom: 4px;
             display: flex;
             align-items: center;
             gap: 8px;
         }
 
-        .checkbox-container input[type="checkbox"] {
-            accent-color: #4fc3f7;
-            width: 18px;
-            height: 18px;
-        }
+        .fork-item.running { color: #f59e0b; }
+        .fork-item.complete { color: var(--accent-primary); }
+        .fork-item.error { color: #ef4444; }
 
-        .history-item {
-            font-size: 0.75em;
-            color: #666;
-            margin: 5px 0;
-            padding: 4px;
-            background: #0f3460;
-            border-radius: 4px;
-        }
-
-        .fork-item {
-            padding: 4px 0;
-            font-size: 0.78em;
-            border-left: 2px solid #444;
-            margin: 4px 0 4px 4px;
-            padding-left: 8px;
-        }
-        .fork-item.running { border-left-color: #ffa500; }
-        .fork-item.complete { border-left-color: #00ff88; }
-        .fork-item.error { border-left-color: #ff4444; }
-        .fork-item .fork-task {
-            color: #aaa;
+        .fork-task {
+            flex: 1;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        .fork-item .fork-status {
-            font-size: 0.85em;
-            color: #666;
+
+        /* ===== Main Container ===== */
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
         }
 
-        .empty-state {
+        /* ===== Header ===== */
+        .header {
+            height: 56px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            border-bottom: 1px solid var(--border-secondary);
+        }
+
+        .toggle-sidebar-btn {
+            width: 36px;
+            height: 36px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+
+        .toggle-sidebar-btn:hover {
+            background: var(--bg-hover);
+        }
+
+        .header-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .model-select {
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .status-pill {
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 12px;
+        }
+
+        .status-pill.connected {
+            background: rgba(16, 163, 127, 0.2);
+            color: var(--accent-primary);
+        }
+
+        .status-pill.disconnected {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .header-right {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* ===== Chat Area ===== */
+        .chat-area {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            padding-bottom: 100px;
+        }
+
+        .chat-content {
+            width: 100%;
+            max-width: 768px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* ===== Welcome Screen ===== */
+        .welcome-screen {
             text-align: center;
-            color: #666;
-            padding: 40px;
+            padding: 80px 20px;
         }
 
-        .empty-state p {
-            margin: 10px 0;
+        .welcome-screen h1 {
+            font-size: 32px;
+            margin-bottom: 16px;
+        }
+
+        .welcome-screen p {
+            color: var(--text-secondary);
+            font-size: 18px;
+        }
+
+        .suggestion-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 40px;
+        }
+
+        .chip {
+            padding: 12px 20px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: 16px;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .chip:hover {
+            background: var(--bg-hover);
+        }
+
+        /* ===== Messages ===== */
+        .message {
+            display: flex;
+            gap: 16px;
+            padding: 24px 0;
+            border-bottom: 1px solid var(--border-secondary);
+        }
+
+        .message-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 6px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .message.user .message-avatar {
+            background: var(--accent-user);
+        }
+
+        .message.assistant .message-avatar {
+            background: var(--accent-primary);
+        }
+
+        .message-content {
+            flex: 1;
+            line-height: 1.75;
+            font-size: 16px;
+            min-width: 0;
+        }
+
+        .message-content p { margin: 8px 0; }
+        .message-content h1 { font-size: 1.4em; margin: 16px 0 8px; }
+        .message-content h2 { font-size: 1.2em; margin: 12px 0 8px; }
+        .message-content h3 { font-size: 1.1em; margin: 8px 0; }
+        .message-content ul, .message-content ol { margin: 8px 0; padding-left: 24px; }
+        .message-content li { margin: 4px 0; }
+
+        .message-content code {
+            background: var(--bg-tertiary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Fira Code', 'SF Mono', monospace;
+            font-size: 14px;
+        }
+
+        .message-content pre {
+            background: var(--bg-secondary);
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 12px 0;
+        }
+
+        .message-content pre code {
+            background: transparent;
+            padding: 0;
+        }
+
+        .message-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+        }
+
+        .message-content th {
+            background: var(--bg-tertiary);
+            padding: 10px;
+            text-align: left;
+            border-bottom: 2px solid var(--accent-primary);
+        }
+
+        .message-content td {
+            padding: 10px;
+            border-bottom: 1px solid var(--border-secondary);
+        }
+
+        /* ===== Interactive Components (inline) ===== */
+        .interactive-inline {
+            margin: 16px 0;
+            padding: 16px;
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            border: 1px solid var(--border-primary);
+        }
+
+        .interactive-inline .prompt-text {
+            margin-bottom: 12px;
+            color: var(--text-secondary);
+        }
+
+        .interactive-inline button {
+            padding: 10px 20px;
+            background: var(--accent-primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: opacity 0.2s;
+        }
+
+        .interactive-inline button:hover {
+            opacity: 0.9;
+        }
+
+        .interactive-inline button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .interactive-inline .form-inline {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .interactive-inline .form-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .interactive-inline .form-field label {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .interactive-inline input[type="text"],
+        .interactive-inline input[type="number"],
+        .interactive-inline select {
+            padding: 10px 14px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .interactive-inline input:focus,
+        .interactive-inline select:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+
+        /* ===== Input Area ===== */
+        .input-area {
+            position: fixed;
+            bottom: 0;
+            left: 260px;
+            right: 0;
+            padding: 16px 20px 24px;
+            background: linear-gradient(to top, var(--bg-primary) 80%, transparent);
+            display: flex;
+            justify-content: center;
+            transition: left 0.3s ease;
+        }
+
+        .left-sidebar.collapsed ~ .main-container .input-area {
+            left: 0;
+        }
+
+        .input-container {
+            width: 100%;
+            max-width: 768px;
+            background: var(--bg-tertiary);
+            border-radius: 24px;
+            border: 1px solid var(--border-primary);
+            display: flex;
+            align-items: flex-end;
+            padding: 12px 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .input-container textarea {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-size: 16px;
+            resize: none;
+            max-height: 200px;
+            line-height: 1.5;
+            outline: none;
+        }
+
+        .input-container textarea::placeholder {
+            color: var(--text-muted);
+        }
+
+        .send-btn {
+            width: 36px;
+            height: 36px;
+            background: var(--accent-primary);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.2s;
+        }
+
+        .send-btn:hover {
+            opacity: 0.9;
+        }
+
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* ===== Error Message ===== */
+        .error-message {
+            padding: 12px 16px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 8px;
+            color: #ef4444;
+            margin: 12px 0;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 768px) {
+            .left-sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                bottom: 0;
+            }
+
+            .input-area {
+                left: 0;
+            }
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
-    <div class="canvas-container">
-        <header>
-            <h1>🎨 AgentCraft Canvas</h1>
-            <span id="status" class="status disconnected">Disconnected</span>
+    <!-- Left Sidebar -->
+    <nav id="left-sidebar" class="left-sidebar">
+        <div class="sidebar-header">
+            <button id="new-chat" class="new-chat-btn">
+                <span>+</span> 新对话
+            </button>
+        </div>
+        <div id="chat-history" class="chat-history"></div>
+        <div class="sidebar-footer">
+            <h4>Fork 任务</h4>
+            <div id="fork-tree" class="fork-tree"></div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Header -->
+        <header class="header">
+            <button id="toggle-sidebar" class="toggle-sidebar-btn">☰</button>
+            <span class="header-title">AgentCraft</span>
+            <div class="header-right">
+                <select id="model-select" class="model-select">
+                    <option value="deepseek-chat">DeepSeek Chat</option>
+                </select>
+                <span id="status" class="status-pill disconnected">未连接</span>
+            </div>
         </header>
 
-        <div id="main-canvas" class="main-canvas">
-            <div class="empty-state">
-                <p>Waiting for agent updates...</p>
-                <p style="font-size: 0.85em;">Connect SSE to receive real-time content</p>
+        <!-- Chat Area -->
+        <main id="chat-area" class="chat-area">
+            <div id="welcome-screen" class="welcome-screen">
+                <h1>Hello!</h1>
+                <p>有什么可以帮助你的?</p>
+                <div class="suggestion-chips">
+                    <button class="chip" data-prompt="帮我写一段 Python 代码">写代码</button>
+                    <button class="chip" data-prompt="解释一下什么是机器学习">解释概念</button>
+                    <button class="chip" data-prompt="帮我分析这个问题">分析问题</button>
+                </div>
             </div>
-        </div>
+            <div class="chat-content" id="chat-content"></div>
+        </main>
 
-        <div id="sidebar" class="sidebar">
-            <h3>Session</h3>
-            <p id="session-info" class="session-info">No session</p>
-            <hr>
-            <h3>Fork Tree</h3>
-            <div id="fork-tree" style="max-height: 200px; overflow-y: auto; font-size: 0.85em;"></div>
-            <hr>
-            <h3>History</h3>
-            <div id="history"></div>
-        </div>
-
-        <div class="input-footer">
-            <input type="text" id="input" placeholder="Send message to agent...">
-            <button id="send">Send</button>
-        </div>
+        <!-- Input Area -->
+        <footer class="input-area">
+            <div class="input-container">
+                <textarea id="input" placeholder="发送消息..." rows="1"></textarea>
+                <button id="send" class="send-btn">➤</button>
+            </div>
+        </footer>
     </div>
 
     <script>
@@ -366,34 +567,38 @@
         const API_BASE = '/canvas';
         let sessionId = null;
         let eventSource = null;
+        let sidebarCollapsed = false;
+        let chatHistory = [];
+        let currentChatId = null;
+        let lastAssistantMessageId = null;
 
         // ===== Initialization =====
         async function init() {
-            // Get or create session with canvas skill
+            setupEventListeners();
+            createNewChat();
+            await createSession();
+        }
+
+        async function createSession() {
             try {
                 const resp = await fetch('/v1/sessions', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        name: `canvas-${Date.now()}`,
+                        name: `chat-${Date.now()}`,
                         model: 'deepseek-chat',
-                        skills: 'canvas-interactive'  // Enable canvas skill
+                        skills: 'canvas-interactive'
                     })
                 });
 
-                if (!resp.ok) {
-                    throw new Error('Failed to create session');
-                }
+                if (!resp.ok) throw new Error('Failed to create session');
 
                 const data = await resp.json();
                 sessionId = data.id || data.session_id;
-                document.getElementById('session-info').textContent = `Session: ${sessionId}`;
-
-                // Connect SSE
                 connectSSE();
             } catch (e) {
                 console.error('Init error:', e);
-                document.getElementById('session-info').textContent = 'Error: ' + e.message;
+                showStatus('连接失败', false);
             }
         }
 
@@ -404,263 +609,216 @@
             eventSource = new EventSource(`${API_BASE}/stream/${sessionId}`);
 
             eventSource.onopen = () => {
-                console.log('SSE connected');
-                document.getElementById('status').textContent = 'Connected';
-                document.getElementById('status').className = 'status connected';
-                clearEmptyState();
+                showStatus('已连接', true);
             };
 
-            eventSource.onerror = (e) => {
-                console.error('SSE error:', e);
-                document.getElementById('status').textContent = 'Disconnected';
-                document.getElementById('status').className = 'status disconnected';
-
-                // Reconnect after 3s
-                setTimeout(() => {
-                    if (sessionId) {
-                        console.log('Reconnecting...');
-                        connectSSE();
-                    }
-                }, 3000);
+            eventSource.onerror = () => {
+                showStatus('未连接', false);
+                setTimeout(() => { if (sessionId) connectSSE(); }, 3000);
             };
 
-            eventSource.addEventListener('connected', (event) => {
-                console.log('Connected event:', event.data);
+            eventSource.addEventListener('connected', () => {
+                showStatus('已连接', true);
             });
 
             eventSource.addEventListener('canvas_update', (event) => {
-                const data = JSON.parse(event.data);
-                handleCanvasUpdate(data);
+                handleCanvasUpdate(JSON.parse(event.data));
             });
 
             eventSource.addEventListener('canvas_interact', (event) => {
-                const data = JSON.parse(event.data);
-                handleInteractiveComponent(data);
+                handleInteractiveComponent(JSON.parse(event.data));
             });
 
             eventSource.addEventListener('fork_event', (event) => {
-                const data = JSON.parse(event.data);
-                handleForkEvent(data);
+                handleForkEvent(JSON.parse(event.data));
             });
 
-            eventSource.addEventListener('heartbeat', () => {
-                // Keep alive, no action needed
+            eventSource.addEventListener('heartbeat', () => {});
+        }
+
+        // ===== Status =====
+        function showStatus(text, connected) {
+            const status = document.getElementById('status');
+            status.textContent = text;
+            status.className = `status-pill ${connected ? 'connected' : 'disconnected'}`;
+        }
+
+        // ===== Sidebar =====
+        function toggleSidebar() {
+            const sidebar = document.getElementById('left-sidebar');
+            sidebar.classList.toggle('collapsed');
+            sidebarCollapsed = sidebar.classList.contains('collapsed');
+        }
+
+        // ===== Chat Management =====
+        function createNewChat() {
+            currentChatId = `chat-${Date.now()}`;
+            chatHistory.push({
+                id: currentChatId,
+                title: '新对话',
+                messages: []
+            });
+            clearChatContent();
+            showWelcomeScreen();
+            updateHistorySidebar();
+        }
+
+        function clearChatContent() {
+            document.getElementById('chat-content').innerHTML = '';
+            lastAssistantMessageId = null;
+        }
+
+        function showWelcomeScreen() {
+            document.getElementById('welcome-screen').style.display = 'block';
+        }
+
+        function hideWelcomeScreen() {
+            document.getElementById('welcome-screen').style.display = 'none';
+        }
+
+        function updateHistorySidebar() {
+            const container = document.getElementById('chat-history');
+            container.innerHTML = chatHistory.map(chat => `
+                <div class="history-item ${chat.id === currentChatId ? 'active' : ''}" data-id="${chat.id}">
+                    ${chat.title}
+                </div>
+            `).join('');
+
+            container.querySelectorAll('.history-item').forEach(item => {
+                item.onclick = () => loadChat(item.dataset.id);
             });
         }
 
-        // ===== Clear Empty State =====
-        function clearEmptyState() {
-            const main = document.getElementById('main-canvas');
-            const empty = main.querySelector('.empty-state');
-            if (empty) empty.remove();
+        function loadChat(chatId) {
+            const chat = chatHistory.find(c => c.id === chatId);
+            if (!chat) return;
+            currentChatId = chatId;
+            clearChatContent();
+            hideWelcomeScreen();
+            chat.messages.forEach(msg => {
+                addMessage(msg.role, msg.content, { skipHistory: true });
+            });
+            updateHistorySidebar();
+        }
+
+        // ===== Messages =====
+        function addMessage(role, content, options = {}) {
+            hideWelcomeScreen();
+            const contentDiv = document.getElementById('chat-content');
+            const msgId = options.id || `msg-${Date.now()}`;
+
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            div.id = msgId;
+
+            const avatar = role === 'user' ? '👤' : '🤖';
+            const rendered = role === 'user' ? escapeHtml(content) : marked.parse(content);
+
+            div.innerHTML = `
+                <div class="message-avatar">${avatar}</div>
+                <div class="message-content">${rendered}</div>
+            `;
+
+            contentDiv.appendChild(div);
+            scrollToBottom();
+
+            if (!options.skipHistory) {
+                const chat = chatHistory.find(c => c.id === currentChatId);
+                if (chat) {
+                    chat.messages.push({ role, content });
+                    if (role === 'user' && chat.title === '新对话') {
+                        chat.title = content.substring(0, 30) + (content.length > 30 ? '...' : '');
+                        updateHistorySidebar();
+                    }
+                }
+            }
+
+            return div;
+        }
+
+        function getOrCreateLastAssistantMessage() {
+            if (lastAssistantMessageId) {
+                const existing = document.getElementById(lastAssistantMessageId);
+                if (existing) return existing;
+            }
+            const msg = addMessage('assistant', '', { id: `msg-${Date.now()}` });
+            lastAssistantMessageId = msg.id;
+            return msg;
+        }
+
+        function appendToMessage(msgDiv, content, mode) {
+            const contentEl = msgDiv.querySelector('.message-content');
+            if (mode === 'markdown') {
+                contentEl.innerHTML += marked.parse(content);
+            } else if (mode === 'code') {
+                const pre = document.createElement('pre');
+                pre.innerHTML = `<code>${escapeHtml(content)}</code>`;
+                contentEl.appendChild(pre);
+            } else {
+                contentEl.innerHTML += content;
+            }
+            scrollToBottom();
+        }
+
+        function addError(text) {
+            const contentDiv = document.getElementById('chat-content');
+            const div = document.createElement('div');
+            div.className = 'error-message';
+            div.textContent = text;
+            contentDiv.appendChild(div);
+            scrollToBottom();
         }
 
         // ===== Canvas Update Handler =====
         function handleCanvasUpdate(data) {
+            const { mode, content, section, action } = data;
             console.log('Canvas update:', data);
 
-            const { mode, content, section, action } = data;
+            if (section === 'sidebar') return; // Ignore sidebar content
 
-            const targetArea = section === 'sidebar'
-                ? document.getElementById('sidebar')
-                : document.getElementById('main-canvas');
+            hideWelcomeScreen();
 
-            // Handle clear action
             if (action === 'clear') {
-                const sections = targetArea.querySelectorAll('.content-section');
-                sections.forEach(s => s.remove());
+                clearChatContent();
                 return;
             }
 
-            // Create content section with canvas indicator
-            const div = document.createElement('div');
-            div.className = `content-section ${mode}`;
-            div.id = `section-${Date.now()}`;
-            div.innerHTML = `<div style="color: #666; font-size: 0.85em; margin-bottom: 8px;">🎨 Canvas (${mode})</div>`;
-
-            // Render content based on mode
-            switch (mode) {
-                case 'markdown':
-                    div.innerHTML += marked.parse(content);
-                    break;
-                case 'html':
-                    div.innerHTML += content;
-                    break;
-                case 'code':
-                    const pre = document.createElement('pre');
-                    const codeEl = document.createElement('code');
-                    codeEl.textContent = content;
-                    pre.appendChild(codeEl);
-                    div.appendChild(pre);
-                    break;
-                case 'table':
-                    div.innerHTML += renderTable(content);
-                    break;
-                default:
-                    div.innerHTML += content;
-            }
-
-            // Apply action
-            if (action === 'replace') {
-                const sections = targetArea.querySelectorAll('.content-section');
-                if (sections.length > 0) {
-                    sections[sections.length - 1].replaceWith(div);
-                } else {
-                    targetArea.appendChild(div);
-                }
-            } else {
-                // append
-                targetArea.appendChild(div);
-            }
-
-            // Auto-scroll
-            targetArea.scrollTop = targetArea.scrollHeight;
-
-            // Add to history
-            addToHistory(data);
+            // Route to message bubble
+            const msgDiv = getOrCreateLastAssistantMessage();
+            appendToMessage(msgDiv, content, mode);
         }
 
-        // ===== Render Table =====
-        function renderTable(content) {
-            try {
-                const data = JSON.parse(content);
-                if (Array.isArray(data) && data.length > 0) {
-                    let html = '<table>';
-                    // Header
-                    html += '<thead><tr>';
-                    Object.keys(data[0]).forEach(key => {
-                        html += `<th>${key}</th>`;
-                    });
-                    html += '</tr></thead>';
-                    // Body
-                    html += '<tbody>';
-                    data.forEach(row => {
-                        html += '<tr>';
-                        Object.values(row).forEach(val => {
-                            html += `<td>${val}</td>`;
-                        });
-                        html += '</tr>';
-                    });
-                    html += '</tbody></table>';
-                    return html;
-                }
-            } catch (e) {
-                // Not valid JSON, show as text
-            }
-            return `<pre>${content}</pre>`;
-        }
-
-        // ===== Add to History =====
-        function addToHistory(data) {
-            const history = document.getElementById('history');
-            const item = document.createElement('div');
-            item.className = 'history-item';
-            const preview = data.content?.substring(0, 40) || data.component_type;
-            item.textContent = `${data.mode || data.type}: ${preview}`;
-            history.appendChild(item);
-        }
-
-        // ===== Handle Fork Event =====
-        const forkEvents = [];  // Track fork events for tree display
-
-        function handleForkEvent(data) {
-            console.log('Fork event:', data);
-            const { event_type, task, child_session_id, result, error } = data;
-
-            const forkTree = document.getElementById('fork-tree');
-            const eventId = `fork-${data.id}`;
-
-            if (event_type === 'fork_start') {
-                // Add new fork item
-                forkEvents.push({ id: eventId, task, status: 'running' });
-                const div = document.createElement('div');
-                div.className = 'fork-item running';
-                div.id = eventId;
-                div.innerHTML = `
-                    <div class="fork-task" title="${escapeHtml(task || '')}">🔀 ${escapeHtml(task || 'Unknown task')}</div>
-                    <div class="fork-status">⏳ Running...</div>
-                `;
-                forkTree.appendChild(div);
-            } else if (event_type === 'fork_complete') {
-                // Update fork item to complete
-                const existing = forkEvents.find(f => f.task === task && f.status === 'running');
-                if (existing) {
-                    existing.status = 'complete';
-                    const el = document.getElementById(existing.id);
-                    if (el) {
-                        el.className = 'fork-item complete';
-                        el.querySelector('.fork-status').textContent = '✅ Completed';
-                        if (result) {
-                            el.title = `Result: ${escapeHtml(result.substring(0, 200))}`;
-                        }
-                    }
-                }
-            } else if (event_type === 'fork_error') {
-                // Update fork item to error
-                const existing = forkEvents.find(f => f.task === task && f.status === 'running');
-                if (existing) {
-                    existing.status = 'error';
-                    const el = document.getElementById(existing.id);
-                    if (el) {
-                        el.className = 'fork-item error';
-                        el.querySelector('.fork-status').textContent = '❌ Error';
-                        if (error) {
-                            el.title = `Error: ${escapeHtml(error.substring(0, 200))}`;
-                        }
-                    }
-                }
-            }
-
-            // Auto-scroll fork tree
-            forkTree.scrollTop = forkTree.scrollHeight;
-        }
-
-        function escapeHtml(str) {
-            const div = document.createElement('div');
-            div.textContent = str;
-            return div.innerHTML;
-        }
-
-        // ===== Handle Interactive Component =====
+        // ===== Interactive Component =====
         function handleInteractiveComponent(data) {
             console.log('Interactive component:', data);
-
-            clearEmptyState();
+            hideWelcomeScreen();
 
             const { component_type, id, config, prompt } = data;
+            const msgDiv = getOrCreateLastAssistantMessage();
+            const contentEl = msgDiv.querySelector('.message-content');
 
-            const div = document.createElement('div');
-            div.className = 'interactive-component';
-            div.id = id;
+            const container = document.createElement('div');
+            container.className = 'interactive-inline';
+            container.id = id;
 
-            // Add prompt if provided
             if (prompt) {
                 const promptEl = document.createElement('div');
                 promptEl.className = 'prompt-text';
                 promptEl.innerHTML = marked.parse(prompt);
-                div.appendChild(promptEl);
+                container.appendChild(promptEl);
             }
 
-            // Create component based on type
             switch (component_type) {
                 case 'button':
                     const btn = document.createElement('button');
-                    btn.textContent = config.label || 'Click';
-                    btn.className = config.style || 'primary';
+                    btn.textContent = config.label || '确认';
                     btn.onclick = () => handleInteraction(id, 'click', { label: config.label });
-                    div.appendChild(btn);
+                    container.appendChild(btn);
                     break;
 
                 case 'form':
-                    const form = document.createElement('form');
-                    form.onsubmit = (e) => {
-                        e.preventDefault();
-                        const formData = {};
-                        form.querySelectorAll('input, select').forEach(input => {
-                            formData[input.name] = input.value;
-                        });
-                        handleInteraction(id, 'submit', formData);
-                    };
+                    const form = document.createElement('div');
+                    form.className = 'form-inline';
                     (config.fields || []).forEach(field => {
                         const fieldDiv = document.createElement('div');
                         fieldDiv.className = 'form-field';
@@ -678,45 +836,27 @@
                         form.appendChild(fieldDiv);
                     });
                     const submitBtn = document.createElement('button');
-                    submitBtn.textContent = config.submit_label || 'Submit';
-                    submitBtn.className = 'primary';
+                    submitBtn.textContent = config.submit_label || '提交';
+                    submitBtn.onclick = () => {
+                        const formData = {};
+                        form.querySelectorAll('input, select').forEach(input => {
+                            formData[input.name] = input.value;
+                        });
+                        handleInteraction(id, 'submit', formData);
+                    };
                     form.appendChild(submitBtn);
-                    div.appendChild(form);
-                    break;
-
-                case 'slider':
-                    const sliderDiv = document.createElement('div');
-                    sliderDiv.className = 'slider-container';
-                    const slider = document.createElement('input');
-                    slider.type = 'range';
-                    slider.min = config.min || 0;
-                    slider.max = config.max || 100;
-                    slider.value = config.default || 50;
-                    slider.className = 'slider-input';
-                    slider.onchange = () => handleInteraction(id, 'change', { value: slider.value });
-                    const sliderLabel = document.createElement('span');
-                    sliderLabel.className = 'slider-label';
-                    sliderLabel.textContent = config.label || '';
-                    const sliderValue = document.createElement('span');
-                    sliderValue.className = 'slider-value';
-                    sliderValue.textContent = slider.value;
-                    slider.oninput = () => sliderValue.textContent = slider.value;
-                    sliderDiv.appendChild(sliderLabel);
-                    sliderDiv.appendChild(slider);
-                    sliderDiv.appendChild(sliderValue);
-                    div.appendChild(sliderDiv);
+                    container.appendChild(form);
                     break;
 
                 case 'select':
                     const selectDiv = document.createElement('div');
-                    selectDiv.className = 'select-container';
+                    selectDiv.className = 'form-field';
                     if (config.label) {
-                        const selectLabel = document.createElement('label');
-                        selectLabel.textContent = config.label;
-                        selectDiv.appendChild(selectLabel);
+                        const label = document.createElement('label');
+                        label.textContent = config.label;
+                        selectDiv.appendChild(label);
                     }
                     const select = document.createElement('select');
-                    select.className = 'select-input';
                     (config.options || []).forEach(opt => {
                         const option = document.createElement('option');
                         option.value = opt.value;
@@ -725,47 +865,69 @@
                     });
                     select.onchange = () => handleInteraction(id, 'select', { value: select.value });
                     selectDiv.appendChild(select);
-                    div.appendChild(selectDiv);
+                    container.appendChild(selectDiv);
                     break;
 
                 case 'checkbox':
                     const checkDiv = document.createElement('div');
-                    checkDiv.className = 'checkbox-container';
+                    checkDiv.className = 'form-inline';
                     const checkbox = document.createElement('input');
                     checkbox.type = 'checkbox';
-                    checkbox.id = `${id}-check`;
                     checkbox.checked = config.checked || false;
                     checkbox.onchange = () => handleInteraction(id, 'change', { checked: checkbox.checked });
                     const checkLabel = document.createElement('label');
                     checkLabel.textContent = config.label || '';
-                    checkLabel.htmlFor = checkbox.id;
+                    checkLabel.style.marginLeft = '8px';
                     checkDiv.appendChild(checkbox);
                     checkDiv.appendChild(checkLabel);
-                    div.appendChild(checkDiv);
+                    container.appendChild(checkDiv);
                     break;
             }
 
-            document.getElementById('main-canvas').appendChild(div);
-            addToHistory(data);
+            contentEl.appendChild(container);
+            scrollToBottom();
         }
 
-        // ===== Handle Interaction (send event back) =====
+        // ===== Fork Event =====
+        function handleForkEvent(data) {
+            console.log('Fork event:', data);
+            const { event_type, task, result, error } = data;
+            const forkTree = document.getElementById('fork-tree');
+
+            if (event_type === 'fork_start') {
+                const div = document.createElement('div');
+                div.className = 'fork-item running';
+                div.id = `fork-${data.id}`;
+                div.innerHTML = `<span class="fork-task">${escapeHtml(task || '任务')}</span><span>⏳</span>`;
+                forkTree.appendChild(div);
+            } else if (event_type === 'fork_complete') {
+                const el = document.getElementById(`fork-${data.id}`);
+                if (el) {
+                    el.className = 'fork-item complete';
+                    el.querySelector('span:last-child').textContent = '✓';
+                }
+            } else if (event_type === 'fork_error') {
+                const el = document.getElementById(`fork-${data.id}`);
+                if (el) {
+                    el.className = 'fork-item error';
+                    el.querySelector('span:last-child').textContent = '✗';
+                }
+            }
+
+            forkTree.scrollTop = forkTree.scrollHeight;
+        }
+
+        // ===== Interaction Handler =====
         async function handleInteraction(componentId, eventType, eventData) {
             console.log('Interaction:', componentId, eventType, eventData);
 
-            // Disable component temporarily
             const component = document.getElementById(componentId);
             if (component) {
-                component.style.opacity = '0.7';
-                component.style.pointerEvents = 'none';
+                component.querySelectorAll('button').forEach(b => b.disabled = true);
             }
 
-            // Add user interaction message to canvas
-            addUserMessage(`[Interaction] ${eventType}: ${JSON.stringify(eventData)}`);
-
             try {
-                // Send event to backend
-                const resp = await fetch(`/canvas/event/${sessionId}`, {
+                await fetch(`/canvas/event/${sessionId}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -775,11 +937,6 @@
                     })
                 });
 
-                if (!resp.ok) {
-                    throw new Error('Event send failed');
-                }
-
-                // Now trigger a new agent request with the interaction as context
                 await fetch('/v1/chat/completions', {
                     method: 'POST',
                     headers: {
@@ -790,21 +947,14 @@
                         model: 'deepseek-chat',
                         messages: [{
                             role: 'user',
-                            content: `用户通过交互组件 ${componentId} 触发了 ${eventType} 事件，数据: ${JSON.stringify(eventData)}`
+                            content: `用户通过组件 ${componentId} 触发了 ${eventType} 事件，数据: ${JSON.stringify(eventData)}`
                         }]
                     })
                 });
-
-                // Re-enable component
-                if (component) {
-                    component.style.opacity = '1';
-                    component.style.pointerEvents = 'auto';
-                }
             } catch (e) {
                 console.error('Interaction error:', e);
                 if (component) {
-                    component.style.opacity = '1';
-                    component.style.pointerEvents = 'auto';
+                    component.querySelectorAll('button').forEach(b => b.disabled = false);
                 }
             }
         }
@@ -816,12 +966,11 @@
             if (!text || !sessionId) return;
 
             input.value = '';
+            input.style.height = 'auto';
 
-            // Show user message in canvas
-            addUserMessage(text);
+            addMessage('user', text);
 
             try {
-                // Call gateway chat API
                 const resp = await fetch('/v1/chat/completions', {
                     method: 'POST',
                     headers: {
@@ -829,64 +978,66 @@
                         'X-Session-Id': sessionId
                     },
                     body: JSON.stringify({
-                        model: 'deepseek-chat',
+                        model: document.getElementById('model-select').value,
                         messages: [{ role: 'user', content: text }]
                     })
                 });
 
-                if (!resp.ok) {
-                    throw new Error('Request failed: ' + resp.status);
-                }
+                if (!resp.ok) throw new Error('Request failed');
 
                 const data = await resp.json();
-                const assistantReply = data.choices?.[0]?.message?.content;
-
-                // Show assistant text reply if present
-                if (assistantReply) {
-                    addAssistantMessage(assistantReply);
+                const reply = data.choices?.[0]?.message?.content;
+                if (reply) {
+                    addMessage('assistant', reply);
                 }
-
-                console.log('Message sent');
             } catch (e) {
                 console.error('Send error:', e);
-                addErrorMessage(e.message);
+                addError(e.message);
             }
         }
 
-        // ===== Add User Message =====
-        function addUserMessage(text) {
-            clearEmptyState();
+        // ===== Utilities =====
+        function escapeHtml(str) {
             const div = document.createElement('div');
-            div.className = 'content-section markdown';
-            div.style.background = '#1e3a5f';
-            div.innerHTML = `<div style="color: #81d4fa; font-weight: 500; margin-bottom: 8px;">👤 You:</div>${marked.parse(text)}`;
-            document.getElementById('main-canvas').appendChild(div);
-            document.getElementById('main-canvas').scrollTop = document.getElementById('main-canvas').scrollHeight;
+            div.textContent = str;
+            return div.innerHTML;
         }
 
-        // ===== Add Assistant Message =====
-        function addAssistantMessage(text) {
-            const div = document.createElement('div');
-            div.className = 'content-section markdown';
-            div.innerHTML = `<div style="color: #4fc3f7; font-weight: 500; margin-bottom: 8px;">🤖 Agent:</div>${marked.parse(text)}`;
-            document.getElementById('main-canvas').appendChild(div);
-            document.getElementById('main-canvas').scrollTop = document.getElementById('main-canvas').scrollHeight;
-        }
-
-        // ===== Add Error Message =====
-        function addErrorMessage(text) {
-            const div = document.createElement('div');
-            div.className = 'content-section markdown';
-            div.style.background = '#3e1e1e';
-            div.innerHTML = `<div style="color: #f44; font-weight: 500;">❌ Error:</div>${text}`;
-            document.getElementById('main-canvas').appendChild(div);
+        function scrollToBottom() {
+            const chatArea = document.getElementById('chat-area');
+            chatArea.scrollTop = chatArea.scrollHeight;
         }
 
         // ===== Event Listeners =====
-        document.getElementById('send').onclick = sendMessage;
-        document.getElementById('input').onkeypress = (e) => {
-            if (e.key === 'Enter') sendMessage();
-        };
+        function setupEventListeners() {
+            document.getElementById('toggle-sidebar').onclick = toggleSidebar;
+            document.getElementById('new-chat').onclick = createNewChat;
+            document.getElementById('send').onclick = sendMessage;
+
+            const input = document.getElementById('input');
+            input.onkeydown = (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            };
+
+            input.oninput = () => {
+                input.style.height = 'auto';
+                input.style.height = Math.min(input.scrollHeight, 200) + 'px';
+            };
+
+            // Suggestion chips
+            document.querySelectorAll('.chip').forEach(chip => {
+                chip.onclick = () => {
+                    const prompt = chip.dataset.prompt;
+                    if (prompt) {
+                        input.value = prompt;
+                        sendMessage();
+                    }
+                };
+            });
+        }
 
         // ===== Start =====
         init();

@@ -1,19 +1,142 @@
-INFO:     Started server process [91543]
+INFO:     Started server process [18214]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:54164 - "GET /canvas/stream/b552e631eb12 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54166 - "GET /canvas/stream/b552e631eb12 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54168 - "GET /canvas/stream/b552e631eb12 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54170 - "GET /canvas/stream/b552e631eb12 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54171 - "GET /canvas/stream/b552e631eb12 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54173 - "GET /canvas/stream/b552e631eb12 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54244 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54246 - "GET /openapi.json HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54265 - "POST /v1/sessions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54267 - "GET /canvas/stream/01954f870ece HTTP/1.1" 200 OK
-WARNING:  Invalid HTTP request received.
-INFO:     127.0.0.1:54281 - "POST /test/canvas_push?session_id=01954f870ece&content=TestMessage HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54297 - "GET /canvas/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54299 - "POST /test/canvas_push?session_id=01954f870ece&content=SecondTest HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54311 - "GET /canvas/stream/01954f870ece HTTP/1.1" 200 OK
+[Canvas] No queue for session 962aa02d4e4d
+[Canvas] No queue for session 962aa02d4e4d
+[Canvas] No queue for session 962aa02d4e4d
+[Canvas] No queue for session 962aa02d4e4d
+[Canvas] No queue for session 962aa02d4e4d
+[Canvas] No queue for session 962aa02d4e4d
+[Canvas] No queue for session 962aa02d4e4d
+[Canvas] No queue for session 962aa02d4e4d
+[Canvas] No queue for session 962aa02d4e4d
+INFO:     127.0.0.1:55264 - "POST /v1/chat/completions HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/uvicorn/protocols/http/h11_impl.py", line 415, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self.scope, self.receive, self.send
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/uvicorn/middleware/proxy_headers.py", line 56, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/fastapi/applications.py", line 1159, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/starlette/applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/starlette/middleware/base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "/Users/yiyu/miniconda3/lib/python3.13/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/starlette/middleware/base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/app.py", line 329, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/starlette/middleware/base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/starlette/middleware/base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/starlette/routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/starlette/routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/starlette/routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/fastapi/routing.py", line 134, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/fastapi/routing.py", line 120, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/fastapi/routing.py", line 674, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/fastapi/routing.py", line 328, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/app.py", line 1039, in chat_completions
+    return await _handle_non_streaming(request, client, payload, model, session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/app.py", line 1355, in _handle_non_streaming
+    with mlflow.start_run(run_name=f"gateway-{model}"):
+         ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yiyu/Pyleaf/ollama-mlflow-demo/.venv/lib/python3.13/site-packages/mlflow/tracking/fluent.py", line 543, in start_run
+    raise Exception(
+    ...<5 lines>...
+    )
+Exception: Run with UUID 403644607a094561aa8fc58c99b877d6 is already active. To start a new run, first end the current run with mlflow.end_run(). To start a nested run, call start_run with nested=True
+[Canvas] No queue for session 962aa02d4e4d
+[Canvas] No queue for session 962aa02d4e4d
+[Canvas] No queue for session 962aa02d4e4d
+INFO:     127.0.0.1:55268 - "GET /canvas HTTP/1.1" 200 OK
+[Canvas] No queue for session 962aa02d4e4d
+[Canvas] No queue for session 962aa02d4e4d
+[Canvas] No queue for session 962aa02d4e4d
+[Canvas] No queue for session 962aa02d4e4d
+[Canvas] No queue for session 962aa02d4e4d
+[Canvas] No queue for session 962aa02d4e4d
+[Canvas] No queue for session 962aa02d4e4d
+Task was destroyed but it is pending!
+task: <Task pending name='Task-9' coro=<ToolExecutor._run_unsafe_queue() done, defined at /Users/yiyu/Pyleaf/ollama-mlflow-demo/core/executor.py:201> wait_for=<Future cancelled>>
+Task was destroyed but it is pending!
+task: <Task pending name='Task-10' coro=<ToolExecutor._run_unsafe_queue() done, defined at /Users/yiyu/Pyleaf/ollama-mlflow-demo/core/executor.py:201> wait_for=<Future cancelled>>
+Task was destroyed but it is pending!
+task: <Task pending name='Task-15' coro=<ToolExecutor._run_unsafe_queue() done, defined at /Users/yiyu/Pyleaf/ollama-mlflow-demo/core/executor.py:201> wait_for=<Future cancelled>>
+Task was destroyed but it is pending!
+task: <Task pending name='Task-18' coro=<ToolExecutor._run_unsafe_queue() done, defined at /Users/yiyu/Pyleaf/ollama-mlflow-demo/core/executor.py:201> wait_for=<Future cancelled>>
+Task was destroyed but it is pending!
+task: <Task pending name='Task-20' coro=<ToolExecutor._run_unsafe_queue() done, defined at /Users/yiyu/Pyleaf/ollama-mlflow-demo/core/executor.py:201> wait_for=<Future cancelled>>
+INFO:     127.0.0.1:55281 - "GET /canvas/stream/962aa02d4e4d HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55283 - "GET /canvas/stream/962aa02d4e4d HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55284 - "GET /canvas/stream/cab8317520e1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55286 - "GET /canvas/stream/cab8317520e1 HTTP/1.1" 200 OK
+🏃 View run gateway-deepseek-chat at: http://127.0.0.1:5050/#/experiments/7/runs/403644607a094561aa8fc58c99b877d6
+🧪 View experiment at: http://127.0.0.1:5050/#/experiments/7
+INFO:     127.0.0.1:55258 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Task was destroyed but it is pending!
+task: <Task pending name='Task-37' coro=<ToolExecutor._run_unsafe_queue() done, defined at /Users/yiyu/Pyleaf/ollama-mlflow-demo/core/executor.py:201> wait_for=<Future cancelled>>
+Task was destroyed but it is pending!
+task: <Task pending name='Task-41' coro=<ToolExecutor._run_unsafe_queue() done, defined at /Users/yiyu/Pyleaf/ollama-mlflow-demo/core/executor.py:201> wait_for=<Future cancelled>>
+Task was destroyed but it is pending!
+task: <Task pending name='Task-42' coro=<ToolExecutor._run_unsafe_queue() done, defined at /Users/yiyu/Pyleaf/ollama-mlflow-demo/core/executor.py:201> wait_for=<Future cancelled>>
+Task exception was never retrieved
+future: <Task finished name='Task-42' coro=<ToolExecutor._run_unsafe_queue() done, defined at /Users/yiyu/Pyleaf/ollama-mlflow-demo/core/executor.py:201> exception=RuntimeError('cannot reuse already awaited coroutine')>
+RuntimeError: cannot reuse already awaited coroutine
+Task was destroyed but it is pending!
+task: <Task pending name='Task-43' coro=<ToolExecutor._run_unsafe_queue() done, defined at /Users/yiyu/Pyleaf/ollama-mlflow-demo/core/executor.py:201> wait_for=<Future cancelled>>
+Task exception was never retrieved
+future: <Task finished name='Task-43' coro=<ToolExecutor._run_unsafe_queue() done, defined at /Users/yiyu/Pyleaf/ollama-mlflow-demo/core/executor.py:201> exception=RuntimeError('cannot reuse already awaited coroutine')>
+RuntimeError: cannot reuse already awaited coroutine
+🏃 View run gateway-deepseek-chat at: http://127.0.0.1:5050/#/experiments/7/runs/b5968e2bddd14792838c539a79e9ecc4
+🧪 View experiment at: http://127.0.0.1:5050/#/experiments/7
+INFO:     127.0.0.1:55258 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   Task was destroyed but it is pending!
+task: <Task pending name='Task-1263' coro=<ToolExecutor._run_unsafe_queue() running at /Users/yiyu/Pyleaf/ollama-mlflow-demo/core/executor.py:205> wait_for=<Future pending cb=[Task.task_wakeup()]>>
