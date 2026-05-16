@@ -16,17 +16,34 @@ def create_session(name: str) -> str:
     return data["id"]
 
 def send_message(session_id: str, content: str) -> dict:
-    """Send a message and get full response."""
+    """Send a message and get full response (streaming)."""
     response = httpx.post(
         f"{BASE_URL}/v1/chat/completions",
         headers={"X-Session-Id": session_id},
         json={
             "model": "deepseek-chat",
             "messages": [{"role": "user", "content": content}],
+            "stream": True,
         },
         timeout=120,
     )
-    return response.json()
+    # Parse streaming response
+    full_content = ""
+    for line in response.iter_lines():
+        if line.startswith("data:"):
+            data_str = line[5:].strip()
+            if not data_str:
+                continue
+            try:
+                data = json.loads(data_str)
+                if data.get("text"):
+                    full_content += data["text"]
+                if data.get("finish_reason") == "stop":
+                    break
+            except json.JSONDecodeError:
+                continue
+    # Return in same format for compatibility
+    return {"choices": [{"message": {"content": full_content}}]}
 
 def get_session_messages(session_id: str) -> list:
     """Get session messages."""

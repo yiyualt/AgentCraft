@@ -945,6 +945,7 @@
                     },
                     body: JSON.stringify({
                         model: 'deepseek-chat',
+                        stream: true,
                         messages: [{
                             role: 'user',
                             content: `用户通过组件 ${componentId} 触发了 ${eventType} 事件，数据: ${JSON.stringify(eventData)}`

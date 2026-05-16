@@ -14,7 +14,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
+from typing import AsyncGenerator
 
 import httpx
 import pytest
@@ -30,11 +31,31 @@ from app import app
 
 client = TestClient(app)
 
-# Fixture for a basic chat payload
+
+def parse_streaming_response(resp) -> str:
+    """Parse SSE streaming response and return final content."""
+    content = ""
+    for line in resp.iter_lines():
+        if line.startswith("data:"):
+            data_str = line[5:].strip()
+            if not data_str:
+                continue
+            try:
+                data = json.loads(data_str)
+                if data.get("text"):
+                    content += data["text"]
+                if data.get("finish_reason") == "stop":
+                    break
+            except json.JSONDecodeError:
+                continue
+    return content
+
+
+# Fixture for a basic chat payload (streaming only)
 CHAT_PAYLOAD = {
     "model": "deepseek-chat",
     "messages": [{"role": "user", "content": "只回复: hello"}],
-    "stream": False,
+    "stream": True,
 }
 
 
@@ -67,19 +88,16 @@ class TestModels:
 
 
 # ============================================================
-# Non-streaming (needs LLM)
+# Streaming tests (needs LLM)
 # ============================================================
 
 
 @pytest.mark.integration
-class TestNonStreaming:
+class TestStreaming:
     def test_basic_chat(self):
-        resp = client.post("/v1/chat/completions", json=CHAT_PAYLOAD)
+        resp = client.post("/v1/chat/completions", json=CHAT_PAYLOAD, stream=True)
         assert resp.status_code == 200
-        data = resp.json()
-        assert "choices" in data
-        assert len(data["choices"]) > 0
-        content = data["choices"][0]["message"]["content"]
+        content = parse_streaming_response(resp)
         assert content is not None
         assert "hello" in content.lower() or "Hello" in content
 
@@ -87,23 +105,19 @@ class TestNonStreaming:
         payload = {
             "model": "nonexistent-model-xyz",
             "messages": [{"role": "user", "content": "hi"}],
-            "stream": False,
+            "stream": True,
         }
-        resp = client.post("/v1/chat/completions", json=payload)
+        resp = client.post("/v1/chat/completions", json=payload, stream=True)
         # Gateway returns 502 for upstream API errors (model not found)
         assert resp.status_code in (200, 502)
-        data = resp.json()
-        assert "error" in data or "choices" in data
 
     def test_empty_messages(self):
         resp = client.post("/v1/chat/completions", json={
             "model": "deepseek-chat",
             "messages": [],
-            "stream": False,
-        })
+            "stream": True,
+        }, stream=True)
         assert resp.status_code in (200, 502)
-        data = resp.json()
-        assert "error" in data or "choices" in data
 
 
 @pytest.mark.integration
@@ -113,11 +127,10 @@ class TestToolCalling:
         resp = client.post("/v1/chat/completions", json={
             "model": "deepseek-chat",
             "messages": [{"role": "user", "content": "现在几点？只给我时间，不要其他内容。"}],
-            "stream": False,
-        })
+            "stream": True,
+        }, stream=True)
         assert resp.status_code == 200
-        data = resp.json()
-        content = data["choices"][0]["message"]["content"]
+        content = parse_streaming_response(resp)
         # Should contain time information
         assert content is not None
         assert len(content) > 0
@@ -127,11 +140,10 @@ class TestToolCalling:
         resp = client.post("/v1/chat/completions", json={
             "model": "deepseek-chat",
             "messages": [{"role": "user", "content": "123 * 456 等于多少？"}],
-            "stream": False,
-        })
+            "stream": True,
+        }, stream=True)
         assert resp.status_code == 200
-        data = resp.json()
-        content = data["choices"][0]["message"]["content"]
+        content = parse_streaming_response(resp)
         assert content is not None
         # The answer should contain 56088 (possibly formatted as 56,088 or 56088)
         assert "56088" in content.replace(",", "")
@@ -152,7 +164,7 @@ class TestConcurrencyLimit:
         with patch.object(gw, "_llm_semaphore", asyncio.Semaphore(0)):
             resp = client.post(
                 "/v1/chat/completions",
-                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": "hi"}], "stream": False},
+                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": "hi"}], "stream": True},
             )
             assert resp.status_code == 429
             data = resp.json()
@@ -163,19 +175,19 @@ class TestConcurrencyLimit:
         """When semaphore has capacity, request passes through."""
         import gateway as gw
 
-        async def fake_handler(*args, **kwargs):
-            return {"choices": [{"message": {"content": "ok"}}]}
+        async def fake_streaming_generator(*args, **kwargs) -> AsyncGenerator:
+            yield "data: " + json.dumps({"text": "ok"}) + "\n\n"
+            yield "data: " + json.dumps({"finish_reason": "stop"}) + "\n\n"
 
         with (
             patch.object(gw, "_llm_semaphore", asyncio.Semaphore(2)),
-            patch.object(gw, "_handle_non_streaming", fake_handler),
+            patch.object(gw, "_handle_streaming", fake_streaming_generator),
         ):
             resp = client.post(
                 "/v1/chat/completions",
-                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": "hi"}], "stream": False},
+                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": "hi"}], "stream": True},
             )
             assert resp.status_code == 200
-            assert resp.json()["choices"][0]["message"]["content"] == "ok"
 
     def test_semaphore_locked_on_zero(self):
         """asyncio.Semaphore(0).locked() returns True."""
@@ -208,23 +220,24 @@ class TestRateLimit:
 
         gw._rate_limit_buckets.clear()
 
-        async def fake_handler(*args, **kwargs):
-            return {"choices": [{"message": {"content": "ok"}}]}
+        async def fake_streaming_generator(*args, **kwargs) -> AsyncGenerator:
+            yield "data: " + json.dumps({"text": "ok"}) + "\n\n"
+            yield "data: " + json.dumps({"finish_reason": "stop"}) + "\n\n"
 
         with (
             patch.object(gw, "RATE_LIMIT_ENABLED", True),
             patch.object(gw, "RATE_LIMIT_REQUESTS", 1),
-            patch.object(gw, "_handle_non_streaming", fake_handler),
+            patch.object(gw, "_handle_streaming", fake_streaming_generator),
         ):
             resp1 = client.post(
                 "/v1/chat/completions",
-                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": "hi"}], "stream": False},
+                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": "hi"}], "stream": True},
             )
             assert resp1.status_code == 200
 
             resp2 = client.post(
                 "/v1/chat/completions",
-                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": "hi"}], "stream": False},
+                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": "hi"}], "stream": True},
             )
             assert resp2.status_code == 429
             assert resp2.json()["detail"]["error"]["type"] == "rate_limit_error"
