@@ -27,7 +27,7 @@ from automation import CronStore, CronScheduler
 from automation.webhook import WebhookStore, WebhookExecutor, init_webhooks
 from providers import ProviderRegistry, register_default_providers
 from gateway import GATEWAY_VERSION, get_version_headers, validate_client_version, get_changelog
-from core import run_tool_loop, clean_orphan_tool_messages, ToolExecutor, is_safe
+from core import clean_orphan_tool_messages, ToolExecutor, is_safe
 from core import LLMRequestQueue, StreamHandler
 from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, PermissionMode, PermissionRuleKind, HookEvent, HookMatcher, MultiSourceRuleManager, PermissionAuditor, PermissionRule, PermissionResult, RuleSource
 from sessions.vector_memory import VectorMemoryStore
@@ -1057,13 +1057,16 @@ async def chat_completions(request: Request):
     model = payload.get("model", "deepseek-chat")
     session_id = request.headers.get("X-Session-Id")
 
-    # Use LLMQueue for concurrent request handling (no direct rejection)
-    if _llm_queue is None:
-        raise HTTPException(status_code=500, detail="LLM queue not initialized")
-
+    # Direct streaming without LLM Queue for debugging
     return StreamingResponse(
-        _handle_streaming_via_queue(payload, model, session_id),
+        _handle_streaming_direct(payload, model, session_id),
         media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "Transfer-Encoding": "chunked",
+        },
     )
 
 
@@ -1073,6 +1076,119 @@ def get_llm_queue_status() -> dict[str, Any]:
     if _llm_queue is None:
         raise HTTPException(status_code=500, detail="LLM queue not initialized")
     return _llm_queue.get_status()
+
+
+async def _handle_streaming_direct(
+    payload: dict[str, Any],
+    model: str,
+    session_id: str | None = None,
+):
+    """Direct streaming without queue."""
+    from core.executor import ToolExecutor
+
+    # Build messages from session history + new messages
+    new_messages = list(payload.get("messages", []))
+    if session_id:
+        session = _session_manager.get_session(session_id)
+        if session:
+            max_tokens = session.context_window or 64000
+            history = _session_manager.get_messages_with_limit(session_id, max_tokens)
+            messages = history + new_messages
+            if _prompt_builder:
+                system_prompt = _prompt_builder.build(
+                    messages=messages,
+                    goal=None,
+                    session_system_prompt=session.system_prompt,
+                )
+                if system_prompt:
+                    messages = _prompt_builder.insert_into_messages(messages, system_prompt)
+        else:
+            messages = new_messages
+    else:
+        messages = new_messages
+
+    messages = clean_orphan_tool_messages(messages)
+    kwargs = {k: v for k, v in payload.items() if k not in ("messages", "stream", "model")}
+
+    yield f"event: stream_start\ndata: {{\"model\": \"{model}\"}}\n\n"
+
+    # Save user messages to session
+    if session_id:
+        for msg in new_messages:
+            _session_manager.add_message(session_id, msg.get("role", "user"), msg.get("content", ""))
+
+    full_content = ""
+    tool_calls_list = []
+    executor = ToolExecutor(registry=_unified_registry, session_id=session_id, canvas_manager=_canvas_manager)
+
+    try:
+        provider = _provider_registry.get_provider("deepseek")
+        if not provider:
+            yield f"event: error\ndata: {{\"error\": \"No provider\"}}\n\n"
+            return
+
+        # Tool loop
+        while True:
+            stream = provider.stream(messages, model, stream=True, **kwargs)
+            turn_content = ""
+            tool_calls_list = []
+
+            async for chunk in stream:
+                choices = chunk.get("choices", [])
+                if not choices:
+                    continue
+
+                delta = choices[0].get("delta", {})
+                if delta.get("content"):
+                    text = delta["content"]
+                    turn_content += text
+                    full_content += text
+                    escaped = text.replace('"', '\\"').replace('\n', '\\n')
+                    yield f"data: {{\"text\": \"{escaped}\"}}\n\n"
+
+                if delta.get("tool_calls"):
+                    for tc in delta["tool_calls"]:
+                        idx = tc.get("index", 0)
+                        while idx >= len(tool_calls_list):
+                            tool_calls_list.append({"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+                        if tc.get("id"):
+                            tool_calls_list[idx]["id"] = tc["id"]
+                        fn = tc.get("function", {})
+                        if fn.get("name"):
+                            tool_calls_list[idx]["function"]["name"] = fn["name"]
+                        if fn.get("arguments"):
+                            tool_calls_list[idx]["function"]["arguments"] += fn["arguments"]
+
+                if choices[0].get("finish_reason"):
+                    break
+
+            # No tool calls - done
+            if not tool_calls_list:
+                yield f"data: {{\"finish_reason\": \"stop\"}}\n\n"
+                break
+
+            # Execute tools
+            tool_names = [tc["function"]["name"] for tc in tool_calls_list]
+            yield f"event: tool_exec\ndata: {{\"tools\": {json.dumps(tool_names)}}}\n\n"
+
+            results = await executor.execute_tools(tool_calls_list)
+
+            messages.append({"role": "assistant", "content": turn_content, "tool_calls": tool_calls_list})
+            for tc in tool_calls_list:
+                result = results.get(tc["id"])
+                if result:
+                    messages.append(result.to_tool_message())
+                else:
+                    messages.append({"role": "tool", "tool_call_id": tc["id"], "content": "Tool not executed"})
+
+            messages = clean_orphan_tool_messages(messages)
+
+    except Exception as e:
+        logger.error(f"[Stream] Error: {e}")
+        yield f"event: error\ndata: {{\"error\": \"{str(e)}\"}}\n\n"
+
+    if session_id and full_content:
+        _session_manager.add_message(session_id, "assistant", full_content)
 
 
 async def _handle_streaming_via_queue(

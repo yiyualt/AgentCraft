@@ -101,7 +101,7 @@ class DeepSeekProvider(Provider):
         model: str | None = None,
         **kwargs,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Streaming completion."""
+        """Streaming completion with minimal buffering."""
         model = model or self.default_model
         start_time = time.time()
 
@@ -115,23 +115,35 @@ class DeepSeekProvider(Provider):
         total_tokens = 0
 
         try:
-            response = await self._client.post(
-                "/chat/completions",
-                json=payload,
-            )
-            response.raise_for_status()
+            # CRITICAL: Use stream() method for true streaming
+            # post() waits for full response before returning
+            async with self._client.stream("POST", "/chat/completions", json=payload) as response:
+                response.raise_for_status()
 
-            async for line in response.aiter_lines():
-                if line.startswith("data: "):
-                    data = line[6:]
-                    if data == "[DONE]":
-                        break
-                    try:
-                        chunk = json.loads(data)
-                        total_tokens += chunk.get("usage", {}).get("total_tokens", 0)
-                        yield chunk
-                    except json.JSONDecodeError:
-                        continue
+                buf = ""
+                async for chunk in response.aiter_bytes():
+                    # Decode bytes to text incrementally
+                    buf += chunk.decode("utf-8", errors="ignore")
+
+                    # Process complete lines immediately
+                    while "\n" in buf:
+                        line, buf = buf.split("\n", 1)
+                        line = line.strip()
+
+                        if not line:
+                            continue
+                        if not line.startswith("data: "):
+                            continue
+
+                        data = line[6:]
+                        if data == "[DONE]":
+                            break
+                        try:
+                            parsed = json.loads(data)
+                            total_tokens += parsed.get("usage", {}).get("total_tokens", 0)
+                            yield parsed
+                        except json.JSONDecodeError:
+                            continue
 
             latency_ms = (time.time() - start_time) * 1000
             self.record_success(total_tokens, latency_ms)

@@ -880,7 +880,9 @@
             }
 
             const msgDiv = addMsg('assistant', '');
+            const contentEl = msgDiv.querySelector('.content');
             let fullContent = '';
+            let isStreaming = true;
 
             try {
                 // Fetch tools from backend
@@ -907,6 +909,25 @@
                 const decoder = new TextDecoder();
                 let buf = '';
 
+                // Throttle markdown rendering for performance (render every 50ms max)
+                let lastRenderTime = 0;
+                const renderInterval = 50;  // ms
+
+                function renderContent() {
+                    const now = Date.now();
+                    if (now - lastRenderTime >= renderInterval || !isStreaming) {
+                        contentEl.innerHTML = marked.parse(fullContent);
+                        scrollDown();
+                        lastRenderTime = now;
+                    }
+                }
+
+                // Periodic render check
+                const renderTimer = setInterval(() => {
+                    if (fullContent) renderContent();
+                    if (!isStreaming) clearInterval(renderTimer);
+                }, renderInterval);
+
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
@@ -926,8 +947,10 @@
                                 try {
                                     const eventData = JSON.parse(lines[i + 1].slice(5).trim());
                                     if (eventType === 'tool_exec') {
-                                        fullContent += `\n[正在执行工具: ${eventData.tools.join(', ')}]\n`;
-                                        updateLastMsg(fullContent);
+                                        // Use markdown callout format for better display
+                                        const toolNotice = `\n> 🔧 **正在执行工具**: ${eventData.tools.join(', ')}\n\n`;
+                                        fullContent += toolNotice;
+                                        // Don't render here, let timer handle it
                                     }
                                     i++; // Skip the data line we already processed
                                 } catch {}
@@ -943,16 +966,25 @@
                             const data = JSON.parse(json);
                             if (data.text) {
                                 fullContent += data.text;
-                                updateLastMsg(fullContent);
+                                // Don't render here - let timer handle it for performance
                             } else if (data.finish_reason) {
-                                // Stream finished
+                                // Stream finished - final render
+                                isStreaming = false;
+                                clearInterval(renderTimer);
+                                contentEl.innerHTML = marked.parse(fullContent);
+                                scrollDown();
                             }
                         } catch {}
                     }
                 }
+
+                // Final markdown render after stream ends
+                contentEl.innerHTML = marked.parse(fullContent);
+                scrollDown();
+
             } catch (e) {
                 console.error(e);
-                msgDiv.querySelector('.content').textContent = '错误: ' + e.message;
+                contentEl.textContent = '错误: ' + e.message;
             } finally {
                 input.disabled = false;
                 sendBtn.disabled = false;
