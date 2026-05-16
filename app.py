@@ -1101,44 +1101,70 @@ async def _handle_streaming(
     # Tool loop
     n_turns = 0
     while True:
-        call_kwargs: dict[str, Any] = {"model": model, "messages": messages, **kwargs}
+        call_kwargs: dict[str, Any] = {"model": model, "messages": messages, "stream": True, **kwargs}
         if tools:
             call_kwargs["tools"] = tools
 
-        # LLM call (non-streaming for simplicity - streaming LLM would be next phase)
+        # Streaming LLM call
+        full_content = ""
+        tool_calls_list = []
+        finish_reason = None
+
         try:
             async with _llm_semaphore:
-                # Use ProviderRegistry if available (with fallback)
-                if _provider_registry and _provider_registry.get_fallback_chain():
-                    response = await _provider_registry.complete_with_fallback(
-                        messages=messages,
-                        model=model,
-                        tools=tools if tools else None,
-                        **kwargs
-                    )
-                    result = response
-                else:
-                    # Fallback to direct client
-                    response = await asyncio.to_thread(
-                        llm_client.chat.completions.create, **call_kwargs
-                    )
-                    result = response.model_dump()
+                # Use streaming with direct client
+                stream = await asyncio.to_thread(
+                    llm_client.chat.completions.create, **call_kwargs
+                )
+
+                # Iterate over stream chunks
+                for chunk in stream:
+                    choice = chunk.choices[0] if chunk.choices else None
+                    if not choice:
+                        continue
+
+                    # Stream content chunks
+                    delta = choice.delta
+                    if delta and delta.content:
+                        full_content += delta.content
+                        # Escape JSON and yield
+                        escaped = delta.content.replace('"', '\\"').replace('\n', '\\n')
+                        yield f"data: {{\"text\": \"{escaped}\"}}\n\n"
+
+                    # Collect tool calls
+                    if delta and delta.tool_calls:
+                        for tc in delta.tool_calls:
+                            # Accumulate tool call fragments
+                            idx = tc.index
+                            if idx >= len(tool_calls_list):
+                                tool_calls_list.append({"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+                            if tc.id:
+                                tool_calls_list[idx]["id"] = tc.id
+                            if tc.function:
+                                if tc.function.name:
+                                    tool_calls_list[idx]["function"]["name"] = tc.function.name
+                                if tc.function.arguments:
+                                    tool_calls_list[idx]["function"]["arguments"] += tc.function.arguments
+
+                    # Get finish reason
+                    if choice.finish_reason:
+                        finish_reason = choice.finish_reason
+
         except Exception as e:
             yield f"event: error\ndata: {{\"error\": \"{str(e)}\"}}\n\n"
             break
 
-        choice = result["choices"][0]
-        message = choice["message"]
+        # Build complete message
+        message = {"role": "assistant", "content": full_content}
+        if tool_calls_list:
+            message["tool_calls"] = tool_calls_list
         messages.append(message)
 
-        # Yield content
-        content = message.get("content", "")
-        if content:
-            yield f"event: content\ndata: {{\"text\": \"{content[:500]}\"}}\n\n"
+        # Yield done event
+        yield f"data: {{\"finish_reason\": \"{finish_reason or 'stop'}\"}}\n\n"
 
-        tool_calls = message.get("tool_calls")
-        if not tool_calls:
-            yield f"event: done\ndata: {{\"finish_reason\": \"stop\"}}\n\n"
+        # No tool calls - done
+        if not tool_calls_list:
             break
 
         n_turns += 1
@@ -1147,18 +1173,15 @@ async def _handle_streaming(
             break
 
         # Yield tool start events
-        for tc in tool_calls:
+        for tc in tool_calls_list:
             fn_name = tc["function"]["name"]
             yield f"event: tool_start\ndata: {{\"id\": \"{tc['id']}\", \"name\": \"{fn_name}\"}}\n\n"
 
         # Execute tools
-        results = await executor.execute_tools(tool_calls)
+        results = await executor.execute_tools(tool_calls_list)
 
-        # Wait for results
-        results = await executor.get_results()
-
-        # Yield tool results
-        for tc in tool_calls:
+        # Yield tool results and append to messages
+        for tc in tool_calls_list:
             tc_id = tc["id"]
             tool_result = results.get(tc_id)
             if tool_result:
@@ -1169,8 +1192,7 @@ async def _handle_streaming(
                     yield f"event: tool_result\ndata: {{\"id\": \"{tc_id}\", \"result\": \"{result_preview}\"}}\n\n"
                 messages.append(tool_result.to_tool_message())
 
-        # Yield turn complete
-        yield f"event: turn_complete\ndata: {{\"turn\": {n_turns}, \"tools\": {len(tool_calls)}}}\n\n"
+        yield f"event: turn_complete\ndata: {{\"turn\": {n_turns}, \"tools\": {len(tool_calls_list)}}}\n\n"
 
     # Save final messages
     if session_id:

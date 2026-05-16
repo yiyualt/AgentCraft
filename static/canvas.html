@@ -969,6 +969,7 @@
             input.style.height = 'auto';
 
             addMessage('user', text);
+            lastAssistantMessageId = null;
 
             try {
                 const resp = await fetch('/v1/chat/completions', {
@@ -979,20 +980,87 @@
                     },
                     body: JSON.stringify({
                         model: document.getElementById('model-select').value,
-                        messages: [{ role: 'user', content: text }]
+                        messages: [{ role: 'user', content: text }],
+                        stream: true
                     })
                 });
 
                 if (!resp.ok) throw new Error('Request failed');
 
-                const data = await resp.json();
-                const reply = data.choices?.[0]?.message?.content;
-                if (reply) {
-                    addMessage('assistant', reply);
+                // Handle SSE stream
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let currentContent = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data:')) continue;
+
+                        const dataStr = line.slice(5).trim();
+                        if (!dataStr) continue;
+
+                        try {
+                            const data = JSON.parse(dataStr);
+
+                            if (data.text) {
+                                currentContent += data.text;
+                                updateAssistantMessage(currentContent);
+                            }
+
+                            if (data.finish_reason === 'stop') {
+                                // Finalize message
+                                if (currentContent) {
+                                    finalizeAssistantMessage(currentContent);
+                                }
+                            }
+
+                            if (data.error) {
+                                addError(data.error);
+                            }
+                        } catch (e) {
+                            // Skip invalid JSON
+                        }
+                    }
                 }
+
+                // Handle remaining buffer
+                if (buffer.startsWith('data:')) {
+                    const dataStr = buffer.slice(5).trim();
+                    try {
+                        const data = JSON.parse(dataStr);
+                        if (data.text) {
+                            currentContent += data.text;
+                            updateAssistantMessage(currentContent);
+                        }
+                    } catch (e) {}
+                }
+
             } catch (e) {
                 console.error('Send error:', e);
                 addError(e.message);
+            }
+        }
+
+        function updateAssistantMessage(content) {
+            hideWelcomeScreen();
+            const msgDiv = getOrCreateLastAssistantMessage();
+            const contentEl = msgDiv.querySelector('.message-content');
+            contentEl.innerHTML = marked.parse(content);
+            scrollToBottom();
+        }
+
+        function finalizeAssistantMessage(content) {
+            const chat = chatHistory.find(c => c.id === currentChatId);
+            if (chat) {
+                chat.messages.push({ role: 'assistant', content });
             }
         }
 
