@@ -24,7 +24,6 @@ from tools.pptx_tools import *  # noqa: F401,F403 — register PPTX tools
 from tools.agent_executor import AgentExecutor, set_agent_executor  # Agent executor
 from tools.skill_tools import *  # noqa: F401,F403 — register Skill tool
 from tools.mcp import MCPToolManager, MCPConfig
-from tools.sandbox import SandboxExecutor, SandboxConfig
 from automation import CronStore, CronScheduler
 from automation.webhook import WebhookStore, WebhookExecutor, init_webhooks
 from providers import ProviderRegistry, register_default_providers
@@ -49,14 +48,6 @@ MAX_CONCURRENT_LLM = int(os.getenv("MAX_CONCURRENT_OLLAMA", "3"))
 RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "false").lower() == "true"
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "60"))
 RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
-
-# Sandbox Execution
-SANDBOX_ENABLED = os.getenv("SANDBOX_ENABLED", "false").lower() == "true"
-SANDBOX_NETWORK = os.getenv("SANDBOX_NETWORK", "false").lower() == "true"  # Enable network
-SANDBOX_HOST_BIN = os.getenv("SANDBOX_HOST_BIN", "false").lower() == "true"  # Mount host /usr/bin
-SANDBOX_PIP_PACKAGES = os.getenv("SANDBOX_PIP_PACKAGES", "").split(",") if os.getenv("SANDBOX_PIP_PACKAGES") else []
-SANDBOX_READ_DIRS = os.getenv("SANDBOX_READ_DIRS", "").split(",") if os.getenv("SANDBOX_READ_DIRS") else []
-SANDBOX_WRITE_DIRS = os.getenv("SANDBOX_WRITE_DIRS", "").split(",") if os.getenv("SANDBOX_WRITE_DIRS") else []
 
 # ===== Logging (写入文件) =====
 import logging
@@ -166,9 +157,6 @@ _skill_loader = SkillLoader(default_skill_dirs())
 _skill_loader.load()
 set_skill_loader(_skill_loader)  # Set skill loader for Skill tool
 
-# ===== Sandbox Executor =====
-_sandbox_executor: SandboxExecutor | None = None
-
 # ===== Canvas =====
 _canvas_manager: CanvasManager | None = None
 _canvas_channel: CanvasChannel | None = None
@@ -209,7 +197,7 @@ _webhook_executor: WebhookExecutor | None = None
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Initialize MCP servers and channels on startup, shut down on exit."""
-    global _mcp_manager, _unified_registry, _sandbox_executor, _canvas_manager, _canvas_channel
+    global _mcp_manager, _unified_registry, _canvas_manager, _canvas_channel
 
     _app.state.session_manager = _session_manager
     _skill_loader.load()
@@ -220,19 +208,6 @@ async def lifespan(_app: FastAPI):
     _app.state.canvas_manager = _canvas_manager
     set_canvas_manager(_canvas_manager)
     logger.info("[Canvas] CanvasManager initialized")
-
-    # Sandbox initialization
-    if SANDBOX_ENABLED:
-        sandbox_config = SandboxConfig(
-            network_disabled=not SANDBOX_NETWORK,
-            mount_host_bin=SANDBOX_HOST_BIN,
-            pip_packages=SANDBOX_PIP_PACKAGES,
-            read_dirs=SANDBOX_READ_DIRS,
-            write_dirs=SANDBOX_WRITE_DIRS,
-        )
-        _sandbox_executor = SandboxExecutor(sandbox_config)
-        _app.state.sandbox_executor = _sandbox_executor
-        logger.info(f"Sandbox executor initialized: network={SANDBOX_NETWORK}, host_bin={SANDBOX_HOST_BIN}, pip={SANDBOX_PIP_PACKAGES}")
 
     # MCP initialization
     config = MCPConfig.load()
@@ -376,8 +351,6 @@ async def lifespan(_app: FastAPI):
 
     # Cleanup
     await _channel_router.stop_all()
-    if _sandbox_executor:
-        await _sandbox_executor.cleanup()
     if _mcp_manager:
         await _mcp_manager.shutdown()
 
@@ -1167,7 +1140,6 @@ async def _handle_streaming(
         registry=registry,
         max_concurrency=10,
         session_id=session_id,
-        sandbox_executor=_sandbox_executor if SANDBOX_ENABLED else None,
         canvas_manager=_canvas_manager,
     )
 
@@ -1745,7 +1717,6 @@ async def _handle_non_streaming(
                         registry=registry,
                         max_concurrency=10,
                         session_id=session_id,
-                        sandbox_executor=_sandbox_executor if SANDBOX_ENABLED else None,
                         canvas_manager=_canvas_manager,
                     )
 

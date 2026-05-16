@@ -140,14 +140,12 @@ class StreamingToolExecutor:
         registry: Any,  # UnifiedToolRegistry
         max_concurrency: int = 10,
         session_id: str | None = None,
-        sandbox_executor: Any | None = None,  # SandboxExecutor
         canvas_manager: Any | None = None,  # CanvasManager
         custom_dispatcher: Callable[[str, dict[str, Any]], Awaitable[str]] | None = None,
     ):
         self._registry = registry
         self._max_concurrency = max_concurrency
         self._session_id = session_id
-        self._sandbox_executor = sandbox_executor
         self._canvas_manager = canvas_manager
         self._custom_dispatcher = custom_dispatcher
 
@@ -169,7 +167,7 @@ class StreamingToolExecutor:
 
         logger.info(
             f"[STREAMING_EXECUTOR] Initialized: max_concurrency={max_concurrency}, "
-            f"session={session_id}, sandbox={sandbox_executor is not None}"
+            f"session={session_id}"
         )
 
     def get_progress_events(self) -> list[ToolProgressEvent]:
@@ -282,31 +280,9 @@ class StreamingToolExecutor:
                 pass
 
         try:
-            # Use custom dispatcher if provided (handles sandbox logic)
+            # Use custom dispatcher if provided
             if self._custom_dispatcher:
                 result = await self._custom_dispatcher(tool_name, arguments)
-            elif self._sandbox_executor:
-                # Sandbox execution: get tool source code first
-                tool_code = self._registry.get_source_code(tool_name)
-                if tool_code is None:
-                    # MCP tools cannot be sandboxed, fall back to direct dispatch
-                    logger.warning(
-                        f"[STREAMING_EXECUTOR] {tool_name} has no source code, "
-                        "falling back to direct dispatch"
-                    )
-                    result = await self._registry.dispatch(tool_name, arguments)
-                else:
-                    logger.info(
-                        f"[STREAMING_EXECUTOR] Executing {tool_name} in sandbox "
-                        f"(code_len={len(tool_code)})"
-                    )
-                    sandbox_result = await self._sandbox_executor.run_tool(
-                        tool_name, arguments, tool_code
-                    )
-                    if sandbox_result.success:
-                        result = sandbox_result.output
-                    else:
-                        result = f"Error: {sandbox_result.error}"
             else:
                 # Direct execution via registry
                 result = await self._registry.dispatch(tool_name, arguments)
