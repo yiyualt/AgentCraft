@@ -1302,26 +1302,44 @@ async def _handle_streaming_direct(
 
         # Tool loop
         while True:
-            # Budget check before each turn
-            if _budget_manager and session_id:
-                current_tokens = estimate_tokens_simple(messages)
-                budget = getattr(session, 'token_budget', None) or DEFAULT_BUDGET
-                decision = _budget_manager.check_budget(session_id, budget, current_tokens)
-
-                if isinstance(decision, StopDecision):
-                    logger.info(f"[Budget] Stop: {decision.reason}, tokens={current_tokens}/{budget}")
-                    report = generate_budget_report(decision.completion_event)
-                    yield f"event: budget_stop\ndata: {{\"reason\": \"{decision.reason}\", \"report\": \"{report.replace(chr(34), chr(92)+chr(34)).replace(chr(10), chr(92)+chr(110))}\"}}\n\n"
-                    break
-                elif isinstance(decision, ContinueDecision) and decision.nudge_message:
-                    # Send nudge to frontend (optional)
-                    yield f"event: budget_nudge\ndata: {{\"pct\": {decision.pct}, \"message\": \"{decision.nudge_message}\"}}\n\n"
+            # Budget check DISABLED - was causing premature termination
+            # if _budget_manager and session_id:
+            #     ...
 
             # Circuit breaker check
             if _recovery_executor and _recovery_executor._circuit.is_open():
                 logger.error("[Recovery] Circuit breaker open, aborting")
                 yield f"event: error\ndata: {{\"error\": \"连续失败次数过多，已进入保护状态。请稍后重试。\"}}\n\n"
                 break
+
+            # Auto-compaction check (proactive, before hitting limits)
+            if _compaction_manager and session:
+                context_window = session.context_window or 64000
+                current_tokens = estimate_tokens_simple(messages)
+
+                level = _compaction_manager.check_compaction_needed(
+                    session_id=session_id or "default",
+                    current_tokens=current_tokens,
+                    context_window=context_window,
+                )
+
+                if level:
+                    logger.info(f"[COMPACTION] Level {level} triggered, tokens={current_tokens}/{context_window}")
+                    yield f"event: compaction\ndata: {{\"level\": {level}, \"tokens\": {current_tokens}, \"window\": {context_window}}}\n\n"
+
+                    try:
+                        calculator = TokenCalculator(session.model)
+                        target_tokens = int(context_window * 0.5)  # Compact to 50%
+                        messages = await _compaction_manager.compact(
+                            session_id=session_id or "default",
+                            messages=messages,
+                            level=level,
+                            calculator=calculator,
+                            target_tokens=target_tokens,
+                        )
+                        logger.info(f"[COMPACTION] Done, now {estimate_tokens_simple(messages)} tokens")
+                    except Exception as e:
+                        logger.warning(f"[COMPACTION] Failed: {e}")
 
             # Stream call with retry logic
             stream_error = None
