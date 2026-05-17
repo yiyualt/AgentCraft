@@ -121,9 +121,13 @@ _skill_loader = SkillLoader(default_skill_dirs())
 _skill_loader.load()
 set_skill_loader(_skill_loader)  # Set skill loader for Skill tool
 
-# ===== Canvas =====
+# ===== Canvas (initialized early for router registration) =====
 _canvas_manager: CanvasManager | None = None
 _canvas_channel: CanvasChannel | None = None
+
+# Initialize canvas early so router can be registered before app starts
+_canvas_manager = CanvasManager()
+_canvas_channel = CanvasChannel(_canvas_manager)
 
 # ===== Compaction =====
 _compaction_manager: CompactionManager | None = None
@@ -148,7 +152,6 @@ _recovery_executor: ResilientExecutor | None = None
 
 # ===== Channels =====
 _channel_router = ChannelRouter()
-_canvas_channel: CanvasChannel | None = None
 
 # ===== Provider Registry =====
 _provider_registry: ProviderRegistry | None = None
@@ -161,17 +164,16 @@ _webhook_executor: WebhookExecutor | None = None
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Initialize MCP servers and channels on startup, shut down on exit."""
-    global _mcp_manager, _unified_registry, _canvas_manager, _canvas_channel
+    global _mcp_manager, _unified_registry
 
     _app.state.session_manager = _session_manager
     _skill_loader.load()
     _app.state.skill_loader = _skill_loader
 
-    # Canvas initialization (before channels, so tools can use it)
-    _canvas_manager = CanvasManager()
+    # Canvas (already initialized at module level for router registration)
     _app.state.canvas_manager = _canvas_manager
     set_canvas_manager(_canvas_manager)
-    logger.info("[Canvas] CanvasManager initialized")
+    logger.info("[Canvas] CanvasManager set to app state")
 
     # MCP initialization
     config = MCPConfig.load()
@@ -282,11 +284,9 @@ async def lifespan(_app: FastAPI):
     _app.state.prompt_builder = _prompt_builder
     logger.info("[Core] PromptBuilder initialized with task-based memory retrieval")
 
-    # Initialize channels - Canvas only
-    _canvas_channel = CanvasChannel(_canvas_manager)
+    # Initialize channels - Canvas only (canvas already created at module level)
     _channel_router.register(_canvas_channel)
-    _app.include_router(_canvas_channel.get_router())
-    logger.info("[Canvas] CanvasChannel registered at /canvas")
+    logger.info("[Canvas] CanvasChannel registered")
 
     # Provider Registry initialization (multi-provider support with fallback)
     global _provider_registry
@@ -335,6 +335,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="Ollama MLflow Gateway", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.include_router(_canvas_channel.get_router())  # Register canvas routes before startup
 
 
 # ===== Version Middleware =====
