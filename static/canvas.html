@@ -48,12 +48,12 @@
 
         .new-chat-btn {
             width: 100%;
-            padding: 10px 16px;
+            padding: 8px 12px;
             background: transparent;
             border: 1px solid var(--border-primary);
             border-radius: 8px;
             color: var(--text-primary);
-            font-size: 14px;
+            font-size: 13px;
             cursor: pointer;
         }
 
@@ -62,21 +62,41 @@
         .chat-list { flex: 1; overflow-y: auto; padding: 8px; }
 
         .chat-item {
-            padding: 10px 12px;
+            padding: 8px 10px;
             border-radius: 8px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 13px;
             color: var(--text-secondary);
             margin-bottom: 4px;
             display: flex;
             align-items: center;
             gap: 8px;
+            user-select: none;
         }
 
         .chat-item:hover { background: var(--bg-hover); }
         .chat-item.active { background: var(--bg-hover); color: var(--text-primary); }
+        .chat-item.dragging { opacity: 0.5; background: var(--bg-hover); }
+        .chat-item.drag-over { border-top: 2px solid var(--text-primary); }
 
-        .chat-item .title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+        .chat-item .title {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .chat-item .title-input {
+            flex: 1;
+            background: var(--bg-primary);
+            border: 1px solid var(--accent-primary);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 13px;
+            outline: none;
+            width: 100%;
+        }
+
         .chat-item .delete-btn {
             opacity: 0;
             width: 20px;
@@ -85,9 +105,21 @@
             border: none;
             color: #dc2626;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 13px;
         }
         .chat-item:hover .delete-btn { opacity: 1; }
+
+        .chat-item .rename-btn {
+            opacity: 0;
+            width: 20px;
+            height: 20px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .chat-item:hover .rename-btn { opacity: 1; }
 
         /* Main */
         .main {
@@ -163,31 +195,129 @@
         .content {
             flex: 1;
             line-height: 1.6;
-            font-size: 15px;
+            font-size: 14px;
+            letter-spacing: 0.02em;
         }
 
         .msg.user .content {
             white-space: pre-wrap;
         }
 
-        .msg.assistant .content p { margin: 12px 0; }
-        .msg.assistant .content ul, .msg.assistant .content ol { margin: 12px 0; padding-left: 20px; }
-        .content p { margin: 4px 0; }
-        .content ul, .content ol { margin: 4px 0; padding-left: 20px; }
+        .msg.assistant .content p { margin: 8px 0; }
+        .msg.assistant .content ul, .msg.assistant .content ol { margin: 8px 0; padding-left: 18px; }
+        .content p { margin: 6px 0; }
+        .content ul, .content ol { margin: 6px 0; padding-left: 18px; }
+        .content li { margin: 3px 0; }
+
+        /* Markdown Styling */
+        .content strong, .content b {
+            font-weight: 550;
+            color: var(--text-primary);
+        }
+
+        .content h1 {
+            font-size: 1.4em;
+            font-weight: 550;
+            margin: 0.8em 0 0.4em 0;
+            padding-bottom: 0.25em;
+            border-bottom: 1px solid var(--border-primary);
+            letter-spacing: 0.01em;
+        }
+
+        .content h2 {
+            font-size: 1.2em;
+            font-weight: 550;
+            margin: 0.6em 0 0.3em 0;
+            letter-spacing: 0.01em;
+        }
+
+        .content h3 {
+            font-size: 1.05em;
+            font-weight: 550;
+            margin: 0.5em 0 0.25em 0;
+            letter-spacing: 0.01em;
+        }
+
+        .content a {
+            color: var(--accent-primary);
+            text-decoration: none;
+        }
+
+        .content a:hover {
+            text-decoration: underline;
+        }
+
+        .content blockquote {
+            margin: 8px 0;
+            padding: 6px 12px;
+            border-left: 3px solid var(--border-primary);
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            font-size: 0.95em;
+        }
+
+        .content blockquote p {
+            margin: 0;
+        }
+
+        .content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 8px 0;
+            font-size: 0.9em;
+        }
+
+        .content th, .content td {
+            border: 1px solid var(--border-primary);
+            padding: 6px 10px;
+            text-align: left;
+        }
+
+        .content th {
+            background: var(--bg-secondary);
+            font-weight: 600;
+        }
+
+        .content hr {
+            border: none;
+            border-top: 1px solid var(--border-primary);
+            margin: 1em 0;
+        }
+
+        .content img {
+            max-width: 100%;
+            border-radius: 6px;
+            margin: 8px 0;
+        }
+
+        /* Inline code */
         .content code {
-            background: var(--bg-secondary);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 13px;
+            background: rgba(0,0,0,0.05);
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 0.85em;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
         }
+
+        /* Code block */
         .content pre {
-            background: var(--bg-secondary);
-            padding: 12px;
-            border-radius: 8px;
-            margin: 12px 0;
+            background: #282c34;
+            color: #abb2bf;
+            padding: 12px 14px;
+            border-radius: 6px;
+            margin: 8px 0;
             overflow-x: auto;
+            font-size: 0.85em;
+            line-height: 1.45;
         }
-        .content pre code { background: transparent; padding: 0; }
+
+        .content pre code {
+            background: transparent;
+            padding: 0;
+            border: none;
+            color: inherit;
+            font-size: inherit;
+        }
 
         /* Welcome */
         .welcome { text-align: center; padding: 60px 20px; }
@@ -249,33 +379,28 @@
         .send-btn {
             width: 36px;
             height: 36px;
-            background: var(--accent-primary);
+            background: var(--text-primary);
             border: none;
             border-radius: 50%;
             color: white;
             cursor: pointer;
-            font-size: 16px;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 8px rgba(16, 163, 127, 0.3);
+            transition: background 0.15s ease;
         }
 
         .send-btn:hover:not(:disabled) {
-            transform: scale(1.05);
-            box-shadow: 0 4px 12px rgba(16, 163, 127, 0.4);
+            background: #333;
         }
 
         .send-btn:active:not(:disabled) {
-            transform: scale(0.95);
+            background: #555;
         }
 
         .send-btn:disabled {
-            background: var(--text-muted);
-            opacity: 0.5;
+            background: var(--border-primary);
             cursor: not-allowed;
-            box-shadow: none;
         }
 
         /* Interactive Components - Compact Style */
@@ -424,9 +549,9 @@
             <div class="input-box">
                 <textarea id="input" placeholder="发送消息..." rows="1"></textarea>
                 <button class="send-btn" id="send">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M22 2L11 13"></path>
-                        <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 19V5"></path>
+                        <path d="M5 12l7-7 7 7"></path>
                     </svg>
                 </button>
             </div>
@@ -750,24 +875,143 @@
 
         function renderChatList() {
             document.getElementById('chatList').innerHTML = chats.map(c => `
-                <div class="chat-item ${c.id === currentChatId ? 'active' : ''}" data-id="${c.id}">
+                <div class="chat-item ${c.id === currentChatId ? 'active' : ''}" data-id="${c.id}" draggable="true">
                     <span class="title">${c.title}</span>
-                    <button class="delete-btn" data-id="${c.id}">×</button>
+                    <button class="rename-btn" data-id="${c.id}" title="重命名">✎</button>
+                    <button class="delete-btn" data-id="${c.id}" title="删除">×</button>
                 </div>
             `).join('');
+
+            // Click to switch
             document.querySelectorAll('.chat-item').forEach(item => {
                 item.onclick = (e) => {
-                    if (!e.target.classList.contains('delete-btn')) {
+                    if (!e.target.classList.contains('delete-btn') && !e.target.classList.contains('rename-btn')) {
                         switchChat(item.dataset.id);
                     }
                 };
+
+                // Double-click to rename
+                item.ondblclick = (e) => {
+                    if (!e.target.classList.contains('delete-btn') && !e.target.classList.contains('rename-btn')) {
+                        startRename(item.dataset.id);
+                    }
+                };
+
+                // Drag events
+                item.ondragstart = (e) => {
+                    e.dataTransfer.setData('text/plain', item.dataset.id);
+                    item.classList.add('dragging');
+                };
+
+                item.ondragend = () => {
+                    item.classList.remove('dragging');
+                };
+
+                item.ondragover = (e) => {
+                    e.preventDefault();
+                    item.classList.add('drag-over');
+                };
+
+                item.ondragleave = () => {
+                    item.classList.remove('drag-over');
+                };
+
+                item.ondrop = (e) => {
+                    e.preventDefault();
+                    item.classList.remove('drag-over');
+                    const draggedId = e.dataTransfer.getData('text/plain');
+                    const targetId = item.dataset.id;
+                    if (draggedId !== targetId) {
+                        reorderChats(draggedId, targetId);
+                    }
+                };
             });
+
+            // Rename button click
+            document.querySelectorAll('.rename-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    startRename(btn.dataset.id);
+                };
+            });
+
+            // Delete button click
             document.querySelectorAll('.delete-btn').forEach(btn => {
                 btn.onclick = (e) => {
                     e.stopPropagation();
                     deleteChat(btn.dataset.id);
                 };
             });
+        }
+
+        // Rename functionality
+        function startRename(id) {
+            const item = document.querySelector(`.chat-item[data-id="${id}"]`);
+            const chat = chats.find(c => c.id === id);
+            if (!item || !chat) return;
+
+            const titleEl = item.querySelector('.title');
+            const currentTitle = chat.title;
+
+            // Replace title with input
+            const input = document.createElement('input');
+            input.className = 'title-input';
+            input.value = currentTitle;
+            input.setAttribute('data-id', id);
+
+            titleEl.replaceWith(input);
+            input.focus();
+            input.select();
+
+            // Save on Enter or blur
+            input.onkeydown = (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    finishRename(input, id);
+                } else if (e.key === 'Escape') {
+                    cancelRename(input, currentTitle);
+                }
+            };
+
+            input.onblur = () => {
+                finishRename(input, id);
+            };
+        }
+
+        function finishRename(input, id) {
+            const newTitle = input.value.trim() || '新对话';
+            const chat = chats.find(c => c.id === id);
+            if (chat) {
+                chat.title = newTitle;
+                // Update backend
+                fetch(`/v1/sessions/${id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newTitle })
+                }).catch(e => console.error('[Rename] Failed:', e));
+            }
+            renderChatList();
+        }
+
+        function cancelRename(input, originalTitle) {
+            const span = document.createElement('span');
+            span.className = 'title';
+            span.textContent = originalTitle;
+            input.replaceWith(span);
+        }
+
+        // Drag reorder functionality
+        function reorderChats(draggedId, targetId) {
+            const draggedIndex = chats.findIndex(c => c.id === draggedId);
+            const targetIndex = chats.findIndex(c => c.id === targetId);
+
+            if (draggedIndex === -1 || targetIndex === -1) return;
+
+            // Remove dragged item and insert at target position
+            const [draggedItem] = chats.splice(draggedIndex, 1);
+            chats.splice(targetIndex, 0, draggedItem);
+
+            renderChatList();
         }
 
         function connectSSE(sessionId) {
