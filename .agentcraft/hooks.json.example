@@ -1,0 +1,23 @@
+{
+    "hooks": [
+        {
+            "event": "PreToolUse",
+            "matcher": "Bash",
+            "command": "echo '[AUDIT] Tool: $TOOL_NAME, Args: $ARGS' >> ~/.agentcraft/audit.log",
+            "blocking": false,
+            "timeout": 5
+        },
+        {
+            "event": "SessionStart",
+            "command": "echo '[SESSION] Started: $SESSION_ID at $TIMESTAMP' >> ~/.agentcraft/sessions.log",
+            "blocking": false,
+            "timeout": 5
+        },
+        {
+            "event": "SessionEnd",
+            "command": "echo '[SESSION] Ended: $SESSION_ID' >> ~/.agentcraft/sessions.log",
+            "blocking": false,
+            "timeout": 5
+        }
+    ]
+}

@@ -29,7 +29,7 @@ from providers import ProviderRegistry, register_default_providers
 from gateway import GATEWAY_VERSION, get_version_headers, validate_client_version, get_changelog
 from core import ToolExecutor, is_safe
 from core import LLMRequestQueue, StreamHandler, TokenCalculator, VectorMemoryStore
-from sessions import SessionManager, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, check_token_budget, generate_budget_report, StopDecision, ContinueDecision, DEFAULT_BUDGET, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, format_error_message, PermissionMode, PermissionRuleKind, HookEvent, HookMatcher, MultiSourceRuleManager, PermissionAuditor, PermissionRule, PermissionResult, RuleSource, clean_orphan_tool_messages
+from sessions import SessionManager, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, check_token_budget, generate_budget_report, StopDecision, ContinueDecision, DEFAULT_BUDGET, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, format_error_message, PermissionMode, PermissionRuleKind, HookEvent, HookMatcher, HookInput, HookExecutor, create_hook_executor, MultiSourceRuleManager, PermissionAuditor, PermissionRule, PermissionResult, RuleSource, clean_orphan_tool_messages
 from sessions import PromptBuilder, MemoryLoader
 from skills import SkillLoader, default_skill_dirs
 from channels import ChannelRouter
@@ -172,6 +172,9 @@ _provider_registry: ProviderRegistry | None = None
 # ===== Webhook =====
 _webhook_store: WebhookStore | None = None
 _webhook_executor: WebhookExecutor | None = None
+
+# ===== Hooks (Lifecycle events) =====
+_hook_executor: HookExecutor | None = None
 
 
 @asynccontextmanager
@@ -334,6 +337,12 @@ async def lifespan(_app: FastAPI):
     _app.state.webhook_store = _webhook_store
     _app.state.webhook_executor = _webhook_executor
     logger.info("[Webhook] WebhookExecutor initialized")
+
+    # Hooks initialization (lifecycle events: PreToolUse, PostToolUse, etc.)
+    global _hook_executor
+    _hook_executor = create_hook_executor()
+    _app.state.hook_executor = _hook_executor
+    logger.info(f"[Hooks] HookExecutor initialized with {len(_hook_executor._hooks)} hooks")
 
     await _channel_router.start_all()
 
@@ -1142,6 +1151,35 @@ async def _handle_streaming_direct(
     """Direct streaming without queue."""
     from core.executor import ToolExecutor
 
+    # === SESSION_START Hook ===
+    if _hook_executor and session_id:
+        try:
+            hook_input = HookInput(
+                event=HookEvent.SESSION_START,
+                session_id=session_id,
+            )
+            await _hook_executor.execute(HookEvent.SESSION_START, hook_input)
+        except Exception as e:
+            logger.warning(f"[Hooks] SessionStart error: {e}")
+
+    # === USER_PROMPT_SUBMIT Hook ===
+    if _hook_executor:
+        try:
+            new_messages = payload.get("messages", [])
+            user_content = ""
+            for msg in new_messages:
+                if msg.get("role") == "user":
+                    user_content = msg.get("content", "")
+                    break
+            hook_input = HookInput(
+                event=HookEvent.USER_PROMPT_SUBMIT,
+                session_id=session_id,
+                args={"prompt": user_content[:500]},  # Truncate for safety
+            )
+            await _hook_executor.execute(HookEvent.USER_PROMPT_SUBMIT, hook_input)
+        except Exception as e:
+            logger.warning(f"[Hooks] UserPromptSubmit error: {e}")
+
     # Build messages from session history + new messages
     new_messages = list(payload.get("messages", []))
     if session_id:
@@ -1176,7 +1214,7 @@ async def _handle_streaming_direct(
     full_content = ""
     tool_calls_list = []
     n_tool_turns = 0
-    executor = ToolExecutor(registry=_unified_registry, session_id=session_id, canvas_manager=_canvas_manager)
+    executor = ToolExecutor(registry=_unified_registry, session_id=session_id, canvas_manager=_canvas_manager, hook_executor=_hook_executor)
 
     # Budget tracking
     budget_tracker_id = session_id or "default"
@@ -1342,6 +1380,18 @@ async def _handle_streaming_direct(
     if session_id and full_content:
         _session_manager.add_message(session_id, "assistant", full_content)
 
+    # === SESSION_END Hook ===
+    if _hook_executor and session_id:
+        try:
+            hook_input = HookInput(
+                event=HookEvent.SESSION_END,
+                session_id=session_id,
+                result=full_content[:200] if full_content else None,
+            )
+            await _hook_executor.execute(HookEvent.SESSION_END, hook_input)
+        except Exception as e:
+            logger.warning(f"[Hooks] SessionEnd error: {e}")
+
 
 async def _handle_streaming_via_queue(
     payload: dict[str, Any],
@@ -1406,6 +1456,7 @@ async def _handle_streaming_via_queue(
         registry=_unified_registry,
         session_id=session_id,
         canvas_manager=_canvas_manager,
+        hook_executor=_hook_executor,
     )
 
     # Acquire semaphore (wait in queue)

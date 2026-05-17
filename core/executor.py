@@ -4,6 +4,7 @@ Provides:
 - Parallel execution for SAFE tools
 - Sequential execution for UNSAFE tools
 - SSE progress events for streaming
+- Hook integration for PreToolUse/PostToolUse events
 """
 
 from __future__ import annotations
@@ -45,6 +46,7 @@ class ToolExecutor:
     - SAFE tools: start immediately, run in parallel
     - UNSAFE tools: queue and run sequentially
     - Wait for all to complete before returning
+    - Hooks: PreToolUse (can block), PostToolUse (audit)
     """
 
     def __init__(
@@ -52,10 +54,12 @@ class ToolExecutor:
         registry: Any,  # UnifiedToolRegistry
         session_id: str | None = None,
         canvas_manager: Any | None = None,
+        hook_executor: Any | None = None,  # HookExecutor
     ):
         self._registry = registry
         self._session_id = session_id
         self._canvas_manager = canvas_manager
+        self._hook_executor = hook_executor
         self._results: dict[str, ToolResult] = {}
         self._pending_tasks: list[asyncio.Task] = []
         self._unsafe_queue: asyncio.Queue = asyncio.Queue()
@@ -114,7 +118,7 @@ class ToolExecutor:
         tool_name: str,
         arguments: dict[str, Any],
     ) -> ToolResult:
-        """Execute a single tool."""
+        """Execute a single tool with hook integration."""
         started_at = time.time()
 
         # Set canvas context
@@ -128,6 +132,33 @@ class ToolExecutor:
             # Push progress: tool starting
             await self._push_progress(f"⏳ 正在执行 **{tool_name}**...", "append")
 
+        # === PRE_TOOL_USE Hook ===
+        if self._hook_executor:
+            try:
+                from sessions import HookEvent, HookInput
+                hook_input = HookInput(
+                    event=HookEvent.PRE_TOOL_USE,
+                    tool_name=tool_name,
+                    args=arguments,
+                    session_id=self._session_id,
+                )
+                hook_output = await self._hook_executor.execute(
+                    HookEvent.PRE_TOOL_USE, hook_input
+                )
+                if hook_output and hook_output.status == "blocked":
+                    logger.warning(f"[EXECUTOR] Tool {tool_name} blocked by hook")
+                    duration_ms = int((time.time() - started_at) * 1000)
+                    blocked_result = ToolResult(
+                        tool_call_id=tool_call_id,
+                        tool_name=tool_name,
+                        error=f"Blocked by hook: {hook_output.message or 'Policy restriction'}",
+                        duration_ms=duration_ms,
+                    )
+                    self._results[tool_call_id] = blocked_result
+                    return blocked_result
+            except Exception as e:
+                logger.warning(f"[EXECUTOR] PreToolUse hook error: {e}")
+
         try:
             result = await self._registry.dispatch(tool_name, arguments)
 
@@ -140,6 +171,21 @@ class ToolExecutor:
                 duration_ms=duration_ms,
             )
             self._results[tool_call_id] = tool_result
+
+            # === POST_TOOL_USE Hook ===
+            if self._hook_executor:
+                try:
+                    from sessions import HookEvent, HookInput
+                    hook_input = HookInput(
+                        event=HookEvent.POST_TOOL_USE,
+                        tool_name=tool_name,
+                        args=arguments,
+                        result=result,
+                        session_id=self._session_id,
+                    )
+                    await self._hook_executor.execute(HookEvent.POST_TOOL_USE, hook_input)
+                except Exception as e:
+                    logger.warning(f"[EXECUTOR] PostToolUse hook error: {e}")
 
             # Push progress: tool completed
             if self._canvas_manager and self._session_id:
@@ -162,6 +208,21 @@ class ToolExecutor:
                 duration_ms=duration_ms,
             )
             self._results[tool_call_id] = tool_result
+
+            # === POST_TOOL_USE_FAILURE Hook ===
+            if self._hook_executor:
+                try:
+                    from sessions import HookEvent, HookInput
+                    hook_input = HookInput(
+                        event=HookEvent.POST_TOOL_USE_FAILURE,
+                        tool_name=tool_name,
+                        args=arguments,
+                        error=error_msg,
+                        session_id=self._session_id,
+                    )
+                    await self._hook_executor.execute(HookEvent.POST_TOOL_USE_FAILURE, hook_input)
+                except Exception as e:
+                    logger.warning(f"[EXECUTOR] PostToolUseFailure hook error: {e}")
 
             # Push progress: tool failed
             if self._canvas_manager and self._session_id:

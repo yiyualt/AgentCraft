@@ -37,6 +37,9 @@ from sessions.hooks import (
     HookOutput,
     HookMatcher,
     HookExecutor,
+    load_hooks_from_config,
+    create_hook_executor,
+    DEFAULT_HOOKS_PATH,
 )
 from sessions.goal import (
     GoalState,
@@ -110,6 +113,9 @@ __all__ = [
     "HookOutput",
     "HookMatcher",
     "HookExecutor",
+    "load_hooks_from_config",
+    "create_hook_executor",
+    "DEFAULT_HOOKS_PATH",
     # Goal
     "GoalState",
     "GoalManager",

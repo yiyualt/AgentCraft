@@ -12,6 +12,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger("gateway")
@@ -196,6 +197,89 @@ class HookExecutor:
 
 
 # ============================================================
+# Configuration Loader
+# ============================================================
+
+DEFAULT_HOOKS_PATH = Path.home() / ".agentcraft" / "hooks.json"
+
+
+def load_hooks_from_config(config_path: Path | str | None = None) -> list[HookMatcher]:
+    """Load hooks from JSON configuration file.
+
+    Config file format:
+    {
+        "hooks": [
+            {
+                "event": "PreToolUse",
+                "matcher": "Bash",
+                "command": "python check_safety.py",
+                "blocking": true,
+                "timeout": 30
+            },
+            {
+                "event": "PostToolUse",
+                "command": "curl -X POST http://localhost:8080/log ..."
+            }
+        ]
+    }
+
+    Args:
+        config_path: Path to config file, defaults to ~/.agentcraft/hooks.json
+
+    Returns:
+        List of HookMatcher instances
+    """
+    path = Path(config_path) if config_path else DEFAULT_HOOKS_PATH
+
+    if not path.exists():
+        logger.info(f"[Hook] Config file not found: {path}, using empty hooks")
+        return []
+
+    try:
+        data = json.loads(path.read_text())
+        hooks = []
+
+        for cfg in data.get("hooks", []):
+            event_name = cfg.get("event", "")
+            try:
+                event = HookEvent(event_name)
+            except ValueError:
+                logger.warning(f"[Hook] Unknown event: {event_name}, skipping")
+                continue
+
+            hook = HookMatcher(
+                event=event,
+                command=cfg.get("command", ""),
+                matcher=cfg.get("matcher"),
+                timeout=cfg.get("timeout", 30),
+                blocking=cfg.get("blocking", False),
+            )
+            hooks.append(hook)
+            logger.info(f"[Hook] Loaded: {event.value} → {hook.command[:50]}")
+
+        return hooks
+
+    except Exception as e:
+        logger.error(f"[Hook] Failed to load config: {e}")
+        return []
+
+
+def create_hook_executor(config_path: Path | str | None = None) -> HookExecutor:
+    """Create HookExecutor with hooks loaded from config.
+
+    Args:
+        config_path: Path to config file
+
+    Returns:
+        HookExecutor instance
+    """
+    hooks = load_hooks_from_config(config_path)
+    executor = HookExecutor(hooks)
+    logger.info(f"[Hook] Executor created with {len(hooks)} hooks")
+    return executor
+
+
+# ============================================================
 # Public API
 # ============================================================
 
@@ -205,4 +289,7 @@ __all__ = [
     "HookOutput",
     "HookMatcher",
     "HookExecutor",
+    "load_hooks_from_config",
+    "create_hook_executor",
+    "DEFAULT_HOOKS_PATH",
 ]
