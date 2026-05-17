@@ -17,7 +17,8 @@ from openai import OpenAI
 
 from tools import UnifiedToolRegistry
 from tools.builtin.agent_tools import AGENT_TYPES
-from sessions import SessionManager, ForkManager, ForkContext, TokenCalculator
+from sessions import SessionManager, ForkManager, ForkContext
+from core import TokenCalculator
 from acp.types import (
     AcpConfig,
     AcpSessionState,

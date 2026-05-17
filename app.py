@@ -231,7 +231,8 @@ async def lifespan(_app: FastAPI):
     logger.info("[Recovery] ResilientExecutor initialized")
 
     # Fork Manager initialization
-    from sessions import ForkManager, TokenCalculator
+    from sessions import ForkManager
+    from core import TokenCalculator
     fork_manager = ForkManager(
         session_manager=_session_manager,
         token_calculator=TokenCalculator(),
