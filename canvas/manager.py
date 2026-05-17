@@ -1,14 +1,18 @@
-"""CanvasManager - manages queues and bridges tools <-> SSE."""
+"""CanvasManager - manages queues and bridges tools <-> SSE.
+
+Supports both memory and Redis backends for multi-worker scenarios.
+"""
 
 from __future__ import annotations
 
-import asyncio
 import contextvars
 import json
 import logging
 import uuid
 from datetime import datetime
 from typing import Any
+
+from canvas.backends import CanvasBackend, create_backend
 
 logger = logging.getLogger(__name__)
 
@@ -32,41 +36,78 @@ class CanvasManager:
     """Manages Canvas queues and coordinates tool execution with SSE streaming.
 
     Architecture:
-        Agent → canvas_update tool → CanvasManager.push_update() → Queue
+        Agent → canvas_update tool → CanvasManager.push_update() → Backend
                                                               ↓
-        Browser ← SSE stream ← CanvasChannel ← Queue.get()
+        Browser ← SSE stream ← CanvasChannel ← Backend.pop_message()
 
-    Each session has its own queue for isolated streaming.
+    Supports both single-worker (memory) and multi-worker (Redis) modes.
     """
 
-    def __init__(self):
-        """Initialize CanvasManager."""
-        self._queues: dict[str, asyncio.Queue] = {}
-        self._lock = asyncio.Lock()
-
-    def get_or_create_queue(self, session_id: str) -> asyncio.Queue:
-        """Get or create SSE queue for a session.
+    def __init__(self, backend: CanvasBackend | None = None):
+        """Initialize CanvasManager with backend.
 
         Args:
-            session_id: Session identifier
-
-        Returns:
-            asyncio.Queue for this session's updates
+            backend: CanvasBackend instance (memory or redis)
+                     If None, uses create_backend("auto")
         """
-        if session_id not in self._queues:
-            self._queues[session_id] = asyncio.Queue(maxsize=100)
-            logger.info(f"[Canvas] Created queue for session {session_id}")
-        return self._queues[session_id]
+        self._backend = backend or create_backend("auto")
+        self._initialized = False
+
+    async def initialize(self) -> None:
+        """Initialize the backend (connect to Redis if needed)."""
+        if self._initialized:
+            return
+        await self._backend.initialize()
+        self._initialized = True
+        logger.info("[Canvas] CanvasManager initialized")
+
+    async def shutdown(self) -> None:
+        """Shutdown the backend."""
+        await self._backend.shutdown()
+        self._initialized = False
+        logger.info("[Canvas] CanvasManager shutdown")
+
+    def get_backend(self) -> CanvasBackend:
+        """Get the underlying backend."""
+        return self._backend
+
+    # ===== Queue Management (Legacy API for SSE) =====
+
+    def get_or_create_queue(self, session_id: str) -> Any:
+        """Get or create queue for session.
+
+        For memory backend: returns asyncio.Queue
+        For redis backend: returns None (use pop_message instead)
+
+        Legacy API for backward compatibility with canvas/server.py.
+        """
+        if hasattr(self._backend, "get_or_create_queue"):
+            return self._backend.get_or_create_queue(session_id)
+        return None
 
     def remove_queue(self, session_id: str) -> None:
         """Remove queue when SSE client disconnects.
 
-        Args:
-            session_id: Session to clean up
+        Legacy API for backward compatibility.
         """
-        if session_id in self._queues:
-            del self._queues[session_id]
-            logger.info(f"[Canvas] Removed queue for session {session_id}")
+        if hasattr(self._backend, "remove_queue"):
+            self._backend.remove_queue(session_id)
+        else:
+            # For Redis backend, use async unregister
+            # This will be called from SSE finally block
+            pass  # Handled in SSE stream cleanup
+
+    # ===== Session Tracking =====
+
+    def has_active_session(self, session_id: str) -> bool:
+        """Check if session has active SSE connection."""
+        return self._backend.has_session(session_id)
+
+    def list_active_sessions(self) -> list[str]:
+        """List all sessions with active SSE connections."""
+        return self._backend.list_sessions()
+
+    # ===== Push Methods (Called by Tools) =====
 
     async def push_update(
         self,
@@ -77,9 +118,8 @@ class CanvasManager:
         action: str = "append",
     ) -> bool:
         """Push update to SSE queue (called by canvas_update tool)."""
-        queue = self._queues.get(session_id)
-        if queue is None:
-            logger.warning(f"[Canvas] No queue for session {session_id}")
+        if not self.has_active_session(session_id):
+            logger.warning(f"[Canvas] No active session {session_id}")
             return False
 
         update = {
@@ -92,13 +132,10 @@ class CanvasManager:
             "timestamp": datetime.now().isoformat(),
         }
 
-        try:
-            await queue.put(update)
+        result = await self._backend.push_message(session_id, update)
+        if result:
             logger.info(f"[Canvas] Pushed update to {session_id}: mode={mode}, section={section}")
-            return True
-        except asyncio.QueueFull:
-            logger.warning(f"[Canvas] Queue full for {session_id}, dropping update")
-            return False
+        return result
 
     async def push_interactive(
         self,
@@ -109,9 +146,8 @@ class CanvasManager:
         prompt: str,
     ) -> bool:
         """Push interactive component to SSE queue (called by canvas_interact tool)."""
-        queue = self._queues.get(session_id)
-        if queue is None:
-            logger.warning(f"[Canvas] No queue for session {session_id}")
+        if not self.has_active_session(session_id):
+            logger.warning(f"[Canvas] No active session {session_id}")
             return False
 
         update = {
@@ -123,13 +159,10 @@ class CanvasManager:
             "timestamp": datetime.now().isoformat(),
         }
 
-        try:
-            await queue.put(update)
+        result = await self._backend.push_message(session_id, update)
+        if result:
             logger.info(f"[Canvas] Pushed interactive component to {session_id}: type={component_type}")
-            return True
-        except asyncio.QueueFull:
-            logger.warning(f"[Canvas] Queue full for {session_id}, dropping component")
-            return False
+        return result
 
     async def push_fork_event(
         self,
@@ -150,8 +183,7 @@ class CanvasManager:
             result: Result from fork execution
             error: Error message if fork failed
         """
-        queue = self._queues.get(session_id)
-        if queue is None:
+        if not self.has_active_session(session_id):
             return False
 
         update = {
@@ -165,28 +197,19 @@ class CanvasManager:
             "timestamp": datetime.now().isoformat(),
         }
 
-        try:
-            await queue.put(update)
+        result = await self._backend.push_message(session_id, update)
+        if result:
             logger.info(f"[Canvas] Pushed fork event to {session_id}: type={event_type}")
-            return True
-        except asyncio.QueueFull:
-            logger.warning(f"[Canvas] Queue full for {session_id}, dropping fork event")
-            return False
+        return result
 
-    def has_active_session(self, session_id: str) -> bool:
-        """Check if session has active SSE connection.
+    async def push_user_event(self, session_id: str, event: dict) -> None:
+        """Push user interaction event back to queue.
 
-        Args:
-            session_id: Session to check
-
-        Returns:
-            True if queue exists (SSE connected)
+        Used by POST /canvas/event endpoint.
         """
-        return session_id in self._queues
-
-    def list_active_sessions(self) -> list[str]:
-        """List all sessions with active SSE connections."""
-        return list(self._queues.keys())
+        event["timestamp"] = datetime.now().isoformat()
+        await self._backend.push_message(session_id, event)
+        logger.info(f"[Canvas] User event pushed to {session_id}")
 
 
 __all__ = [

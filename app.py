@@ -34,6 +34,7 @@ from sessions import PromptBuilder, MemoryLoader
 from skills import SkillLoader, default_skill_dirs
 from channels import ChannelRouter
 from canvas import CanvasManager, CanvasChannel
+from canvas.backends import create_backend
 from acp import AgentControlPlane, AcpConfig
 
 # ===== Config =====
@@ -41,6 +42,12 @@ MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5050")
 MLFLOW_EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT", "agentcraft-gateway")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "sk-default")
+
+# Redis Configuration (Canvas multi-worker support)
+REDIS_ENABLED = os.getenv("REDIS_ENABLED", "auto")  # true|false|auto
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+REDIS_MAX_CONNECTIONS = int(os.getenv("REDIS_MAX_CONNECTIONS", "50"))
+REDIS_MESSAGE_TTL = int(os.getenv("REDIS_MESSAGE_TTL", "3600"))
 
 # Concurrency / Rate Limiting
 MAX_CONCURRENT_LLM = int(os.getenv("MAX_CONCURRENT_OLLAMA", "100"))
@@ -125,8 +132,14 @@ set_skill_loader(_skill_loader)  # Set skill loader for Skill tool
 _canvas_manager: CanvasManager | None = None
 _canvas_channel: CanvasChannel | None = None
 
-# Initialize canvas early so router can be registered before app starts
-_canvas_manager = CanvasManager()
+# Initialize canvas with backend (supports multi-worker via Redis)
+_canvas_backend = create_backend(
+    mode=REDIS_ENABLED,
+    url=REDIS_URL,
+    max_connections=REDIS_MAX_CONNECTIONS,
+    ttl=REDIS_MESSAGE_TTL,
+)
+_canvas_manager = CanvasManager(backend=_canvas_backend)
 _canvas_channel = CanvasChannel(_canvas_manager)
 
 # ===== Compaction =====
@@ -170,10 +183,11 @@ async def lifespan(_app: FastAPI):
     _skill_loader.load()
     _app.state.skill_loader = _skill_loader
 
-    # Canvas (already initialized at module level for router registration)
+    # Canvas (initialize backend for multi-worker support)
+    await _canvas_manager.initialize()
     _app.state.canvas_manager = _canvas_manager
     set_canvas_manager(_canvas_manager)
-    logger.info("[Canvas] CanvasManager set to app state")
+    logger.info(f"[Canvas] CanvasManager initialized with {type(_canvas_backend).__name__} backend")
 
     # MCP initialization
     config = MCPConfig.load()
@@ -331,6 +345,9 @@ async def lifespan(_app: FastAPI):
         await _llm_queue.stop()
     if _mcp_manager:
         await _mcp_manager.shutdown()
+    # Canvas shutdown
+    if _canvas_manager:
+        await _canvas_manager.shutdown()
 
 
 app = FastAPI(title="Ollama MLflow Gateway", lifespan=lifespan)

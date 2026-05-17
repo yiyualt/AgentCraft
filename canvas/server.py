@@ -13,12 +13,12 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from canvas.manager import CanvasManager
-from channels.base import Channel
+from canvas.backends.memory_backend import MemoryBackend
 
 logger = logging.getLogger(__name__)
 
 
-class CanvasChannel(Channel):
+class CanvasChannel:
     """Canvas channel with SSE streaming and event handling.
 
     Routes:
@@ -44,13 +44,15 @@ class CanvasChannel(Channel):
         return self._router
 
     async def start(self) -> None:
-        """Start the channel (no async initialization needed for SSE)."""
+        """Start the channel (initialize backend)."""
+        await self._manager.initialize()
         logger.info("[Canvas] Channel started")
 
     async def stop(self) -> None:
-        """Stop the channel and clean up all queues."""
+        """Stop the channel and cleanup."""
         for session_id in self._manager.list_active_sessions():
-            self._manager.remove_queue(session_id)
+            await self._manager._backend.unregister_session(session_id)
+        await self._manager.shutdown()
         logger.info("[Canvas] Channel stopped")
 
     async def send_message(self, peer_id: str, text: str) -> None:
@@ -85,7 +87,8 @@ class CanvasChannel(Channel):
             Client connects here to receive updates pushed by canvas_update tool.
             Heartbeat every 30s to keep connection alive.
             """
-            queue = self._manager.get_or_create_queue(session_id)
+            # Register session
+            await self._manager._backend.register_session(session_id)
 
             async def event_generator():
                 # Send initial connection event
@@ -100,18 +103,25 @@ class CanvasChannel(Channel):
 
                         # Wait for updates with timeout (heartbeat)
                         try:
-                            update = await asyncio.wait_for(queue.get(), timeout=30.0)
-                            event_type = update.get("type", "update")
-                            yield f"event: {event_type}\ndata: {json.dumps(update)}\n\n"
-                        except asyncio.TimeoutError:
-                            # Send heartbeat to keep connection alive
-                            yield "event: heartbeat\ndata: \n\n"
+                            # Use backend.pop_message() instead of queue.get()
+                            update = await self._manager._backend.pop_message(session_id, timeout=30.0)
+
+                            if update:
+                                event_type = update.get("type", "update")
+                                yield f"event: {event_type}\ndata: {json.dumps(update)}\n\n"
+                            else:
+                                # Timeout - send heartbeat
+                                yield "event: heartbeat\ndata: \n\n"
+
+                        except Exception as e:
+                            logger.error(f"[Canvas SSE] Error: {e}")
+                            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
 
                 except asyncio.CancelledError:
                     logger.info(f"[Canvas SSE] Stream cancelled: {session_id}")
                 finally:
-                    # Cleanup queue on disconnect
-                    self._manager.remove_queue(session_id)
+                    # Cleanup session
+                    await self._manager._backend.unregister_session(session_id)
 
             return StreamingResponse(
                 event_generator(),
@@ -141,17 +151,15 @@ class CanvasChannel(Channel):
             )
 
             # Push the event back to the session queue for agent to receive
-            queue = self._manager.get_or_create_queue(session_id)
-            if queue:
-                event_update = {
-                    "type": "user_interaction",
-                    "id": component_id,
-                    "event_type": event_type,
-                    "data": event_data,
-                    "timestamp": datetime.now().isoformat(),
-                }
-                await queue.put(event_update)
-                logger.info(f"[Canvas] User interaction pushed to queue: {event_type}")
+            event_update = {
+                "type": "user_interaction",
+                "id": component_id,
+                "event_type": event_type,
+                "data": event_data,
+                "timestamp": datetime.now().isoformat(),
+            }
+            await self._manager.push_user_event(session_id, event_update)
+            logger.info(f"[Canvas] User interaction pushed to queue: {event_type}")
 
             return {
                 "status": "received",
@@ -165,6 +173,7 @@ class CanvasChannel(Channel):
             return {
                 "status": "ok",
                 "active_sessions": self._manager.list_active_sessions(),
+                "backend": type(self._manager._backend).__name__,
             }
 
 
