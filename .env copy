@@ -1,0 +1,24 @@
+# LLM API
+LLM_BASE_URL=https://api.deepseek.com
+LLM_API_KEY=
+
+# MLflow
+MLFLOW_TRACKING_URI=http://127.0.0.1:5050
+MLFLOW_EXPERIMENT=agentcraft-gateway
+
+# Concurrency
+MAX_CONCURRENT_OLLAMA=100
+
+# Rate Limiting (disabled by default)
+RATE_LIMIT_ENABLED=false
+RATE_LIMIT_REQUESTS=60
+RATE_LIMIT_WINDOW=60
+
+DEEPSEEK_API_KEY=
+UNIFUNCS_API_KEY=
+
+# ===== Redis (Canvas multi-worker support) =====
+REDIS_ENABLED=auto   # true|false|auto (auto: try Redis, fallback to memory)
+REDIS_URL=redis://localhost:6379/0
+REDIS_MAX_CONNECTIONS=50
+REDIS_MESSAGE_TTL=3600
