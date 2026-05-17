@@ -147,6 +147,7 @@ _permission_auditor: PermissionAuditor | None = None
 _memory_store: VectorMemoryStore | None = None
 _memory_loader: MemoryLoader | None = None
 _prompt_builder: PromptBuilder | None = None
+_memory_extractor: Any = None  # MemoryExtractor instance
 
 # ===== ACP (Agent Control Plane) =====
 _acp: AgentControlPlane | None = None
@@ -306,6 +307,13 @@ async def lifespan(_app: FastAPI):
     if _provider_registry:
         status = _provider_registry.get_status_summary()
         logger.info(f"[ProviderRegistry] Initialized: {status}")
+
+    # MemoryExtractor (auto memory extraction from conversations)
+    global _memory_extractor
+    from sessions.memory_extractor import MemoryExtractor
+    # Use existing OpenAI client (defined at module level)
+    _memory_extractor = MemoryExtractor(llm_client=client, model="deepseek-chat")
+    logger.info("[MemoryExtractor] Initialized for auto memory extraction")
 
     # LLM Queue initialization (new concurrent request handling)
     global _llm_queue, _stream_handler
@@ -1278,7 +1286,15 @@ async def _handle_streaming_direct(
     # Save user messages to session
     if session_id:
         for msg in new_messages:
-            _session_manager.add_message(session_id, msg.get("role", "user"), msg.get("content", ""))
+            _, should_trigger = _session_manager.add_message(
+                session_id, msg.get("role", "user"), msg.get("content", "")
+            )
+            # Auto memory extraction trigger
+            if should_trigger and _memory_extractor:
+                recent_messages = _session_manager.get_messages_openai(session_id, limit=20)
+                asyncio.create_task(
+                    _memory_extractor.analyze_and_save(session_id, recent_messages)
+                )
 
     full_content = ""
     tool_calls_list = []
@@ -1519,7 +1535,7 @@ async def _handle_streaming_direct(
         yield f"event: error\ndata: {{\"error\": \"{str(e)}\"}}\n\n"
 
     if session_id and full_content:
-        _session_manager.add_message(session_id, "assistant", full_content)
+        _session_manager.add_message(session_id, "assistant", full_content)  # assistant msg, no trigger
 
     # === SESSION_END Hook ===
     if _hook_executor and session_id:
@@ -1586,11 +1602,17 @@ async def _handle_streaming_via_queue(
     # Save incoming user messages to session
     if session_id:
         for msg in new_messages:
-            _session_manager.add_message(
+            _, should_trigger = _session_manager.add_message(
                 session_id=session_id,
                 role=msg.get("role", "user"),
                 content=msg.get("content", ""),
             )
+            # Auto memory extraction trigger
+            if should_trigger and _memory_extractor:
+                recent_messages = _session_manager.get_messages_openai(session_id, limit=20)
+                asyncio.create_task(
+                    _memory_extractor.analyze_and_save(session_id, recent_messages)
+                )
 
     # Create ToolExecutor once (reused across tool turns)
     executor = ToolExecutor(
@@ -1712,7 +1734,7 @@ async def _handle_streaming_via_queue(
             session_id=session_id,
             role="assistant",
             content=full_content,
-        )
+        )  # assistant msg, no trigger
 
 
 # ===== Slash command processing =====

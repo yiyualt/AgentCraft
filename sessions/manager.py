@@ -105,7 +105,12 @@ class SessionManager:
         tool_calls: str | None = None,
         tool_call_id: str | None = None,
         name: str | None = None,
-    ) -> Message:
+    ) -> tuple[Message, bool]:
+        """Add a message to session.
+
+        Returns:
+            Tuple of (Message, should_trigger_memory_extraction)
+        """
         mid = new_id()
         now = now_iso()
 
@@ -132,13 +137,35 @@ class SessionManager:
             "token_count = token_count + ?, updated_at = ? WHERE id = ?",
             (token_count, now, session_id),
         )
+
+        # Update batch_count for user messages (auto memory extraction trigger)
+        should_trigger_extraction = False
+        if role == "user":
+            # Get current batch_count
+            session = self.get_session(session_id)
+            if session:
+                new_batch_count = session.message_count_batch + 1
+                if new_batch_count >= 5:
+                    # Trigger extraction and reset
+                    self._conn.execute(
+                        "UPDATE sessions SET message_count_batch = 0 WHERE id = ?",
+                        (session_id,),
+                    )
+                    should_trigger_extraction = True
+                else:
+                    self._conn.execute(
+                        "UPDATE sessions SET message_count_batch = ? WHERE id = ?",
+                        (new_batch_count, session_id),
+                    )
+
         self._conn.commit()
+
         return Message(
             id=mid, session_id=session_id, role=role,
             content=content, tool_calls=tool_calls,
             tool_call_id=tool_call_id, name=name,
             created_at=now, token_count=token_count,
-        )
+        ), should_trigger_extraction
 
     def get_messages(
         self, session_id: str, limit: int = 50
@@ -209,6 +236,7 @@ class SessionManager:
             skills=row[9] if len(row) > 9 else "",
             context_window=row[10] if len(row) > 10 else 64000,
             memory_strategy=row[11] if len(row) > 11 else "sliding_window",
+            message_count_batch=row[12] if len(row) > 12 else 0,
         )
 
     @staticmethod

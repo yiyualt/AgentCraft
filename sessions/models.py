@@ -24,6 +24,7 @@ class Session:
     skills: str = ""
     context_window: int = 64000
     memory_strategy: str = "sliding_window"
+    message_count_batch: int = 0  # For auto memory extraction (5 user messages trigger)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -88,7 +89,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     status TEXT NOT NULL DEFAULT 'active',
     skills TEXT NOT NULL DEFAULT '',
     context_window INTEGER NOT NULL DEFAULT 64000,
-    memory_strategy TEXT NOT NULL DEFAULT 'sliding_window'
+    memory_strategy TEXT NOT NULL DEFAULT 'sliding_window',
+    message_count_batch INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -140,6 +142,12 @@ def init_db(db_path: str) -> sqlite3.Connection:
         conn.execute("SELECT token_count FROM messages LIMIT 1")
     except sqlite3.OperationalError:
         conn.execute("ALTER TABLE messages ADD COLUMN token_count INTEGER NOT NULL DEFAULT 0")
+
+    # 5. message_count_batch column in sessions
+    try:
+        conn.execute("SELECT message_count_batch FROM sessions LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE sessions ADD COLUMN message_count_batch INTEGER NOT NULL DEFAULT 0")
 
     conn.commit()
     return conn

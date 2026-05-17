@@ -7,6 +7,7 @@ from sessions.tool_loop import run_tool_loop, clean_orphan_tool_messages
 from sessions.memory import SlidingWindowStrategy, SummaryStrategy, HybridStrategy
 from sessions.compaction import CompactionConfig, CompactionState, CompactionManager
 from sessions.fork import ForkContext, ForkManager, FORK_PLACEHOLDER, FORK_CHILD_BOILERPLATE
+from sessions.memory_extractor import MemoryExtractor
 from sessions.budget import (
     BudgetTracker,
     BudgetManager,
@@ -88,6 +89,8 @@ __all__ = [
     "ForkManager",
     "FORK_PLACEHOLDER",
     "FORK_CHILD_BOILERPLATE",
+    # Memory Extraction (auto)
+    "MemoryExtractor",
     # Budget
     "BudgetTracker",
     "BudgetManager",
