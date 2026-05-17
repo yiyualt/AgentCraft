@@ -1274,7 +1274,7 @@ async def _handle_streaming_direct(
                             text = delta["content"]
                             turn_content += text
                             full_content += text
-                            escaped = text.replace('"', '\\"').replace('\n', '\\n')
+                            escaped = text.replace('"', '\\"').replace('\n', '\\n').replace('\r', '')
                             yield f"data: {{\"text\": \"{escaped}\"}}\n\n"
 
                         if delta.get("tool_calls"):
@@ -1496,7 +1496,7 @@ async def _handle_streaming_via_queue(
                         text = delta["content"]
                         turn_content += text
                         full_content += text
-                        escaped = text.replace('"', '\\"').replace('\n', '\\n')
+                        escaped = text.replace('"', '\\"').replace('\n', '\\n').replace('\r', '')
                         yield f"data: {{\"text\": \"{escaped}\"}}\n\n"
 
                     # Accumulate tool calls
