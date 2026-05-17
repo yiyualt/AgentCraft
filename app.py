@@ -7,14 +7,12 @@ from dotenv import load_dotenv
 load_dotenv()  # Load .env file before reading config
 
 import httpx
-import mlflow
 import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
-from mlflow.entities import SpanType
 from openai import OpenAI
 
 from tools import get_default_registry, UnifiedToolRegistry
@@ -38,8 +36,6 @@ from canvas.backends import create_backend
 from acp import AgentControlPlane, AcpConfig
 
 # ===== Config =====
-MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5050")
-MLFLOW_EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT", "agentcraft-gateway")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "sk-default")
 
@@ -91,11 +87,6 @@ if not chat_logger.handlers:
     chat_file_handler.setLevel(logging.INFO)
     chat_file_handler.setFormatter(formatter)
     chat_logger.addHandler(chat_file_handler)
-
-# ===== MLflow =====
-mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-mlflow.set_experiment(MLFLOW_EXPERIMENT)
-mlflow.openai.autolog(log_traces=False)
 
 # ===== LLM Client =====
 client = OpenAI(
@@ -424,7 +415,6 @@ async def _check_rate_limit(request: Request) -> None:
 def health() -> dict[str, str]:
     return {
         "status": "ok",
-        "mlflow_tracking_uri": MLFLOW_TRACKING_URI,
         "llm_base_url": LLM_BASE_URL,
         "gateway_version": GATEWAY_VERSION,
     }
@@ -1617,45 +1607,3 @@ def _summarize_messages(msgs: list[dict]) -> list[dict]:
     return out
 
 
-def _log_mlflow_artifacts(result: dict[str, Any]) -> None:
-    try:
-        message = result["choices"][0]["message"]
-        answer = message.get("content", "")
-        reasoning = message.get("reasoning", "")
-        mlflow.log_text(answer or "", "answer.txt")
-        if reasoning:
-            mlflow.log_text(reasoning, "reasoning.txt")
-    except Exception:
-        pass
-
-
-def _export_trace_to_filesystem(trace_id: str, experiment_id: int) -> None:
-    """Export trace data to file system as traces.json artifact."""
-    try:
-        from mlflow.tracing.client import TracingClient
-
-        client = TracingClient()
-        trace = client.get_trace(trace_id)
-
-        artifact_dir = f"mlruns/{experiment_id}/traces/{trace_id}/artifacts"
-        os.makedirs(artifact_dir, exist_ok=True)
-
-        spans_data = {"spans": []}
-        for span in trace.data.spans:
-            span_dict = {
-                "trace_id": span.trace_id,
-                "span_id": span.span_id,
-                "parent_span_id": span.parent_id,
-                "name": span.name,
-                "start_time_unix_nano": span.start_time_ns,
-                "end_time_unix_nano": span.end_time_ns,
-                "events": span.events or [],
-                "status": {"code": "STATUS_CODE_OK", "message": ""},
-                "attributes": span.attributes or {},
-            }
-            spans_data["spans"].append(span_dict)
-
-        with open(f"{artifact_dir}/traces.json", "w") as f:
-            json.dump(spans_data, f, ensure_ascii=False)
-    except Exception:
-        pass

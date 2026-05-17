@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ===== Configuration =====
-MLFLOW_PORT = 5050
 REDIS_PORT = 6379
 APP_PORT = 8000
 WORKERS = int(os.getenv("APP_WORKERS", "8"))
@@ -30,36 +29,6 @@ def wait_for_port(port: int, timeout: float = 10.0) -> bool:
             return True
         time.sleep(0.5)
     return False
-
-
-def start_mlflow():
-    """Start MLflow server if not running."""
-    if is_port_open(MLFLOW_PORT):
-        print(f"[MLflow] Already running on port {MLFLOW_PORT}")
-        return
-
-    print(f"[MLflow] Starting on port {MLFLOW_PORT}...")
-    subprocess.Popen(
-        [
-            "mlflow",
-            "server",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(MLFLOW_PORT),
-            "--backend-store-uri",
-            "sqlite:///mlflow.db",
-            "--default-artifact-root",
-            "./mlartifacts",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
-    if wait_for_port(MLFLOW_PORT, timeout=15.0):
-        print(f"[MLflow] Started successfully")
-    else:
-        print(f"[MLflow] Warning: startup timeout, continuing anyway...")
 
 
 def start_redis():
@@ -86,8 +55,7 @@ def main():
     print("AgentCraft Gateway Startup")
     print("=" * 50)
 
-    # Start dependencies
-    start_mlflow()
+    # Start Redis (required for canvas)
     start_redis()
 
     print(f"\n[App] Starting with {WORKERS} workers on port {APP_PORT}...")
