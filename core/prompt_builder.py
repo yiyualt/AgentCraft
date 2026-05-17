@@ -110,3 +110,6 @@ def build_system_prompt(
     """Convenience function to build system prompt."""
     builder = PromptBuilder(skill_loader=skill_loader)
     return builder.build(messages=messages, goal=goal)
+
+
+__all__ = ["PromptBuilder", "build_system_prompt"]

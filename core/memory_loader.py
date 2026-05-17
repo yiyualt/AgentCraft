@@ -99,3 +99,6 @@ def load_relevant_memories(
     """Convenience function to load relevant memories."""
     loader = MemoryLoader()
     return loader.load_for_task(messages, task, limit, top_k)
+
+
+__all__ = ["MemoryLoader", "load_relevant_memories"]

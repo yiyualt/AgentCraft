@@ -220,3 +220,6 @@ class SessionManager:
             created_at=row[7],
             token_count=row[8] if len(row) > 8 else 0,
         )
+
+
+__all__ = ["SessionManager"]

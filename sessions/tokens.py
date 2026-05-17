@@ -73,3 +73,6 @@ class TokenCalculator:
         if not messages:
             return 0
         return sum(self.count_message(m) for m in messages)
+
+
+__all__ = ["TokenCalculator"]

@@ -520,3 +520,13 @@ class VectorMemoryStore:
                 continue
 
         return count
+
+
+__all__ = [
+    "EmbeddingModel",
+    "MockEmbeddingModel",
+    "LocalEmbeddingModel",
+    "RemoteEmbeddingModel",
+    "MemoryEntry",
+    "VectorMemoryStore",
+]

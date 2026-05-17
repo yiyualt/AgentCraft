@@ -143,3 +143,6 @@ def init_db(db_path: str) -> sqlite3.Connection:
 
     conn.commit()
     return conn
+
+
+__all__ = ["Session", "Message", "now_iso", "new_id", "init_db", "SCHEMA"]

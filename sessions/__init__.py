@@ -63,3 +63,75 @@ from sessions.vector_memory import (
     VectorMemoryStore,
     MemoryEntry,
 )
+
+__all__ = [
+    # Session management
+    "SessionManager",
+    # Token counting
+    "TokenCalculator",
+    # Memory strategies
+    "SlidingWindowStrategy",
+    "SummaryStrategy",
+    "HybridStrategy",
+    # Compaction
+    "CompactionConfig",
+    "CompactionState",
+    "CompactionManager",
+    # Fork
+    "ForkContext",
+    "ForkManager",
+    "FORK_PLACEHOLDER",
+    "FORK_CHILD_BOILERPLATE",
+    # Budget
+    "BudgetTracker",
+    "BudgetManager",
+    "BudgetDecision",
+    "ContinueDecision",
+    "StopDecision",
+    "check_token_budget",
+    "get_budget_for_task",
+    "generate_budget_report",
+    "estimate_tokens_simple",
+    "DEFAULT_BUDGET",
+    # Error recovery
+    "ErrorKind",
+    "RetryStrategy",
+    "CircuitState",
+    "ResilientExecutor",
+    "classify_error",
+    "get_retry_config",
+    "calculate_delay",
+    "format_error_message",
+    "ERROR_MESSAGES",
+    "RETRY_CONFIGS",
+    # Hooks
+    "HookEvent",
+    "HookInput",
+    "HookOutput",
+    "HookMatcher",
+    "HookExecutor",
+    # Goal
+    "GoalState",
+    "GoalManager",
+    "check_stop_goal",
+    # Permission
+    "PermissionMode",
+    "PermissionRuleKind",
+    "PermissionResult",
+    "PermissionRule",
+    "PermissionChecker",
+    "PermissionPattern",
+    "PermissionAuditLog",
+    "PermissionAuditor",
+    "YoloClassifier",
+    "RuleSource",
+    "MultiSourceRuleManager",
+    "DEFAULT_RULES",
+    # Vector memory
+    "EmbeddingModel",
+    "LocalEmbeddingModel",
+    "RemoteEmbeddingModel",
+    "MockEmbeddingModel",
+    "VectorMemoryStore",
+    "MemoryEntry",
+]

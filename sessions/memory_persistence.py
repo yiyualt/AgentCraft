@@ -250,3 +250,6 @@ Conversation:
             store.save(entry)
             saved_names.append(entry.name)
         return saved_names
+
+
+__all__ = ["MemoryType", "MemoryEntry", "MemoryStore", "MemoryExtractor"]
