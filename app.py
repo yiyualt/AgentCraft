@@ -29,7 +29,7 @@ from providers import ProviderRegistry, register_default_providers
 from gateway import GATEWAY_VERSION, get_version_headers, validate_client_version, get_changelog
 from core import clean_orphan_tool_messages, ToolExecutor, is_safe
 from core import LLMRequestQueue, StreamHandler
-from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, PermissionMode, PermissionRuleKind, HookEvent, HookMatcher, MultiSourceRuleManager, PermissionAuditor, PermissionRule, PermissionResult, RuleSource
+from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, check_token_budget, generate_budget_report, StopDecision, ContinueDecision, DEFAULT_BUDGET, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, format_error_message, PermissionMode, PermissionRuleKind, HookEvent, HookMatcher, MultiSourceRuleManager, PermissionAuditor, PermissionRule, PermissionResult, RuleSource
 from sessions.vector_memory import VectorMemoryStore
 from skills import SkillLoader, default_skill_dirs
 from channels import ChannelRouter
@@ -1119,7 +1119,17 @@ async def _handle_streaming_direct(
 
     full_content = ""
     tool_calls_list = []
+    n_tool_turns = 0
     executor = ToolExecutor(registry=_unified_registry, session_id=session_id, canvas_manager=_canvas_manager)
+
+    # Budget tracking
+    budget_tracker_id = session_id or "default"
+    if _budget_manager:
+        _budget_manager.reset_tracker(budget_tracker_id)
+
+    # Error recovery tracking
+    total_retries = 0
+    max_retries = 10
 
     try:
         provider = _provider_registry.get_provider("deepseek")
@@ -1129,38 +1139,123 @@ async def _handle_streaming_direct(
 
         # Tool loop
         while True:
-            stream = provider.stream(messages, model, stream=True, **kwargs)
-            turn_content = ""
-            tool_calls_list = []
+            # Budget check before each turn
+            if _budget_manager and session_id:
+                current_tokens = estimate_tokens_simple(messages)
+                budget = getattr(session, 'token_budget', None) or DEFAULT_BUDGET
+                decision = _budget_manager.check_budget(session_id, budget, current_tokens)
 
-            async for chunk in stream:
-                choices = chunk.get("choices", [])
-                if not choices:
-                    continue
-
-                delta = choices[0].get("delta", {})
-                if delta.get("content"):
-                    text = delta["content"]
-                    turn_content += text
-                    full_content += text
-                    escaped = text.replace('"', '\\"').replace('\n', '\\n')
-                    yield f"data: {{\"text\": \"{escaped}\"}}\n\n"
-
-                if delta.get("tool_calls"):
-                    for tc in delta["tool_calls"]:
-                        idx = tc.get("index", 0)
-                        while idx >= len(tool_calls_list):
-                            tool_calls_list.append({"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
-                        if tc.get("id"):
-                            tool_calls_list[idx]["id"] = tc["id"]
-                        fn = tc.get("function", {})
-                        if fn.get("name"):
-                            tool_calls_list[idx]["function"]["name"] = fn["name"]
-                        if fn.get("arguments"):
-                            tool_calls_list[idx]["function"]["arguments"] += fn["arguments"]
-
-                if choices[0].get("finish_reason"):
+                if isinstance(decision, StopDecision):
+                    logger.info(f"[Budget] Stop: {decision.reason}, tokens={current_tokens}/{budget}")
+                    report = generate_budget_report(decision.completion_event)
+                    yield f"event: budget_stop\ndata: {{\"reason\": \"{decision.reason}\", \"report\": \"{report.replace(chr(34), chr(92)+chr(34)).replace(chr(10), chr(92)+chr(110))}\"}}\n\n"
                     break
+                elif isinstance(decision, ContinueDecision) and decision.nudge_message:
+                    # Send nudge to frontend (optional)
+                    yield f"event: budget_nudge\ndata: {{\"pct\": {decision.pct}, \"message\": \"{decision.nudge_message}\"}}\n\n"
+
+            # Circuit breaker check
+            if _recovery_executor and _recovery_executor._circuit.is_open():
+                logger.error("[Recovery] Circuit breaker open, aborting")
+                yield f"event: error\ndata: {{\"error\": \"连续失败次数过多，已进入保护状态。请稍后重试。\"}}\n\n"
+                break
+
+            # Stream call with retry logic
+            stream_error = None
+            retry_count = 0
+
+            while retry_count <= max_retries:
+                try:
+                    stream = provider.stream(messages, model, stream=True, **kwargs)
+                    turn_content = ""
+                    tool_calls_list = []
+
+                    async for chunk in stream:
+                        choices = chunk.get("choices", [])
+                        if not choices:
+                            continue
+
+                        delta = choices[0].get("delta", {})
+                        if delta.get("content"):
+                            text = delta["content"]
+                            turn_content += text
+                            full_content += text
+                            escaped = text.replace('"', '\\"').replace('\n', '\\n')
+                            yield f"data: {{\"text\": \"{escaped}\"}}\n\n"
+
+                        if delta.get("tool_calls"):
+                            for tc in delta["tool_calls"]:
+                                idx = tc.get("index", 0)
+                                while idx >= len(tool_calls_list):
+                                    tool_calls_list.append({"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+                                if tc.get("id"):
+                                    tool_calls_list[idx]["id"] = tc["id"]
+                                fn = tc.get("function", {})
+                                if fn.get("name"):
+                                    tool_calls_list[idx]["function"]["name"] = fn["name"]
+                                if fn.get("arguments"):
+                                    tool_calls_list[idx]["function"]["arguments"] += fn["arguments"]
+
+                        if choices[0].get("finish_reason"):
+                            break
+
+                    # Stream completed successfully - reset circuit breaker
+                    if _recovery_executor:
+                        _recovery_executor._circuit.record_success()
+                    stream_error = None
+                    break  # Exit retry loop
+
+                except Exception as e:
+                    stream_error = e
+                    error_kind = classify_error(e)
+                    strategy = get_retry_config(error_kind)
+
+                    logger.warning(f"[Recovery] {error_kind.value}: {str(e)[:100]}")
+
+                    # Auth error - no retry
+                    if error_kind == ErrorKind.AUTH:
+                        logger.error("[Recovery] Auth error, not retrying")
+                        if _recovery_executor:
+                            _recovery_executor._circuit.record_failure()
+                        yield f"event: error\ndata: {{\"error\": \"{format_error_message(error_kind, str(e))}\"}}\n\n"
+                        return
+
+                    # Prompt too long - attempt compaction
+                    if error_kind == ErrorKind.PROMPT_TOO_LONG:
+                        logger.warning("[Recovery] Prompt too long, attempting compaction...")
+                        if _recovery_executor and _recovery_executor._compaction_callback:
+                            messages = await _recovery_executor._compaction_callback(messages)
+                            logger.info(f"[Recovery] Compacted to {len(messages)} messages")
+                            retry_count += 1
+                            total_retries += 1
+                            continue
+                        else:
+                            if _recovery_executor:
+                                _recovery_executor._circuit.record_failure()
+                            yield f"event: error\ndata: {{\"error\": \"{format_error_message(error_kind, str(e))}\"}}\n\n"
+                            return
+
+                    # Check retry limits
+                    if retry_count >= strategy.max_retries or total_retries >= max_retries:
+                        logger.error(f"[Recovery] Max retries exceeded: {retry_count}/{strategy.max_retries}")
+                        if _recovery_executor:
+                            _recovery_executor._circuit.record_failure()
+                        yield f"event: error\ndata: {{\"error\": \"{format_error_message(error_kind, str(e))}\"}}\n\n"
+                        return
+
+                    # Delay and retry
+                    delay = calculate_delay(retry_count, strategy)
+                    logger.info(f"[Recovery] Retrying in {delay:.1f}s (attempt {retry_count + 1}/{strategy.max_retries})")
+                    yield f"event: retry\ndata: {{\"error_kind\": \"{error_kind.value}\", \"delay\": {delay:.1f}, \"attempt\": {retry_count + 1}}}\n\n"
+
+                    await asyncio.sleep(delay)
+                    retry_count += 1
+                    total_retries += 1
+
+            # Check if stream failed after all retries
+            if stream_error:
+                logger.error(f"[Stream] Error after retries: {stream_error}")
+                return
 
             # No tool calls - done
             if not tool_calls_list:
@@ -1182,9 +1277,10 @@ async def _handle_streaming_direct(
                     messages.append({"role": "tool", "tool_call_id": tc["id"], "content": "Tool not executed"})
 
             messages = clean_orphan_tool_messages(messages)
+            n_tool_turns += 1
 
     except Exception as e:
-        logger.error(f"[Stream] Error: {e}")
+        logger.error(f"[Stream] Unexpected error: {e}")
         yield f"event: error\ndata: {{\"error\": \"{str(e)}\"}}\n\n"
 
     if session_id and full_content:

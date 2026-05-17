@@ -12,6 +12,7 @@ import time
 from typing import Any
 
 from tools import tool
+from sessions.fork import FORK_PLACEHOLDER, FORK_CHILD_BOILERPLATE
 
 logger = logging.getLogger("gateway")
 
@@ -154,6 +155,7 @@ def _get_fork_context(session_id: str, task: str) -> tuple[list[dict], bool]:
         Tuple of (messages, is_fork_child)
     """
     if _fork_manager is None or session_id is None:
+        logger.debug("[Fork] No fork manager or session_id")
         return None, False
 
     fork_context = _fork_manager.create_fork_context(
@@ -161,16 +163,19 @@ def _get_fork_context(session_id: str, task: str) -> tuple[list[dict], bool]:
         max_tokens=32000,
     )
     if fork_context is None:
+        logger.warning(f"[Fork] Could not create fork context for session {session_id}")
         return None, False
 
-    # Replace placeholder with task
-    messages = fork_context.inherited_messages.copy()
-    for i, msg in enumerate(messages):
-        if msg.get("content") == "FORK_PLACEHOLDER":
-            messages[i] = {"role": "user", "content": task}
-            break
+    logger.info(f"[Fork] Created fork context: inherited={len(fork_context.inherited_messages)} messages")
 
-    return messages, True
+    # Use ForkManager to build fork messages (properly replaces placeholder)
+    messages = _fork_manager.build_fork_messages(fork_context, task)
+
+    # Verify is_in_fork_child detection
+    is_fork = _fork_manager.is_in_fork_child(messages)
+    logger.info(f"[Fork] is_fork_child={is_fork}, placeholder_replaced")
+
+    return messages, is_fork
 
 
 @tool(
