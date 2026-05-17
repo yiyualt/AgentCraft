@@ -38,7 +38,11 @@
             transition: width 0.3s;
         }
 
-        .sidebar.collapsed { width: 0; }
+        .sidebar.collapsed {
+            width: 0;
+            overflow: hidden;
+            border-right: none;
+        }
 
         .sidebar-header { padding: 12px; }
 
@@ -211,9 +215,10 @@
             display: flex;
             justify-content: center;
             transition: left 0.3s;
+            z-index: 10;
         }
 
-        .sidebar.collapsed ~ .main .input-area { left: 0; }
+        .sidebar.collapsed + .main .input-area { left: 0; }
 
         .input-box {
             width: 100%;
@@ -242,17 +247,36 @@
         .input-box textarea::placeholder { color: var(--text-muted); }
 
         .send-btn {
-            width: 32px;
-            height: 32px;
+            width: 36px;
+            height: 36px;
             background: var(--accent-primary);
             border: none;
-            border-radius: 6px;
+            border-radius: 50%;
             color: white;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(16, 163, 127, 0.3);
         }
 
-        .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .send-btn:hover:not(:disabled) {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(16, 163, 127, 0.4);
+        }
+
+        .send-btn:active:not(:disabled) {
+            transform: scale(0.95);
+        }
+
+        .send-btn:disabled {
+            background: var(--text-muted);
+            opacity: 0.5;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
 
         /* Interactive Components - Compact Style */
         .interactive-container {
@@ -361,7 +385,8 @@
 
         /* Responsive */
         @media (max-width: 768px) {
-            .sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 100; }
+            .sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 100; width: 260px; }
+            .sidebar.collapsed { width: 0; left: -260px; }
             .input-area { left: 0; }
         }
     </style>
@@ -398,7 +423,12 @@
         <footer class="input-area">
             <div class="input-box">
                 <textarea id="input" placeholder="发送消息..." rows="1"></textarea>
-                <button class="send-btn" id="send">➤</button>
+                <button class="send-btn" id="send">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 2L11 13"></path>
+                        <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
+                    </svg>
+                </button>
             </div>
         </footer>
 
