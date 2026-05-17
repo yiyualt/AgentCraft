@@ -815,7 +815,7 @@
             document.getElementById('messages').innerHTML = msgs.map(m => `
                 <div class="msg ${m.role}">
                     <div class="avatar">${m.role === 'user' ? '👤' : '🤖'}</div>
-                    <div class="content">${m.role === 'user' ? esc(m.content) : marked.parse(m.content)}</div>
+                    <div class="content">${m.role === 'user' ? esc(m.content) : marked.parse(preprocessMarkdown(m.content))}</div>
                 </div>
             `).join('');
             scrollDown();
@@ -827,7 +827,7 @@
             div.className = `msg ${role}`;
             div.innerHTML = `
                 <div class="avatar">${role === 'user' ? '👤' : '🤖'}</div>
-                <div class="content">${role === 'user' ? esc(content) : marked.parse(content)}</div>
+                <div class="content">${role === 'user' ? esc(content) : marked.parse(preprocessMarkdown(content))}</div>
             `;
             document.getElementById('messages').appendChild(div);
             scrollDown();
@@ -838,18 +838,40 @@
             const msgs = document.getElementById('messages');
             const last = msgs.lastElementChild;
             if (last && last.classList.contains('assistant')) {
-                last.querySelector('.content').innerHTML = marked.parse(content);
+                last.querySelector('.content').innerHTML = marked.parse(preprocessMarkdown(content));
                 scrollDown();
             }
         }
 
         function hideWelcome() { document.getElementById('welcome').style.display = 'none'; }
         function showWelcome() { document.getElementById('welcome').style.display = 'block'; }
-        function scrollDown() { document.getElementById('chatArea').scrollTop = 999999; }
+
+        // Smart scroll: only auto-scroll if user is near bottom
+        function isNearBottom() {
+            const chatArea = document.getElementById('chatArea');
+            const threshold = 100;  // pixels from bottom
+            return chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight < threshold;
+        }
+
+        function scrollDown() {
+            if (isNearBottom()) {
+                document.getElementById('chatArea').scrollTop = 999999;
+            }
+        }
+
         function esc(s) {
             const d = document.createElement('div');
             d.textContent = s;
             return d.innerHTML;
+        }
+
+        // Pre-process markdown to prevent ~~ being parsed as strikethrough
+        // This fixes issues with special characters like 喵喵's output
+        function preprocessMarkdown(text) {
+            if (!text) return text;
+            // Disable strikethrough parsing by escaping ~~
+            // This prevents 喵喵's output like "喵喵喵" from being rendered with strikethrough
+            return text.replace(/~~/g, '\\~\\~');
         }
 
         // Send message
@@ -917,7 +939,7 @@
                 function renderContent() {
                     const now = Date.now();
                     if (now - lastRenderTime >= renderInterval || !isStreaming) {
-                        contentEl.innerHTML = marked.parse(fullContent);
+                        contentEl.innerHTML = marked.parse(preprocessMarkdown(fullContent));
                         scrollDown();
                         lastRenderTime = now;
                     }
@@ -972,7 +994,7 @@
                                 // Stream finished - final render
                                 isStreaming = false;
                                 clearInterval(renderTimer);
-                                contentEl.innerHTML = marked.parse(fullContent);
+                                contentEl.innerHTML = marked.parse(preprocessMarkdown(fullContent));
                                 scrollDown();
                             }
                         } catch {}
@@ -980,7 +1002,7 @@
                 }
 
                 // Final markdown render after stream ends
-                contentEl.innerHTML = marked.parse(fullContent);
+                contentEl.innerHTML = marked.parse(preprocessMarkdown(fullContent));
                 scrollDown();
 
             } catch (e) {
