@@ -113,8 +113,20 @@ class MemoryExtractor:
             memory_type: Memory type
         """
         try:
+            # Generate unique name from content (first 20 chars, sanitized)
+            import time
+            import re
+            # Extract meaningful words (Chinese or English)
+            words = re.findall(r'[一-龥]+|[a-zA-Z]+', content[:50])
+            if words:
+                name_base = '-'.join(words[:3]).lower()
+            else:
+                name_base = "auto"
+            # Add timestamp suffix to ensure uniqueness
+            unique_name = f"{name_base}-{int(time.time())}"
+
             # Call remember tool (async)
-            await remember(content=content, memory_type=memory_type)
+            await remember(content=content, name=unique_name, memory_type=memory_type)
         except Exception as e:
             logger.error(f"[MemoryExtractor] Failed to save memory: {e}")
 
