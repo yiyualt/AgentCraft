@@ -76,6 +76,8 @@ async def run_tool_loop(
     provider_registry: Any | None = None,
     semaphore: asyncio.Semaphore | None = None,
     max_turns: int = 50,
+    goal_manager: Any | None = None,
+    goal_verifier: Any | None = None,
     **kwargs,
 ) -> tuple[list[dict], dict]:
     """Run the tool execution loop.
@@ -94,6 +96,8 @@ async def run_tool_loop(
         provider_registry: ProviderRegistry for fallback (optional)
         semaphore: Concurrency semaphore (optional)
         max_turns: Maximum tool turns
+        goal_manager: GoalManager for long-running tasks (optional)
+        goal_verifier: GoalVerifier for LLM-based goal checking (optional)
         **kwargs: Additional LLM parameters
 
     Returns:
@@ -169,7 +173,58 @@ async def run_tool_loop(
         # Check for tool calls
         tool_calls = message.get("tool_calls")
         if not tool_calls:
-            logger.info("[LLM] No tool_calls, done")
+            logger.info("[LLM] No tool_calls, checking goal...")
+
+            # Goal verification for long-running tasks
+            if goal_manager and goal_manager.has_goal():
+                # Import verifier helper
+                from sessions.goal import verify_goal_in_loop
+
+                # Create verifier if not provided
+                if goal_verifier is None:
+                    from sessions.goal import GoalVerifier
+                    goal_verifier = GoalVerifier(llm_client=llm_client, model=model)
+
+                # Collect recent tool results for verification
+                recent_tool_results = []
+                for msg in messages[-5:]:
+                    if msg.get("role") == "tool":
+                        recent_tool_results.append({
+                            "output": msg.get("content", "")
+                        })
+
+                # Verify goal
+                should_continue, feedback = await verify_goal_in_loop(
+                    goal_manager=goal_manager,
+                    verifier=goal_verifier,
+                    messages=messages,
+                    tool_results=recent_tool_results,
+                )
+
+                if should_continue:
+                    # Goal not met, inject feedback and continue
+                    n_turns += 1
+                    if n_turns <= max_turns:
+                        logger.info(f"[GOAL] Not met, continuing. Turn {n_turns}")
+                        messages.append({
+                            "role": "user",
+                            "content": feedback,
+                        })
+                        continue  # Keep running!
+                    else:
+                        # Exceeded max turns with unmet goal
+                        logger.warning(f"[GOAL] Max turns ({max_turns}) reached with unmet goal")
+                        messages.append({
+                            "role": "assistant",
+                            "content": f"尝试了 {max_turns} 轮仍未达成目标。\n\n{feedback}",
+                        })
+                        break
+                else:
+                    # Goal met or cleared
+                    logger.info("[GOAL] Goal verified, exiting loop")
+                    break
+
+            # No goal set, normal exit
             break
 
         n_turns += 1

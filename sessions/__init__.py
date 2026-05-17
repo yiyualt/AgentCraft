@@ -44,7 +44,10 @@ from sessions.hooks import (
 from sessions.goal import (
     GoalState,
     GoalManager,
+    GoalVerifier,
+    VERIFIER_SYSTEM_PROMPT,
     check_stop_goal,
+    verify_goal_in_loop,
 )
 from sessions.permission import (
     PermissionMode,
@@ -119,7 +122,10 @@ __all__ = [
     # Goal
     "GoalState",
     "GoalManager",
+    "GoalVerifier",
+    "VERIFIER_SYSTEM_PROMPT",
     "check_stop_goal",
+    "verify_goal_in_loop",
     # Permission
     "PermissionMode",
     "PermissionRuleKind",

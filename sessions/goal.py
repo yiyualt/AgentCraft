@@ -1,12 +1,13 @@
-"""Goal Command - Session-level objective tracking via Stop hooks.
+"""Goal Command - Session-level objective tracking with LLM verification.
 
 /goal <condition> sets a measurable goal. At each turn end, the goal
-condition is checked. If unmet, the session is blocked from ending
-and feedback is injected to keep the agent working.
+condition is checked via LLM verification. If unmet, feedback is injected
+to keep the agent working until the goal is truly achieved.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -23,6 +24,96 @@ class GoalState:
     created_at: float = field(default_factory=time.time)
     check_count: int = 0
     met: bool = False
+
+
+VERIFIER_SYSTEM_PROMPT = """你是一个独立验证者，检查任务目标是否达成。
+
+规则:
+1. 只依据提供的对话内容判断，不要假设
+2. 如果有数值指标，严格比较（f1=0.88 < 0.90 就是未达标）
+3. 如果未达标，给出具体反馈和建议下一步行动
+4. 回复格式必须严格遵循:
+   - 达标: "VERIFIED: 目标已达成"
+   - 未达标: "NOT_MET: <当前状态描述>，建议<下一步行动>"
+"""
+
+
+class GoalVerifier:
+    """使用LLM验证目标是否达成。"""
+
+    def __init__(self, llm_client: Any, model: str = "deepseek-chat"):
+        self._client = llm_client
+        self._model = model
+
+    async def verify(
+        self,
+        condition: str,
+        messages: list[dict],
+        tool_results: list[dict] | None = None,
+    ) -> tuple[bool, str]:
+        """验证目标是否达成。
+
+        Args:
+            condition: 目标条件（如 "f1 > 0.90"）
+            messages: 最近几轮对话
+            tool_results: 最近工具执行结果（可选）
+
+        Returns:
+            (is_met, feedback): 是否达成 + 反馈信息
+        """
+        # 构建验证输入
+        recent_content = self._extract_recent_content(messages, tool_results)
+
+        verifier_messages = [
+            {"role": "system", "content": VERIFIER_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": f"目标条件: {condition}\n\n最近对话内容:\n{recent_content}\n\n请判断目标是否达成。",
+            },
+        ]
+
+        try:
+            response = await asyncio.to_thread(
+                self._client.chat.completions.create,
+                model=self._model,
+                messages=verifier_messages,
+            )
+
+            content = response.choices[0].message.content or ""
+            is_met = content.startswith("VERIFIED:")
+            feedback = content
+
+            logger.info(f"[GoalVerifier] Result: is_met={is_met}, content={content[:100]}")
+            return is_met, feedback
+
+        except Exception as e:
+            logger.error(f"[GoalVerifier] Error: {e}")
+            # 出错时保守处理：允许继续
+            return True, f"验证出错: {str(e)}"
+
+    def _extract_recent_content(
+        self,
+        messages: list[dict],
+        tool_results: list[dict] | None,
+    ) -> str:
+        """提取最近对话内容用于验证。"""
+        parts = []
+
+        # 取最近3-5条消息
+        for msg in messages[-5:]:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if content and role != "system":
+                parts.append(f"[{role}]: {content[:500]}")
+
+        # 添加工具结果
+        if tool_results:
+            for r in tool_results[-3:]:
+                output = r.get("output", r.get("content", ""))
+                if output:
+                    parts.append(f"[tool]: {output[:500]}")
+
+        return "\n".join(parts) if parts else "无最近对话内容"
 
 
 class GoalManager:
@@ -189,8 +280,62 @@ async def check_stop_goal(
     return False, feedback
 
 
+# ============================================================
+# Goal Verification for Tool Loop
+# ============================================================
+
+async def verify_goal_in_loop(
+    goal_manager: GoalManager,
+    verifier: GoalVerifier,
+    messages: list[dict],
+    tool_results: list[dict] | None = None,
+) -> tuple[bool, str]:
+    """在 tool loop 中验证目标。
+
+    Args:
+        goal_manager: GoalManager 实例
+        verifier: GoalVerifier 实例
+        messages: 当前对话消息
+        tool_results: 最近工具结果（可选）
+
+    Returns:
+        (should_continue, feedback):
+        - should_continue=True: 目标未达成，需要继续循环
+        - should_continue=False: 目标已达成或无目标，可以退出
+    """
+    if not goal_manager.has_goal():
+        return False, ""
+
+    goal = goal_manager.get_goal()
+    goal.check_count += 1
+
+    # 检查次数上限
+    if goal.check_count > 500:
+        logger.warning(f"[Goal] 达到 500 次验证上限")
+        goal_manager.clear_goal()
+        return False, "目标验证达到500次上限，已自动终止。"
+
+    # LLM 验证
+    is_met, feedback = await verifier.verify(
+        condition=goal.condition,
+        messages=messages,
+        tool_results=tool_results,
+    )
+
+    if is_met:
+        logger.info(f"[Goal] 目标已达成: {goal.condition}")
+        goal_manager.clear_goal()
+        return False, f"目标已达成: {goal.condition}"
+
+    logger.info(f"[Goal] 未达成 (#{goal.check_count}): {goal.condition}")
+    return True, feedback
+
+
 __all__ = [
     "GoalState",
     "GoalManager",
+    "GoalVerifier",
+    "VERIFIER_SYSTEM_PROMPT",
     "check_stop_goal",
+    "verify_goal_in_loop",
 ]

@@ -27,7 +27,7 @@ from providers import ProviderRegistry, register_default_providers
 from gateway import GATEWAY_VERSION, get_version_headers, validate_client_version, get_changelog
 from core import ToolExecutor, is_safe
 from core import LLMRequestQueue, StreamHandler, TokenCalculator, VectorMemoryStore
-from sessions import SessionManager, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, check_token_budget, generate_budget_report, StopDecision, ContinueDecision, DEFAULT_BUDGET, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, format_error_message, PermissionMode, PermissionRuleKind, HookEvent, HookMatcher, HookInput, HookExecutor, create_hook_executor, MultiSourceRuleManager, PermissionAuditor, PermissionRule, PermissionResult, RuleSource, clean_orphan_tool_messages
+from sessions import SessionManager, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, check_token_budget, generate_budget_report, StopDecision, ContinueDecision, DEFAULT_BUDGET, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, format_error_message, PermissionMode, PermissionRuleKind, HookEvent, HookMatcher, HookInput, HookExecutor, create_hook_executor, MultiSourceRuleManager, PermissionAuditor, PermissionRule, PermissionResult, RuleSource, clean_orphan_tool_messages, GoalManager, GoalVerifier
 from sessions import PromptBuilder, MemoryLoader
 from skills import SkillLoader, default_skill_dirs
 from channels import ChannelRouter
@@ -166,6 +166,9 @@ _webhook_executor: WebhookExecutor | None = None
 
 # ===== Hooks (Lifecycle events) =====
 _hook_executor: HookExecutor | None = None
+
+# ===== Goal (Long-running task control) =====
+_goal_managers: dict[str, GoalManager] = {}  # session_id -> GoalManager
 
 
 @asynccontextmanager
@@ -521,9 +524,85 @@ async def update_session(session_id: str, request: Request) -> dict[str, Any]:
 @app.delete("/v1/sessions/{session_id}")
 def delete_session_endpoint(session_id: str) -> dict[str, str]:
     """Delete a session and its messages."""
+    # Also clean up goal manager if exists
+    if session_id in _goal_managers:
+        del _goal_managers[session_id]
     if _session_manager.delete_session(session_id):
         return {"deleted": session_id}
     raise HTTPException(status_code=404, detail="Session not found")
+
+
+# ===== Goal API =====
+
+@app.post("/v1/sessions/{session_id}/goal")
+async def set_session_goal(session_id: str, request: Request) -> dict[str, Any]:
+    """Set a goal for long-running tasks.
+
+    The goal will be verified after each assistant turn.
+    If not met, feedback is injected to keep the agent working.
+
+    Example:
+        POST /v1/sessions/{id}/goal
+        {"condition": "f1 score > 0.90"}
+    """
+    session = _session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    body = await request.json()
+    condition = body.get("condition")
+
+    if not condition:
+        raise HTTPException(status_code=400, detail="Missing 'condition' field")
+
+    # Create or get GoalManager for this session
+    if session_id not in _goal_managers:
+        _goal_managers[session_id] = GoalManager()
+
+    goal_manager = _goal_managers[session_id]
+    goal_manager.set_goal(condition)
+
+    logger.info(f"[Goal] Set for session {session_id}: {condition}")
+
+    return {
+        "session_id": session_id,
+        "condition": condition,
+        "status": "active",
+    }
+
+
+@app.get("/v1/sessions/{session_id}/goal")
+def get_session_goal(session_id: str) -> dict[str, Any]:
+    """Get current goal for a session."""
+    if session_id not in _goal_managers:
+        return {"session_id": session_id, "goal": None}
+
+    goal_manager = _goal_managers[session_id]
+    goal = goal_manager.get_goal()
+
+    if not goal:
+        return {"session_id": session_id, "goal": None}
+
+    return {
+        "session_id": session_id,
+        "goal": {
+            "condition": goal.condition,
+            "check_count": goal.check_count,
+            "created_at": goal.created_at,
+            "met": goal.met,
+        }
+    }
+
+
+@app.delete("/v1/sessions/{session_id}/goal")
+def clear_session_goal(session_id: str) -> dict[str, str]:
+    """Clear goal for a session."""
+    if session_id in _goal_managers:
+        goal_manager = _goal_managers[session_id]
+        result = goal_manager.clear_goal()
+        logger.info(f"[Goal] Cleared for session {session_id}")
+        return {"cleared": session_id, "message": result}
+    return {"cleared": session_id, "message": "No goal was set"}
 
 
 @app.get("/v1/skills")
@@ -1341,8 +1420,59 @@ async def _handle_streaming_direct(
                 logger.error(f"[Stream] Error after retries: {stream_error}")
                 return
 
-            # No tool calls - done
+            # No tool calls - check goal before exiting
             if not tool_calls_list:
+                # Goal verification for long-running tasks
+                if session_id and session_id in _goal_managers:
+                    goal_manager = _goal_managers[session_id]
+                    if goal_manager.has_goal():
+                        goal = goal_manager.get_goal()
+                        goal.check_count += 1
+
+                        # Check limit (500 max)
+                        if goal.check_count > 500:
+                            logger.warning(f"[Goal] 达到 500 次验证上限")
+                            yield f"event: goal_limit\ndata: {{\"message\": \"目标验证达到500次上限\"}}\n\n"
+                            del _goal_managers[session_id]
+                            yield f"data: {{\"finish_reason\": \"stop\"}}\n\n"
+                            break
+
+                        # LLM verification
+                        verifier = GoalVerifier(llm_client=client, model=model)
+                        recent_tool_results = [
+                            {"output": msg.get("content", "")}
+                            for msg in messages[-5:]
+                            if msg.get("role") == "tool"
+                        ]
+
+                        is_met, feedback = await verifier.verify(
+                            condition=goal.condition,
+                            messages=messages,
+                            tool_results=recent_tool_results,
+                        )
+
+                        if is_met:
+                            logger.info(f"[Goal] 目标已达成: {goal.condition}")
+                            yield f"event: goal_met\ndata: {{\"condition\": \"{goal.condition}\"}}\n\n"
+                            del _goal_managers[session_id]
+                            yield f"data: {{\"finish_reason\": \"stop\"}}\n\n"
+                            break
+                        else:
+                            # Goal not met, inject feedback and continue
+                            n_tool_turns += 1
+                            if n_tool_turns <= 50:  # max_turns
+                                logger.info(f"[Goal] 未达成 (#{goal.check_count}), 继续执行")
+                                yield f"event: goal_continue\ndata: {{\"count\": {goal.check_count}, \"feedback\": \"{feedback[:200].replace(chr(34), chr(92)+chr(34))}\"}}\n\n"
+                                messages.append({"role": "user", "content": feedback})
+                                continue  # Keep running!
+                            else:
+                                logger.warning(f"[Goal] 超过最大轮数 (50)")
+                                yield f"event: goal_exhausted\ndata: {{\"turns\": {n_tool_turns}, \"feedback\": \"{feedback[:200].replace(chr(34), chr(92)+chr(34))}\"}}\n\n"
+                                del _goal_managers[session_id]
+                                yield f"data: {{\"finish_reason\": \"stop\"}}\n\n"
+                                break
+
+                # No goal, normal exit
                 yield f"data: {{\"finish_reason\": \"stop\"}}\n\n"
                 break
 
