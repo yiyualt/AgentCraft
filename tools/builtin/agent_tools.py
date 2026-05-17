@@ -81,7 +81,7 @@ class SimpleAgentRunner:
         timeout: int = 180,
     ) -> str:
         """Run a sub-agent task."""
-        from core import run_tool_loop
+        from sessions import run_tool_loop
 
         config = AGENT_TYPES.get(agent_type, AGENT_TYPES["general-purpose"])
 

@@ -1337,6 +1337,9 @@ async def _handle_streaming_direct(
                             calculator=calculator,
                             target_tokens=target_tokens,
                         )
+                        # CRITICAL: Clean orphan tool messages after compaction
+                        # Otherwise API will return 400 Bad Request
+                        messages = clean_orphan_tool_messages(messages)
                         logger.info(f"[COMPACTION] Done, now {estimate_tokens_simple(messages)} tokens")
                     except Exception as e:
                         logger.warning(f"[COMPACTION] Failed: {e}")

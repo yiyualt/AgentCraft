@@ -88,8 +88,9 @@ class GoalVerifier:
 
         except Exception as e:
             logger.error(f"[GoalVerifier] Error: {e}")
-            # 出错时保守处理：允许继续
-            return True, f"验证出错: {str(e)}"
+            # API 调用失败时，必须返回 False（未达成）
+            # 不能假装目标已达成，否则任务会提前结束
+            return False, f"验证 API 调用失败: {str(e)}。请继续执行任务。"
 
     def _extract_recent_content(
         self,
