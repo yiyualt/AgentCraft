@@ -438,6 +438,14 @@ def list_models() -> dict[str, Any]:
 
 @app.post("/v1/sessions")
 async def create_session(request: Request) -> dict[str, Any]:
+    # Auto-reload skills when creating a new session
+    if _skill_loader and _skill_loader.needs_reload():
+        skills = _skill_loader.load()
+        set_skill_loader(_skill_loader)
+        if _prompt_builder:
+            _prompt_builder._skill_loader = _skill_loader
+        logger.info(f"[SKILLS] Auto-reloaded {len(skills)} skills on new session")
+
     body = await request.json()
     session = _session_manager.create_session(
         name=body.get("name", "Untitled"),
@@ -505,6 +513,36 @@ def delete_session_endpoint(session_id: str) -> dict[str, str]:
 @app.get("/v1/skills")
 def list_skills() -> list[dict[str, Any]]:
     return [s.to_dict() for s in _skill_loader.list_skills()]
+
+
+@app.post("/v1/skills/reload")
+def reload_skills() -> dict[str, Any]:
+    """Reload skills from disk without restarting the application.
+
+    Use this endpoint after adding/modifying skills to make changes effective immediately.
+
+    Returns:
+        Dict with reload status and updated skills list
+    """
+    global _skill_loader
+
+    # Reload skills from disk
+    skills = _skill_loader.load()
+
+    # Update global reference for Skill tool
+    set_skill_loader(_skill_loader)
+
+    # Update PromptBuilder reference if initialized
+    if _prompt_builder:
+        _prompt_builder._skill_loader = _skill_loader
+
+    logger.info(f"[SKILLS] Reloaded {len(skills)} skills from disk")
+
+    return {
+        "success": True,
+        "message": f"Reloaded {len(skills)} skills",
+        "skills": [s.name for s in skills.values()],
+    }
 
 
 @app.get("/v1/tools")

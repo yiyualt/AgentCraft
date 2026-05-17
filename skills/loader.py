@@ -18,6 +18,44 @@ class SkillLoader:
     def __init__(self, directories: list[Path] | None = None):
         self._directories = directories or []
         self._skills: dict[str, Skill] = {}
+        self._last_mtime: dict[Path, float] = {}  # Track last modification time
+        self._last_count: int = 0  # Track skill count
+
+    def needs_reload(self) -> bool:
+        """Check if skills directory has changes.
+
+        Returns True if:
+        - New skill files added
+        - Existing skill files modified
+        - Skill files deleted
+        """
+        for d in self._directories:
+            if not d.is_dir():
+                continue
+
+            # Check SKILL.md files (AgentSkills format)
+            for skill_dir in d.iterdir():
+                if skill_dir.is_dir():
+                    skill_file = skill_dir / "SKILL.md"
+                    if skill_file.exists():
+                        current_mtime = skill_file.stat().st_mtime
+                        last_mtime = self._last_mtime.get(skill_file, 0)
+                        if current_mtime > last_mtime:
+                            return True
+
+            # Check JSON files (legacy format)
+            for f in d.glob("*.json"):
+                current_mtime = f.stat().st_mtime
+                last_mtime = self._last_mtime.get(f, 0)
+                if current_mtime > last_mtime:
+                    return True
+
+        # Check if skill count changed
+        current_count = len(self._skills)
+        if current_count != self._last_count:
+            return True
+
+        return False
 
     def load(self) -> dict[str, Skill]:
         """Scan all directories for skill definitions.
@@ -29,6 +67,8 @@ class SkillLoader:
         Later directories override earlier ones.
         """
         self._skills.clear()
+        self._last_mtime.clear()
+
         for d in self._directories:
             if not d.is_dir():
                 continue
@@ -42,6 +82,8 @@ class SkillLoader:
                             skill = self._parse_skill_md(skill_file)
                             if skill:
                                 self._skills[skill.name] = skill
+                                # Track modification time
+                                self._last_mtime[skill_file] = skill_file.stat().st_mtime
                         except Exception as e:
                             print(f"Failed to load {skill_file}: {e}")
                             continue
@@ -54,8 +96,13 @@ class SkillLoader:
                     # Don't override if SKILL.md already loaded
                     if skill.name not in self._skills:
                         self._skills[skill.name] = skill
+                        # Track modification time
+                        self._last_mtime[f] = f.stat().st_mtime
                 except (json.JSONDecodeError, KeyError):
                     continue
+
+        # Track skill count
+        self._last_count = len(self._skills)
 
         return self._skills
 

@@ -1,0 +1,18 @@
+{
+  "name": "unifuncs",
+  "version": "1.0.0",
+  "description": "UniFuncs web reading, AI search, and deep research tools",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "web-reader": "node scripts/web-reader.js",
+    "web-search": "node scripts/web-search.js",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": ["unifuncs", "web", "search", "ai", "research"],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
