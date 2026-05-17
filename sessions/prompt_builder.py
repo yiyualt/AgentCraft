@@ -13,7 +13,7 @@ import logging
 from typing import Any
 
 from skills import SkillLoader
-from core.memory_loader import MemoryLoader, load_relevant_memories
+from sessions.memory_loader import MemoryLoader, load_relevant_memories
 
 logger = logging.getLogger(__name__)
 

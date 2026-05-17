@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sessions.tokens import TokenCalculator
+from core.tokens import TokenCalculator
 from sessions.memory import SlidingWindowStrategy
 from sessions.manager import SessionManager
 

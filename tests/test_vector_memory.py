@@ -9,7 +9,7 @@ import time
 import pytest
 import sqlite3
 
-from sessions.vector_memory import (
+from core.vector_memory import (
     VectorMemoryStore,
     MockEmbeddingModel,
     MemoryEntry,
@@ -446,7 +446,7 @@ class TestEdgeCases:
     def test_cosine_similarity_edge_cases(self, store):
         """Direct test of cosine similarity internals."""
         import numpy as np
-        from sessions.vector_memory import VectorMemoryStore
+        from core.vector_memory import VectorMemoryStore
 
         # Zero vector
         a = np.array([0.0, 0.0, 0.0])

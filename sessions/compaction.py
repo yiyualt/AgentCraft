@@ -18,7 +18,7 @@ from openai import OpenAI
 
 from sessions.manager import SessionManager
 from sessions.memory import SlidingWindowStrategy
-from sessions.tokens import TokenCalculator
+from core.tokens import TokenCalculator
 
 logger = logging.getLogger("gateway")
 

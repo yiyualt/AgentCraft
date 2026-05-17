@@ -14,7 +14,7 @@ from sessions.models import (
     now_iso,
     new_id,
 )
-from sessions.tokens import TokenCalculator
+from core.tokens import TokenCalculator
 from sessions.memory import SlidingWindowStrategy
 
 

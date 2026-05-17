@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from sessions.manager import SessionManager
-from sessions.tokens import TokenCalculator
+from core.tokens import TokenCalculator
 from sessions.memory import SlidingWindowStrategy
 
 logger = logging.getLogger("gateway")

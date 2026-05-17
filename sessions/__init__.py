@@ -1,7 +1,9 @@
-"""Session management for AgentCraft."""
+"""Session management for AgentCraft - 应用层."""
 
 from sessions.manager import SessionManager
-from sessions.tokens import TokenCalculator
+from sessions.prompt_builder import PromptBuilder, build_system_prompt
+from sessions.memory_loader import MemoryLoader, load_relevant_memories
+from sessions.tool_loop import run_tool_loop, clean_orphan_tool_messages
 from sessions.memory import SlidingWindowStrategy, SummaryStrategy, HybridStrategy
 from sessions.compaction import CompactionConfig, CompactionState, CompactionManager
 from sessions.fork import ForkContext, ForkManager, FORK_PLACEHOLDER, FORK_CHILD_BOILERPLATE
@@ -55,20 +57,18 @@ from sessions.permission import (
     MultiSourceRuleManager,
     DEFAULT_RULES,
 )
-from sessions.vector_memory import (
-    EmbeddingModel,
-    LocalEmbeddingModel,
-    RemoteEmbeddingModel,
-    MockEmbeddingModel,
-    VectorMemoryStore,
-    MemoryEntry,
-)
 
 __all__ = [
     # Session management
     "SessionManager",
-    # Token counting
-    "TokenCalculator",
+    # Prompt & Memory (应用层)
+    "PromptBuilder",
+    "build_system_prompt",
+    "MemoryLoader",
+    "load_relevant_memories",
+    # Tool Loop (应用层执行)
+    "run_tool_loop",
+    "clean_orphan_tool_messages",
     # Memory strategies
     "SlidingWindowStrategy",
     "SummaryStrategy",
@@ -127,11 +127,4 @@ __all__ = [
     "RuleSource",
     "MultiSourceRuleManager",
     "DEFAULT_RULES",
-    # Vector memory
-    "EmbeddingModel",
-    "LocalEmbeddingModel",
-    "RemoteEmbeddingModel",
-    "MockEmbeddingModel",
-    "VectorMemoryStore",
-    "MemoryEntry",
 ]

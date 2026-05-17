@@ -27,14 +27,13 @@ from automation import CronStore, CronScheduler
 from automation.webhook import WebhookStore, WebhookExecutor, init_webhooks
 from providers import ProviderRegistry, register_default_providers
 from gateway import GATEWAY_VERSION, get_version_headers, validate_client_version, get_changelog
-from core import clean_orphan_tool_messages, ToolExecutor, is_safe
-from core import LLMRequestQueue, StreamHandler
-from sessions import SessionManager, TokenCalculator, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, check_token_budget, generate_budget_report, StopDecision, ContinueDecision, DEFAULT_BUDGET, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, format_error_message, PermissionMode, PermissionRuleKind, HookEvent, HookMatcher, MultiSourceRuleManager, PermissionAuditor, PermissionRule, PermissionResult, RuleSource
-from sessions.vector_memory import VectorMemoryStore
+from core import ToolExecutor, is_safe
+from core import LLMRequestQueue, StreamHandler, TokenCalculator, VectorMemoryStore
+from sessions import SessionManager, CompactionManager, CompactionConfig, BudgetManager, estimate_tokens_simple, check_token_budget, generate_budget_report, StopDecision, ContinueDecision, DEFAULT_BUDGET, ResilientExecutor, classify_error, get_retry_config, calculate_delay, ErrorKind, format_error_message, PermissionMode, PermissionRuleKind, HookEvent, HookMatcher, MultiSourceRuleManager, PermissionAuditor, PermissionRule, PermissionResult, RuleSource, clean_orphan_tool_messages
+from sessions import PromptBuilder, MemoryLoader
 from skills import SkillLoader, default_skill_dirs
 from channels import ChannelRouter
 from canvas import CanvasManager, CanvasChannel
-from core import PromptBuilder, MemoryLoader
 from acp import AgentControlPlane, AcpConfig
 
 # ===== Config =====
@@ -267,7 +266,7 @@ async def lifespan(_app: FastAPI):
 
     # Memory initialization (VectorMemoryStore)
     global _memory_store
-    from sessions.vector_memory import VectorMemoryStore, MockEmbeddingModel
+    from core.vector_memory import VectorMemoryStore, MockEmbeddingModel
     _memory_store = VectorMemoryStore(embedding_model=MockEmbeddingModel())
     _app.state.memory_store = _memory_store
     logger.info("[Memory] VectorMemoryStore initialized")

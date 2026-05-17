@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from tools import tool
-from sessions.vector_memory import VectorMemoryStore, MockEmbeddingModel, MemoryEntry
+from core.vector_memory import VectorMemoryStore, MockEmbeddingModel, MemoryEntry
 
 
 # Global memory store (initialized with project path)

@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from sessions.tokens import TokenCalculator
+    from core.tokens import TokenCalculator
 
 
 class MemoryStrategy(ABC):

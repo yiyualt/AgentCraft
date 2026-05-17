@@ -90,7 +90,7 @@ async def test_auth_profile_rotation():
 @pytest.mark.asyncio
 async def test_vector_memory_search():
     """Test 11.3: Vector memory search (semantic query)."""
-    from sessions.vector_memory import VectorMemoryStore, MockEmbeddingModel
+    from core.vector_memory import VectorMemoryStore, MockEmbeddingModel
 
     store = VectorMemoryStore(embedding_model=MockEmbeddingModel())
 
