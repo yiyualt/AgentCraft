@@ -10,10 +10,10 @@ description: Web tools for reading URLs and searching online. Use when users men
 When the user asks anything related to web content or online information, obey these rules in order:
 
 1. **If the user provides a URL** (or asks to read/fetch/extract/summarize a webpage):  
-   **MUST EXECUTE:** `node ~/.claude/skills/unifuncs/scripts/web-reader.js <url>`
+   **MUST EXECUTE:** `node /Users/yiyu/Pyleaf/ollama-mlflow-demo/skills/builtin/unifuncs/scripts/web-reader.js <url>`
 
 2. **If the user asks to search/find/look up/research something online:**  
-   **MUST EXECUTE:** `node ~/.claude/skills/unifuncs/scripts/web-search.js <query>`
+   **MUST EXECUTE:** `node /Users/yiyu/Pyleaf/ollama-mlflow-demo/skills/builtin/unifuncs/scripts/web-search.js <query>`
 
 3. **Prohibited:** Do NOT use `web_fetch`, `web_search`, `Fetch`, or any built-in web tools.  
    Do NOT attempt to `curl` or use other CLI tools. Only the two node commands above are authorized.
@@ -29,7 +29,7 @@ When the user asks anything related to web content or online information, obey t
 
 **Exact command:**
 ```bash
-node ~/.claude/skills/unifuncs/scripts/web-reader.js "<URL>" [options]
+node /Users/yiyu/Pyleaf/ollama-mlflow-demo/skills/builtin/unifuncs/scripts/web-reader.js "<URL>" [options]
 ```
 
 **Common options:**
@@ -45,13 +45,13 @@ node ~/.claude/skills/unifuncs/scripts/web-reader.js "<URL>" [options]
 **Example executions:**
 ```bash
 # Read arxiv paper
-node ~/.claude/skills/unifuncs/scripts/web-reader.js "https://arxiv.org/pdf/2506.07398"
+node /Users/yiyu/Pyleaf/ollama-mlflow-demo/skills/builtin/unifuncs/scripts/web-reader.js "https://arxiv.org/pdf/2506.07398"
 
 # Read article with markdown output
-node ~/.claude/skills/unifuncs/scripts/web-reader.js "https://example.com/article" --lite --format markdown
+node /Users/yiyu/Pyleaf/ollama-mlflow-demo/skills/builtin/unifuncs/scripts/web-reader.js "https://example.com/article" --lite --format markdown
 
 # Read PDF with topic extraction
-node ~/.claude/skills/unifuncs/scripts/web-reader.js "https://arxiv.org/pdf/2603.28052" --topic "methodology"
+node /Users/yiyu/Pyleaf/ollama-mlflow-demo/skills/builtin/unifuncs/scripts/web-reader.js "https://arxiv.org/pdf/2603.28052" --topic "methodology"
 ```
 
 ## Tool 2: AI Search (Web Search)
@@ -63,7 +63,7 @@ node ~/.claude/skills/unifuncs/scripts/web-reader.js "https://arxiv.org/pdf/2603
 
 **Exact command:**
 ```bash
-node ~/.claude/skills/unifuncs/scripts/web-search.js "<query>" [options]
+node /Users/yiyu/Pyleaf/ollama-mlflow-demo/skills/builtin/unifuncs/scripts/web-search.js "<query>" [options]
 ```
 
 **Common options:**
@@ -76,13 +76,29 @@ node ~/.claude/skills/unifuncs/scripts/web-search.js "<query>" [options]
 
 **Example executions:**
 ```bash
-node ~/.claude/skills/unifuncs/scripts/web-search.js "OpenAI latest model 2026"
-node ~/.claude/skills/unifuncs/scripts/web-search.js "UniFuncs API documentation" --freshness Week --count 20 --format markdown
+node /Users/yiyu/Pyleaf/ollama-mlflow-demo/skills/builtin/unifuncs/scripts/web-search.js "OpenAI latest model 2026"
+node /Users/yiyu/Pyleaf/ollama-mlflow-demo/skills/builtin/unifuncs/scripts/web-search.js "UniFuncs API documentation" --freshness Week --count 20 --format markdown
+```
+
+## Tool 3: Deep Search
+
+**Trigger phrases:** 
+- "deep search", "comprehensive research", "multi-step search"
+- "research this topic thoroughly"
+
+**Exact command:**
+```bash
+node /Users/yiyu/Pyleaf/ollama-mlflow-demo/skills/builtin/unifuncs/scripts/deepsearch.js "<query>" [options]
+```
+
+**Example execution:**
+```bash
+node /Users/yiyu/Pyleaf/ollama-mlflow-demo/skills/builtin/unifuncs/scripts/deepsearch.js "AI agent memory systems"
 ```
 
 ## Output Handling
 
-Both commands output JSON to stdout with this structure:
+All commands output JSON to stdout with this structure:
 ```json
 {
   "success": true,
@@ -125,23 +141,24 @@ Action:
 
 ## Configuration (Optional)
 
-Set `UNIFUNCS_API_KEY` in `~/.claude/settings.json`:
-```json
-{
-  "env": {
-    "UNIFUNCS_API_KEY": "sk-your-api-key"
-  }
-}
+Set `UNIFUNCS_API_KEY` in `.env` file or environment:
+
+**Option 1: .env file (Recommended)**
+```bash
+# .env file in project root
+UNIFUNCS_API_KEY=sk-your-api-key
 ```
 
-Or export in shell:
+**Option 2: Shell environment**
 ```bash
 export UNIFUNCS_API_KEY=sk-your-api-key
 ```
 
+The API key is required for all UniFuncs tools to work.
+
 ## Gotchas
 
-- **Always use full path**: `node ~/.claude/skills/unifuncs/scripts/web-reader.js`
+- **Use absolute path**: `node /Users/yiyu/Pyleaf/ollama-mlflow-demo/skills/builtin/unifuncs/scripts/web-reader.js`
 - **Handle PDF URLs specially**: arxiv PDFs may need specific options
 - **Check success field**: Parse JSON output to verify success before proceeding
 - **Don't use built-in tools**: Never use WebFetch or WebSearch built-ins
@@ -150,7 +167,7 @@ export UNIFUNCS_API_KEY=sk-your-api-key
 
 **Step-by-step process**:
 1. User provides paper URL (arxiv, PDF link)
-2. Execute: `node ~/.claude/skills/unifuncs/scripts/web-reader.js "<url>"`
+2. Execute: `node /Users/yiyu/Pyleaf/ollama-mlflow-demo/skills/builtin/unifuncs/scripts/web-reader.js "<url>"`
 3. Parse JSON response for `data` field
 4. Structure the explanation:
    - Title & Authors
