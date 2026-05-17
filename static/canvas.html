@@ -230,7 +230,8 @@
             line-height: 1.5;
             resize: none;
             outline: none;
-            max-height: 150px;
+            min-height: 22.5px;
+            max-height: 112.5px;  /* max 5 lines */
         }
 
         .input-box textarea::placeholder { color: var(--text-muted); }
@@ -451,12 +452,19 @@
             };
             document.getElementById('newChat').onclick = createNewChat;
             document.getElementById('send').onclick = sendMessage;
-            document.getElementById('input').onkeydown = (e) => {
+            const inputEl = document.getElementById('input');
+            inputEl.onkeydown = (e) => {
                 // Don't send during IME composition (Chinese/Japanese/Korean input)
                 if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
                     e.preventDefault();
                     sendMessage();
                 }
+            };
+            // Auto-resize textarea (max 5 lines)
+            inputEl.oninput = () => {
+                inputEl.style.height = 'auto';
+                const newHeight = Math.min(inputEl.scrollHeight, 112.5);
+                inputEl.style.height = newHeight + 'px';
             };
             document.querySelectorAll('.chip').forEach(c => {
                 c.onclick = () => {
@@ -885,6 +893,7 @@
             input.disabled = true;
             sendBtn.disabled = true;
             input.value = '';
+            input.style.height = 'auto';  // Reset height after sending
 
             addMsg('user', text);
             currentMessages.push({ role: 'user', content: text });
