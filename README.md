@@ -20,7 +20,7 @@ cp ".env copy" .env
 python run_app.py
 ```
 
-服务将在 http://127.0.0.1:8000 启动。
+服务将在 http://127.0.0.1:8000/canvas 启动。
 
 ## 环境变量
 
