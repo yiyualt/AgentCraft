@@ -231,7 +231,10 @@ class SkillLoader:
 
 
 def default_skill_dirs() -> list[Path]:
-    """Return the default skill directories: built-in + user."""
+    """Return the default skill directory: built-in skills only.
+
+    Only loads from project's builtin directory:
+    - skills/builtin/ - Project built-in skills
+    """
     builtin = Path(__file__).resolve().parent / "builtin"
-    user = Path(os.path.expanduser("~/.agentcraft/skills"))
-    return [builtin, user]
+    return [builtin]

@@ -451,7 +451,8 @@
             document.getElementById('newChat').onclick = createNewChat;
             document.getElementById('send').onclick = sendMessage;
             document.getElementById('input').onkeydown = (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
+                // Don't send during IME composition (Chinese/Japanese/Korean input)
+                if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
                     e.preventDefault();
                     sendMessage();
                 }
@@ -484,7 +485,7 @@
                     selectedOptionIndex = newIndex;
                     updateOptionSelection();
                 }
-            } else if (e.key === 'Enter' && !e.shiftKey) {
+            } else if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
                 e.preventDefault();
                 if (selectedOptionIndex >= 0) {
                     submitInteractiveSelection();
