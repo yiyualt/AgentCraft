@@ -63,7 +63,7 @@ class ToolExecutor:
         self._results: dict[str, ToolResult] = {}
         self._pending_tasks: list[asyncio.Task] = []
         self._unsafe_queue: asyncio.Queue = asyncio.Queue()
-        self._unsafe_executor_started = False
+        self._unsafe_executor_task: asyncio.Task | None = None
 
     async def execute_tools(self, tool_calls: list[dict]) -> dict[str, ToolResult]:
         """Execute a batch of tool calls.
@@ -77,10 +77,9 @@ class ToolExecutor:
         self._results.clear()
         self._pending_tasks.clear()
 
-        # Start unsafe executor
-        if not self._unsafe_executor_started:
-            asyncio.create_task(self._run_unsafe_queue())
-            self._unsafe_executor_started = True
+        # Start unsafe executor if needed
+        if self._unsafe_executor_task is None:
+            self._unsafe_executor_task = asyncio.create_task(self._run_unsafe_queue())
 
         # Submit all tools
         for tc in tool_calls:
@@ -109,6 +108,15 @@ class ToolExecutor:
 
         # Wait for unsafe queue to drain
         await self._unsafe_queue.join()
+
+        # Cancel the unsafe executor task to prevent hanging on shutdown
+        if self._unsafe_executor_task and not self._unsafe_executor_task.done():
+            self._unsafe_executor_task.cancel()
+            try:
+                await self._unsafe_executor_task
+            except asyncio.CancelledError:
+                pass
+            self._unsafe_executor_task = None
 
         return self._results
 
